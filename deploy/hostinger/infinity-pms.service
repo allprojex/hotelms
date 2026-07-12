@@ -8,9 +8,11 @@ User=pms
 Group=pms
 WorkingDirectory=/opt/infinity-pms
 EnvironmentFile=/opt/infinity-pms/.env.production
-ExecStart=/usr/bin/npm run start
+ExecStart=/usr/bin/node .output/server/index.mjs
 Restart=on-failure
 RestartSec=5
+KillSignal=SIGTERM
+TimeoutStopSec=15
 
 # Basic hardening for a Node web service.
 NoNewPrivileges=true

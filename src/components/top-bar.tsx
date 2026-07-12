@@ -43,6 +43,7 @@ export function TopBar() {
     if (properties && properties.length > 0) {
       setActivePropertyId(properties[0].id);
       setActiveId(properties[0].id);
+      window.dispatchEvent(new Event("iti-property-changed"));
     }
   }, [properties]);
 
