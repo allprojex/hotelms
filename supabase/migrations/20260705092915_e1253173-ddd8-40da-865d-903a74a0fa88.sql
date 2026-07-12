@@ -4,7 +4,7 @@ CREATE TABLE public.accounting_sync_targets (
   property_id uuid NOT NULL REFERENCES public.properties(id) ON DELETE CASCADE,
   name text NOT NULL,
   webhook_url text,
-  signing_secret text NOT NULL DEFAULT encode(gen_random_bytes(24), 'hex'),
+  signing_secret text NOT NULL DEFAULT encode(extensions.gen_random_bytes(24), 'hex'),
   is_active boolean NOT NULL DEFAULT true,
   last_sync_at timestamptz,
   last_sync_status text,
