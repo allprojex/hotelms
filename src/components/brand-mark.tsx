@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import logoAsset from "@/assets/logo.asset.json";
 import { useBrandSettings } from "@/hooks/use-brand-settings";
+
+const DEFAULT_LOGO_URL = "/iti360-logo.jpeg";
 
 export function BrandMark({ className = "h-8" }: { className?: string }) {
   const { data } = useBrandSettings();
@@ -23,8 +24,18 @@ export function BrandMark({ className = "h-8" }: { className?: string }) {
   const src =
     (isDark && data?.logo_dark_url) ||
     data?.logo_url ||
-    logoAsset.url;
+    DEFAULT_LOGO_URL;
   const alt = data?.app_name || "Infinity Techub Intelligence";
 
-  return <img src={src} alt={alt} className={className} />;
+  return (
+    <img
+      src={src}
+      alt={alt}
+      className={className}
+      onError={(event) => {
+        if (event.currentTarget.src.endsWith(DEFAULT_LOGO_URL)) return;
+        event.currentTarget.src = DEFAULT_LOGO_URL;
+      }}
+    />
+  );
 }
