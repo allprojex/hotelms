@@ -87,7 +87,7 @@ function AuthPage() {
           <form className="space-y-5" onSubmit={submit}>
             <div className="space-y-2">
               <Label htmlFor="identifier">
-                {accountType === "staff" ? "Username / Staff ID or Email" : "Admin ID or Email"}
+                {accountType === "staff" ? "Username / Staff ID" : "Admin ID"}
               </Label>
               <Input
                 id="identifier"
@@ -95,8 +95,8 @@ function AuthPage() {
                 onChange={(e) => setIdentifier(e.target.value)}
                 placeholder={
                   accountType === "staff"
-                    ? "Enter your username, Staff ID or email"
-                    : "Enter your Admin ID or email"
+                    ? "Enter your username or Staff ID"
+                    : "Enter your Admin ID"
                 }
                 autoCapitalize="none"
                 autoCorrect="off"

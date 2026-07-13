@@ -175,7 +175,8 @@ export function AppSidebar() {
           .filter((it) => canSee(it.requireRoles))
           .filter((it) => !q ||
             it.title.toLowerCase().includes(q) ||
-            it.description.toLowerCase().includes(q)),
+            it.description.toLowerCase().includes(q))
+          .sort((a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: "base" })),
       }))
       .filter((g) => g.items.length > 0);
   // eslint-disable-next-line react-hooks/exhaustive-deps

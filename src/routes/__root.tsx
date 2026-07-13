@@ -13,6 +13,29 @@ import { reportLovableError } from "../lib/lovable-error-reporting";
 import { supabase } from "@/integrations/supabase/client";
 import { Toaster } from "@/components/ui/sonner";
 import { ThemeProvider } from "@/components/theme-provider";
+import { useBrandSettings } from "@/hooks/use-brand-settings";
+
+const FALLBACK_FAVICON =
+  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%230b2d22'/%3E%3Ctext x='32' y='42' text-anchor='middle' font-family='Arial,sans-serif' font-size='30' font-weight='700' fill='%23f4d58d'%3ETS%3C/text%3E%3C/svg%3E";
+
+function BrandFavicon() {
+  const { data: brandSettings } = useBrandSettings();
+
+  useEffect(() => {
+    const faviconUrl = brandSettings?.favicon_url || brandSettings?.logo_url;
+    if (!faviconUrl) return;
+
+    let favicon = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
+    if (!favicon) {
+      favicon = document.createElement("link");
+      favicon.rel = "icon";
+      document.head.appendChild(favicon);
+    }
+    favicon.href = faviconUrl;
+  }, [brandSettings?.favicon_url, brandSettings?.logo_url]);
+
+  return null;
+}
 
 function NotFoundComponent() {
   return (
@@ -66,7 +89,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     ],
     links: [
       { rel: "stylesheet", href: appCss },
-      { rel: "icon", href: "/favicon.ico", type: "image/x-icon" },
+      { rel: "icon", href: FALLBACK_FAVICON, type: "image/svg+xml" },
     ],
   }),
   shellComponent: RootShell,
@@ -100,6 +123,7 @@ function RootComponent() {
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
+        <BrandFavicon />
         <Outlet />
         <Toaster richColors position="top-right" />
       </ThemeProvider>
