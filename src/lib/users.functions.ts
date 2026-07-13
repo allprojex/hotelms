@@ -10,6 +10,14 @@ import {
 } from "@/lib/auth-identity";
 
 const ADMIN_ROLES = ["super_admin", "hotel_owner", "general_manager"] as const;
+const STAFF_ROLES = new Set([
+  "front_desk",
+  "reservations",
+  "cashier",
+  "accountant",
+  "housekeeping_supervisor",
+  "housekeeping",
+]);
 // Roles that only super_admin or hotel_owner may grant.
 const ELEVATED_ROLES = new Set(["super_admin", "hotel_owner", "general_manager"]);
 
@@ -51,6 +59,32 @@ async function assertCanGrantRole(context: any, role: string, propertyId: string
     throw new Error(`Only super_admin or hotel_owner may grant '${role}'`);
   }
   // Non-elevated: any admin scoped to this property is fine (assertAdmin already checked).
+}
+
+async function assertNotLastActiveSuperAdmin(supabaseAdmin: any, userId: string) {
+  const targetRole = await (supabaseAdmin.from("user_roles") as any)
+    .select("id")
+    .eq("user_id", userId)
+    .eq("role", "super_admin");
+  if (targetRole.error) throw targetRole.error;
+  if (!(targetRole.data ?? []).length) return;
+
+  const allSuperRoles = await (supabaseAdmin.from("user_roles") as any)
+    .select("user_id")
+    .eq("role", "super_admin");
+  if (allSuperRoles.error) throw allSuperRoles.error;
+  const otherIds = Array.from(
+    new Set((allSuperRoles.data ?? []).map((row: any) => row.user_id as string)),
+  ).filter((id) => id !== userId);
+  if (otherIds.length) {
+    const activeOthers = await (supabaseAdmin.from("profiles") as any)
+      .select("id", { count: "exact", head: true })
+      .in("id", otherIds)
+      .eq("status", "active");
+    if (activeOthers.error) throw activeOthers.error;
+    if ((activeOthers.count ?? 0) > 0) return;
+  }
+  throw new Error("The last active Super Admin cannot be suspended, disabled or demoted.");
 }
 
 export const inviteUser = createServerFn({ method: "POST" })
@@ -157,20 +191,8 @@ export const setUserStatus = createServerFn({ method: "POST" })
         await assertAdmin(context, data.propertyId);
         const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
-        if (data.status !== "active") {
-          const targetRoles = await (supabaseAdmin.from("user_roles") as any)
-            .select("role")
-            .eq("user_id", data.userId)
-            .eq("role", "super_admin");
-          if ((targetRoles.data ?? []).length) {
-            const allSupers = await (supabaseAdmin.from("user_roles") as any)
-              .select("user_id")
-              .eq("role", "super_admin");
-            const unique = new Set((allSupers.data ?? []).map((r: any) => r.user_id));
-            if (unique.size <= 1)
-              throw new Error("The last Super Admin cannot be suspended or disabled.");
-          }
-        }
+        if (data.status !== "active")
+          await assertNotLastActiveSuperAdmin(supabaseAdmin, data.userId);
         const banDuration =
           data.status === "disabled" ? "876000h" : data.status === "suspended" ? "8760h" : "none";
         const { error: banErr } = await supabaseAdmin.auth.admin.updateUserById(data.userId, {
@@ -380,6 +402,121 @@ export const updateManagedIdentifier = createServerFn({ method: "POST" })
         meta: { previous_identifier: target.identifier, new_identifier: data.identifier },
       });
       return { ok: true, identifier: data.identifier };
+    }),
+  );
+
+type UpdateManagedAccountInput = {
+  userId: string;
+  propertyId: string;
+  fullName: string;
+  phone?: string;
+  department?: string;
+  role: string;
+  propertyIds: string[];
+};
+
+export const updateManagedAccount = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .validator((d: UpdateManagedAccountInput) => {
+    const fullName = d.fullName?.trim();
+    const phone = d.phone?.trim() || "";
+    const department = d.department?.trim() || "";
+    const propertyIds = Array.from(new Set(d.propertyIds ?? []));
+    if (!d.userId || !d.propertyId) throw new Error("User and property are required.");
+    if (!fullName || fullName.length > 120) throw new Error("Enter a valid full name.");
+    if (phone.length > 50 || department.length > 100)
+      throw new Error("Account details are too long.");
+    if (!d.role) throw new Error("Role is required.");
+    if (d.role !== "super_admin" && !propertyIds.length)
+      throw new Error("Assign at least one property.");
+    return { ...d, fullName, phone, department, propertyIds };
+  })
+  .handler(async ({ data, context }) =>
+    runServerOp({ op: "users.updateManagedAccount", userId: data.userId }, async () => {
+      await assertAdmin(context, data.propertyId);
+      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+      const [targetResult, targetRolesResult, callerRolesResult] = await Promise.all([
+        (supabaseAdmin.from("profiles") as any)
+          .select("id,account_type,full_name,phone,department")
+          .eq("id", data.userId)
+          .maybeSingle(),
+        (supabaseAdmin.from("user_roles") as any)
+          .select("id,role,property_id")
+          .eq("user_id", data.userId),
+        (supabaseAdmin.from("user_roles") as any).select("role").eq("user_id", context.userId),
+      ]);
+      if (targetResult.error) throw targetResult.error;
+      if (targetRolesResult.error) throw targetRolesResult.error;
+      if (callerRolesResult.error) throw callerRolesResult.error;
+      const target = targetResult.data;
+      if (!target) throw new Error("Account not found.");
+      const previousRoles = targetRolesResult.data ?? [];
+      const targetIsInScope = previousRoles.some(
+        (row: any) => row.property_id === null || row.property_id === data.propertyId,
+      );
+      if (!targetIsInScope) throw new Error("Account is outside your property scope.");
+      const callerIsSuper = (callerRolesResult.data ?? []).some(
+        (row: any) => row.role === "super_admin",
+      );
+      if (target.account_type === "admin" && !callerIsSuper)
+        throw new Error("Only a Super Admin may edit an Administrator.");
+      if (target.account_type === "staff" && !STAFF_ROLES.has(data.role))
+        throw new Error("Choose a Staff role.");
+      if (target.account_type === "admin" && !ELEVATED_ROLES.has(data.role))
+        throw new Error("Choose an Administrator role.");
+
+      for (const propertyId of data.propertyIds)
+        await assertCanGrantRole(context, data.role, propertyId);
+      if (data.role === "super_admin")
+        await assertCanGrantRole(context, data.role, data.propertyId);
+      const wasSuper = previousRoles.some((row: any) => row.role === "super_admin");
+      if (wasSuper && data.role !== "super_admin")
+        await assertNotLastActiveSuperAdmin(supabaseAdmin, data.userId);
+
+      const nextRoles =
+        data.role === "super_admin"
+          ? [{ user_id: data.userId, role: data.role, property_id: null }]
+          : data.propertyIds.map((propertyId) => ({
+              user_id: data.userId,
+              role: data.role,
+              property_id: propertyId,
+            }));
+      const removed = await (supabaseAdmin.from("user_roles") as any)
+        .delete()
+        .eq("user_id", data.userId);
+      if (removed.error) throw removed.error;
+      const inserted = await (supabaseAdmin.from("user_roles") as any).insert(nextRoles);
+      if (inserted.error) {
+        if (previousRoles.length) {
+          await (supabaseAdmin.from("user_roles") as any).insert(
+            previousRoles.map((row: any) => ({
+              user_id: data.userId,
+              role: row.role,
+              property_id: row.property_id,
+            })),
+          );
+        }
+        throw inserted.error;
+      }
+
+      const profile = await (supabaseAdmin.from("profiles") as any)
+        .update({
+          full_name: data.fullName,
+          phone: data.phone || null,
+          department: data.department || null,
+          default_property_id: data.role === "super_admin" ? null : data.propertyIds[0],
+        })
+        .eq("id", data.userId);
+      if (profile.error) throw profile.error;
+      await (supabaseAdmin.from("audit_logs") as any).insert({
+        user_id: context.userId,
+        property_id: data.propertyId,
+        action: "users.account.updated",
+        entity: "profiles",
+        entity_id: data.userId,
+        meta: { role: data.role, properties: data.propertyIds },
+      });
+      return { ok: true };
     }),
   );
 

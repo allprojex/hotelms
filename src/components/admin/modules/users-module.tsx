@@ -8,6 +8,7 @@ import {
   listManageableUsers,
   resetManagedPassword,
   setUserStatus,
+  updateManagedAccount,
   updateManagedIdentifier,
   type ManageableUser,
 } from "@/lib/users.functions";
@@ -40,7 +41,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
-import { KeyRound, Pencil, Plus, Shield, UserRound } from "lucide-react";
+import { KeyRound, Pencil, Plus, Settings2, Shield, UserRound } from "lucide-react";
 import { toast } from "sonner";
 
 interface Props {
@@ -63,10 +64,12 @@ export function UsersModule({ propertyId }: Props) {
   const [createType, setCreateType] = useState<"staff" | "admin" | null>(null);
   const [resetTarget, setResetTarget] = useState<ManageableUser | null>(null);
   const [identifierTarget, setIdentifierTarget] = useState<ManageableUser | null>(null);
+  const [editTarget, setEditTarget] = useState<ManageableUser | null>(null);
   const [search, setSearch] = useState("");
   const [type, setType] = useState("all");
   const [status, setStatus] = useState("all");
   const [role, setRole] = useState("all");
+  const [department, setDepartment] = useState("all");
   const users = useQuery({
     queryKey: ["managed-users", propertyId],
     enabled: !!propertyId,
@@ -81,10 +84,18 @@ export function UsersModule({ propertyId }: Props) {
           (!needle || hay.includes(needle)) &&
           (type === "all" || u.account_type === type) &&
           (status === "all" || u.status === status) &&
+          (department === "all" || u.department === department) &&
           (role === "all" || u.roles.some((r) => r.role === role))
         );
       }),
-    [users.data, search, type, status, role],
+    [users.data, search, type, status, role, department],
+  );
+  const departments = useMemo(
+    () =>
+      Array.from(
+        new Set((users.data ?? []).map((user) => user.department).filter(Boolean) as string[]),
+      ).sort(),
+    [users.data],
   );
   const statusMut = useMutation({
     mutationFn: (v: { userId: string; status: "active" | "suspended" | "disabled" }) =>
@@ -117,7 +128,7 @@ export function UsersModule({ propertyId }: Props) {
         </div>
       </div>
       <Card className="p-4">
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -141,6 +152,12 @@ export function UsersModule({ propertyId }: Props) {
             setValue={setStatus}
             label="Status"
             values={["active", "pending", "suspended", "disabled"]}
+          />
+          <Filter
+            value={department}
+            setValue={setDepartment}
+            label="Department"
+            values={departments}
           />
         </div>
       </Card>
@@ -198,6 +215,15 @@ export function UsersModule({ propertyId }: Props) {
                 </TableCell>
                 <TableCell>
                   <div className="flex justify-end gap-1">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setEditTarget(u)}
+                      title="Edit account"
+                      aria-label={`Edit account ${u.identifier}`}
+                    >
+                      <Settings2 className="h-4 w-4" />
+                    </Button>
                     <Button
                       size="sm"
                       variant="ghost"
@@ -280,6 +306,14 @@ export function UsersModule({ propertyId }: Props) {
           user={identifierTarget}
           propertyId={propertyId!}
           onClose={() => setIdentifierTarget(null)}
+          onDone={refresh}
+        />
+      )}
+      {editTarget && (
+        <EditAccountDialog
+          user={editTarget}
+          currentPropertyId={propertyId!}
+          onClose={() => setEditTarget(null)}
           onDone={refresh}
         />
       )}
@@ -488,6 +522,138 @@ function CreateDialog({
     </Dialog>
   );
 }
+function EditAccountDialog({
+  user,
+  currentPropertyId,
+  onClose,
+  onDone,
+}: {
+  user: ManageableUser;
+  currentPropertyId: string;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const updateAccount = useServerFn(updateManagedAccount);
+  const roles = user.account_type === "admin" ? ADMIN_ROLES : STAFF_ROLES;
+  const properties = useQuery({
+    queryKey: ["account-properties"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("properties")
+        .select("id,name")
+        .eq("active", true)
+        .order("name");
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+  const assigned = user.roles.map((role) => role.property_id).filter(Boolean) as string[];
+  const [form, setForm] = useState({
+    fullName: user.full_name ?? "",
+    phone: user.phone ?? "",
+    department: user.department ?? "",
+    role: user.roles[0]?.role ?? roles[0],
+    propertyIds: assigned.length ? assigned : [currentPropertyId],
+  });
+  const [busy, setBusy] = useState(false);
+  const set = (key: string, value: any) => setForm((current) => ({ ...current, [key]: value }));
+  async function save() {
+    setBusy(true);
+    try {
+      await updateAccount({
+        data: { ...form, userId: user.id, propertyId: currentPropertyId },
+      });
+      toast.success("Account details updated.");
+      onDone();
+      onClose();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Account update failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Edit account</DialogTitle>
+          <DialogDescription>
+            Update profile details, role and property access for {user.identifier}. Login
+            credentials are unchanged.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field
+            label="Full name"
+            value={form.fullName}
+            setValue={(value) => set("fullName", value)}
+          />
+          <Field
+            label="Phone number"
+            value={form.phone}
+            setValue={(value) => set("phone", value)}
+          />
+          <Field
+            label="Department"
+            value={form.department}
+            setValue={(value) => set("department", value)}
+          />
+          <div>
+            <Label>Role</Label>
+            <Select value={form.role} onValueChange={(value) => set("role", value)}>
+              <SelectTrigger className="mt-2" aria-label="Role">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {roles.map((role) => (
+                  <SelectItem key={role} value={role}>
+                    {role.replaceAll("_", " ")}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="sm:col-span-2">
+            <Label>Assigned properties</Label>
+            <div className="mt-2 grid gap-2 rounded-md border p-3 sm:grid-cols-2">
+              {properties.data?.map((property) => (
+                <label key={property.id} className="flex items-center gap-2 text-sm">
+                  <Checkbox
+                    checked={form.propertyIds.includes(property.id)}
+                    disabled={form.role === "super_admin"}
+                    onCheckedChange={(checked) =>
+                      set(
+                        "propertyIds",
+                        checked
+                          ? [...form.propertyIds, property.id]
+                          : form.propertyIds.filter((id) => id !== property.id),
+                      )
+                    }
+                  />
+                  {property.name}
+                </label>
+              ))}
+            </div>
+            {form.role === "super_admin" && (
+              <p className="mt-2 text-xs text-muted-foreground">
+                Super Admin access is global across properties.
+              </p>
+            )}
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button onClick={save} disabled={busy}>
+            {busy ? "Saving…" : "Save changes"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function IdentifierDialog({
   user,
   propertyId,
