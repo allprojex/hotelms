@@ -112,7 +112,7 @@ export const getPasswordChangeState = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuthAllowPasswordChange])
   .handler(async ({ context }) => {
     const { data } = await (context.supabase.from("profiles") as any)
-      .select("must_change_password,account_type,status")
+      .select("must_change_password,account_type,status,identifier,full_name")
       .eq("id", context.userId)
       .single();
     return data;
