@@ -180,7 +180,12 @@ describe("runScheduledExport — ownership guard", () => {
 // assert the guard remains present so it cannot be silently removed.
 // ---------------------------------------------------------------------------
 describe("logAuditEvent — property-access guard", () => {
-  const src = readFileSync(resolve(__dirname, "../src/lib/audit.functions.ts"), "utf8");
+  const src = readFileSync(resolve(__dirname, "../src/lib/audit.server.ts"), "utf8");
+  const wrapper = readFileSync(resolve(__dirname, "../src/lib/audit.functions.ts"), "utf8");
+
+  it("routes the public server function through the guarded audit helper", () => {
+    expect(wrapper).toContain("captureAuditEvent");
+  });
 
   it("calls can_access_property before recording property-scoped events", () => {
     expect(src).toMatch(/rpc\(\s*["']can_access_property["']/);

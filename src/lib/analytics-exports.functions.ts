@@ -1,13 +1,21 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import type { AppRole } from "@/hooks/use-user-roles";
+import type { PermissionContext } from "@/lib/permissions.server";
+import { authorizeReportAction } from "@/lib/reports/report-access.server";
 import { z } from "zod";
 
-const EXEC_ROLES = ["super_admin", "hotel_owner", "general_manager", "accountant"] as const;
+const EXEC_ROLES = [
+  "super_admin",
+  "hotel_owner",
+  "general_manager",
+  "accountant",
+] as const satisfies readonly AppRole[];
 
-async function assertPropertyAccess(context: any, propertyId: string) {
+async function assertPropertyAccess(context: PermissionContext, propertyId: string) {
   const { data, error } = await context.supabase.rpc("has_any_role", {
     _user_id: context.userId,
-    _roles: EXEC_ROLES as unknown as string[],
+    _roles: [...EXEC_ROLES],
     _property_id: propertyId,
   });
   if (error) throw new Error(error.message);
@@ -19,7 +27,30 @@ export const assertExecExportAccess = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ propertyId: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
-    await assertPropertyAccess(context, data.propertyId);
+    await authorizeReportAction(context, {
+      propertyId: data.propertyId,
+      reportKey: "analytics",
+      title: "Executive Analytics",
+      action: "export",
+      defaultRoles: EXEC_ROLES,
+      sensitive: true,
+    });
+    return { allowed: true };
+  });
+
+/** Server-side authorization gate for print requests. */
+export const assertExecPrintAccess = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ propertyId: z.string().uuid() }).parse(d))
+  .handler(async ({ data, context }) => {
+    await authorizeReportAction(context, {
+      propertyId: data.propertyId,
+      reportKey: "analytics",
+      title: "Executive Analytics",
+      action: "print",
+      defaultRoles: EXEC_ROLES,
+      sensitive: true,
+    });
     return { allowed: true };
   });
 
@@ -35,9 +66,16 @@ const ScheduleSchema = z.object({
   isActive: z.boolean(),
 });
 
-function computeNextRun(freq: string, hour: number, dow: number | null | undefined, dom: number | null | undefined): string {
+function computeNextRun(
+  freq: string,
+  hour: number,
+  dow: number | null | undefined,
+  dom: number | null | undefined,
+): string {
   const now = new Date();
-  const next = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), hour, 0, 0));
+  const next = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), hour, 0, 0),
+  );
   if (freq === "daily") {
     if (next <= now) next.setUTCDate(next.getUTCDate() + 1);
   } else if (freq === "weekly") {
@@ -60,14 +98,18 @@ export const listExportSchedules = createServerFn({ method: "POST" })
     await assertPropertyAccess(context, data.propertyId);
     const { data: rows, error } = await context.supabase
       .from("analytics_export_schedules")
-      .select("*").eq("property_id", data.propertyId).order("created_at");
+      .select("*")
+      .eq("property_id", data.propertyId)
+      .order("created_at");
     if (error) throw new Error(error.message);
     return rows ?? [];
   });
 
 export const upsertExportSchedule = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) => ScheduleSchema.extend({ id: z.string().uuid().optional() }).parse(d))
+  .inputValidator((d: unknown) =>
+    ScheduleSchema.extend({ id: z.string().uuid().optional() }).parse(d),
+  )
   .handler(async ({ data, context }) => {
     await assertPropertyAccess(context, data.propertyId);
     const nextRun = computeNextRun(data.frequency, data.hour, data.dayOfWeek, data.dayOfMonth);
@@ -84,23 +126,33 @@ export const upsertExportSchedule = createServerFn({ method: "POST" })
       next_run_at: nextRun,
     };
     if (data.id) {
-      const { error } = await context.supabase.from("analytics_export_schedules")
-        .update(payload).eq("id", data.id);
+      const { error } = await context.supabase
+        .from("analytics_export_schedules")
+        .update(payload)
+        .eq("id", data.id);
       if (error) throw new Error(error.message);
       return { id: data.id };
     }
-    const { data: inserted, error } = await context.supabase.from("analytics_export_schedules")
-      .insert({ ...payload, created_by: context.userId }).select("id").single();
+    const { data: inserted, error } = await context.supabase
+      .from("analytics_export_schedules")
+      .insert({ ...payload, created_by: context.userId })
+      .select("id")
+      .single();
     if (error) throw new Error(error.message);
     return { id: inserted.id };
   });
 
 export const deleteExportSchedule = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) => z.object({ id: z.string().uuid(), propertyId: z.string().uuid() }).parse(d))
+  .inputValidator((d: unknown) =>
+    z.object({ id: z.string().uuid(), propertyId: z.string().uuid() }).parse(d),
+  )
   .handler(async ({ data, context }) => {
     await assertPropertyAccess(context, data.propertyId);
-    const { error } = await context.supabase.from("analytics_export_schedules").delete().eq("id", data.id);
+    const { error } = await context.supabase
+      .from("analytics_export_schedules")
+      .delete()
+      .eq("id", data.id);
     if (error) throw new Error(error.message);
     return { ok: true };
   });
@@ -112,8 +164,12 @@ export const listExportRuns = createServerFn({ method: "POST" })
     await assertPropertyAccess(context, data.propertyId);
     const { data: rows, error } = await context.supabase
       .from("analytics_export_runs")
-      .select("id, schedule_id, period_from, period_to, format, recipients, status, error, sent_at, created_at")
-      .eq("property_id", data.propertyId).order("created_at", { ascending: false }).limit(50);
+      .select(
+        "id, schedule_id, period_from, period_to, format, recipients, status, error, sent_at, created_at",
+      )
+      .eq("property_id", data.propertyId)
+      .order("created_at", { ascending: false })
+      .limit(50);
     if (error) throw new Error(error.message);
     return rows ?? [];
   });
@@ -121,7 +177,9 @@ export const listExportRuns = createServerFn({ method: "POST" })
 /** Triggers a scheduled export immediately (server-side dispatch via cron endpoint). */
 export const runExportScheduleNow = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) => z.object({ scheduleId: z.string().uuid(), propertyId: z.string().uuid() }).parse(d))
+  .inputValidator((d: unknown) =>
+    z.object({ scheduleId: z.string().uuid(), propertyId: z.string().uuid() }).parse(d),
+  )
   .handler(async ({ data, context }) => {
     await assertPropertyAccess(context, data.propertyId);
     // Reuse cron logic by dynamic import to avoid duplication.

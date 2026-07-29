@@ -101,26 +101,29 @@
   --chart-4: oklch(0.75 0.15 75);
   --chart-5: oklch(0.58 0.22 25);
 
-  /* Emerald sidebar — brand-forward, calm, professional */
-  --sidebar: oklch(0.985 0.012 160);
-  --sidebar-foreground: oklch(0.24 0.04 160);
-  --sidebar-primary: oklch(0.55 0.14 160);
-  --sidebar-primary-foreground: oklch(0.99 0.005 160);
-  --sidebar-accent: oklch(0.93 0.05 160);
-  --sidebar-accent-foreground: oklch(0.22 0.05 160);
-  --sidebar-border: oklch(0.88 0.04 160);
-  --sidebar-ring: oklch(0.55 0.14 160);
+  /* Deep Sea Blue navigation with safe --nav-brand-* branding overrides. */
+  --nav-brand-background: oklch(0.27 0.075 245);
+  --nav-brand-foreground: oklch(0.96 0.015 235);
+  --nav-brand-accent: oklch(0.7 0.12 220);
+  --sidebar: var(--nav-brand-background);
+  --sidebar-foreground: var(--nav-brand-foreground);
+  --sidebar-primary: var(--nav-brand-accent);
+  --sidebar-primary-foreground: oklch(0.18 0.045 245);
+  --sidebar-accent: oklch(0.35 0.075 242);
+  --sidebar-accent-foreground: oklch(0.98 0.008 235);
+  --sidebar-border: oklch(0.43 0.065 240);
+  --sidebar-ring: var(--nav-brand-accent);
 
-  /* Per-group nav accent tokens (light) — each hue calibrated to sit with emerald */
-  --nav-home:          oklch(0.55 0.14 160); /* emerald  */
-  --nav-front-office:  oklch(0.55 0.13 195); /* teal     */
-  --nav-rooms-rates:   oklch(0.58 0.12 220); /* cyan     */
-  --nav-pos:           oklch(0.62 0.15 65);  /* amber    */
-  --nav-inventory:     oklch(0.55 0.16 290); /* violet   */
-  --nav-distribution:  oklch(0.58 0.13 245); /* sky      */
-  --nav-accounting:    oklch(0.52 0.15 265); /* indigo   */
-  --nav-insights:      oklch(0.58 0.18 335); /* fuchsia  */
-  --nav-administration:oklch(0.48 0.03 250); /* slate    */
+  /* Group accents stay within the blue/teal enterprise palette. */
+  --nav-home: oklch(0.78 0.1 215);
+  --nav-front-office: oklch(0.8 0.09 200);
+  --nav-rooms-rates: oklch(0.78 0.1 225);
+  --nav-pos: oklch(0.82 0.09 205);
+  --nav-inventory: oklch(0.76 0.11 235);
+  --nav-distribution: oklch(0.79 0.1 220);
+  --nav-accounting: oklch(0.76 0.1 245);
+  --nav-insights: oklch(0.8 0.09 210);
+  --nav-administration: oklch(0.75 0.04 240);
 
   --gradient-primary: linear-gradient(135deg, var(--primary), var(--primary-glow));
   --gradient-surface: linear-gradient(180deg, oklch(0.99 0.005 160), oklch(0.96 0.01 170));
@@ -166,26 +169,29 @@
   --chart-4: oklch(0.8 0.15 75);
   --chart-5: oklch(0.65 0.2 25);
 
-  /* Emerald sidebar (dark) — deep forest, mint ink */
-  --sidebar: oklch(0.19 0.03 160);
-  --sidebar-foreground: oklch(0.94 0.03 160);
-  --sidebar-primary: oklch(0.72 0.13 160);
-  --sidebar-primary-foreground: oklch(0.14 0.02 160);
-  --sidebar-accent: oklch(0.27 0.05 160);
-  --sidebar-accent-foreground: oklch(0.96 0.02 160);
-  --sidebar-border: oklch(0.30 0.04 160);
-  --sidebar-ring: oklch(0.72 0.13 160);
+  /* Dark-mode Deep Sea Blue uses the same branding token contract. */
+  --nav-brand-background: oklch(0.18 0.055 245);
+  --nav-brand-foreground: oklch(0.95 0.015 230);
+  --nav-brand-accent: oklch(0.75 0.12 215);
+  --sidebar: var(--nav-brand-background);
+  --sidebar-foreground: var(--nav-brand-foreground);
+  --sidebar-primary: var(--nav-brand-accent);
+  --sidebar-primary-foreground: oklch(0.15 0.04 245);
+  --sidebar-accent: oklch(0.27 0.065 242);
+  --sidebar-accent-foreground: oklch(0.98 0.008 230);
+  --sidebar-border: oklch(0.34 0.055 240);
+  --sidebar-ring: var(--nav-brand-accent);
 
-  /* Per-group nav accents (dark) — reduced chroma + lifted lightness so no hue screams */
-  --nav-home:          oklch(0.78 0.11 160);
-  --nav-front-office:  oklch(0.78 0.10 195);
-  --nav-rooms-rates:   oklch(0.78 0.10 220);
-  --nav-pos:           oklch(0.80 0.11 65);
-  --nav-inventory:     oklch(0.76 0.12 290);
-  --nav-distribution:  oklch(0.78 0.10 245);
-  --nav-accounting:    oklch(0.76 0.11 265);
-  --nav-insights:      oklch(0.76 0.13 335);
-  --nav-administration:oklch(0.75 0.02 250);
+  /* Dark group accents retain accessible contrast. */
+  --nav-home: oklch(0.8 0.1 215);
+  --nav-front-office: oklch(0.82 0.09 200);
+  --nav-rooms-rates: oklch(0.8 0.1 225);
+  --nav-pos: oklch(0.84 0.09 205);
+  --nav-inventory: oklch(0.78 0.11 235);
+  --nav-distribution: oklch(0.81 0.1 220);
+  --nav-accounting: oklch(0.78 0.1 245);
+  --nav-insights: oklch(0.82 0.09 210);
+  --nav-administration: oklch(0.77 0.04 240);
 
   --gradient-primary: linear-gradient(135deg, var(--primary), var(--primary-glow));
   --gradient-surface: linear-gradient(180deg, oklch(0.16 0.015 180), oklch(0.14 0.015 180));
@@ -250,4 +256,3 @@
 @utility nav-accent-border {
   border-left-color: var(--nav-accent, var(--primary));
 }
-
