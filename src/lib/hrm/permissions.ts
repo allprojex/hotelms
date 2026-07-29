@@ -31,4 +31,16 @@ export const HRM_PERMISSIONS = {
   announcementView: { module: "staff_announcements", capability: "view" },
   announcementManage: { module: "staff_announcements", capability: "manage_settings" },
   announcementPublish: { module: "staff_announcements", capability: "approve" },
+  workforceSettingsView: { module: "workforce_settings", capability: "view" },
+  workforceSettingsManage: {
+    module: "workforce_settings",
+    capability: "manage_settings",
+  },
+  shiftView: { module: "shift_templates", capability: "view" },
+  shiftManage: { module: "shift_templates", capability: "manage_settings" },
+  rosterView: { module: "duty_roster", capability: "view" },
+  rosterManage: { module: "duty_roster", capability: "manage_settings" },
+  rosterPublish: { module: "duty_roster", capability: "approve" },
+  holidayView: { module: "holidays", capability: "view" },
+  holidayManage: { module: "holidays", capability: "manage_settings" },
 } as const satisfies Record<string, { module: string; capability: PermissionCapability }>;

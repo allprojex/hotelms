@@ -51,6 +51,10 @@ import { Route as AuthenticatedInventoryTransfersRouteImport } from './routes/_a
 import { Route as AuthenticatedInventorySettingsRouteImport } from './routes/_authenticated/inventory.settings'
 import { Route as AuthenticatedInventoryPurchaseOrdersRouteImport } from './routes/_authenticated/inventory.purchase-orders'
 import { Route as AuthenticatedInventoryAdjustmentsRouteImport } from './routes/_authenticated/inventory.adjustments'
+import { Route as AuthenticatedHrmWorkforceSettingsRouteImport } from './routes/_authenticated/hrm.workforce-settings'
+import { Route as AuthenticatedHrmShiftsRouteImport } from './routes/_authenticated/hrm.shifts'
+import { Route as AuthenticatedHrmRosterRouteImport } from './routes/_authenticated/hrm.roster'
+import { Route as AuthenticatedHrmHolidaysRouteImport } from './routes/_authenticated/hrm.holidays'
 import { Route as AuthenticatedHrmDocumentsRouteImport } from './routes/_authenticated/hrm.documents'
 import { Route as AuthenticatedHrmDesignationsRouteImport } from './routes/_authenticated/hrm.designations'
 import { Route as AuthenticatedHrmDepartmentsRouteImport } from './routes/_authenticated/hrm.departments'
@@ -315,6 +319,28 @@ const AuthenticatedInventoryAdjustmentsRoute =
   AuthenticatedInventoryAdjustmentsRouteImport.update({
     id: '/inventory/adjustments',
     path: '/inventory/adjustments',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedHrmWorkforceSettingsRoute =
+  AuthenticatedHrmWorkforceSettingsRouteImport.update({
+    id: '/hrm/workforce-settings',
+    path: '/hrm/workforce-settings',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedHrmShiftsRoute = AuthenticatedHrmShiftsRouteImport.update({
+  id: '/hrm/shifts',
+  path: '/hrm/shifts',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedHrmRosterRoute = AuthenticatedHrmRosterRouteImport.update({
+  id: '/hrm/roster',
+  path: '/hrm/roster',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedHrmHolidaysRoute =
+  AuthenticatedHrmHolidaysRouteImport.update({
+    id: '/hrm/holidays',
+    path: '/hrm/holidays',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedHrmDocumentsRoute =
@@ -597,6 +623,10 @@ export interface FileRoutesByFullPath {
   '/hrm/departments': typeof AuthenticatedHrmDepartmentsRoute
   '/hrm/designations': typeof AuthenticatedHrmDesignationsRoute
   '/hrm/documents': typeof AuthenticatedHrmDocumentsRoute
+  '/hrm/holidays': typeof AuthenticatedHrmHolidaysRoute
+  '/hrm/roster': typeof AuthenticatedHrmRosterRoute
+  '/hrm/shifts': typeof AuthenticatedHrmShiftsRoute
+  '/hrm/workforce-settings': typeof AuthenticatedHrmWorkforceSettingsRoute
   '/inventory/adjustments': typeof AuthenticatedInventoryAdjustmentsRoute
   '/inventory/purchase-orders': typeof AuthenticatedInventoryPurchaseOrdersRoute
   '/inventory/settings': typeof AuthenticatedInventorySettingsRoute
@@ -680,6 +710,10 @@ export interface FileRoutesByTo {
   '/hrm/departments': typeof AuthenticatedHrmDepartmentsRoute
   '/hrm/designations': typeof AuthenticatedHrmDesignationsRoute
   '/hrm/documents': typeof AuthenticatedHrmDocumentsRoute
+  '/hrm/holidays': typeof AuthenticatedHrmHolidaysRoute
+  '/hrm/roster': typeof AuthenticatedHrmRosterRoute
+  '/hrm/shifts': typeof AuthenticatedHrmShiftsRoute
+  '/hrm/workforce-settings': typeof AuthenticatedHrmWorkforceSettingsRoute
   '/inventory/adjustments': typeof AuthenticatedInventoryAdjustmentsRoute
   '/inventory/purchase-orders': typeof AuthenticatedInventoryPurchaseOrdersRoute
   '/inventory/settings': typeof AuthenticatedInventorySettingsRoute
@@ -765,6 +799,10 @@ export interface FileRoutesById {
   '/_authenticated/hrm/departments': typeof AuthenticatedHrmDepartmentsRoute
   '/_authenticated/hrm/designations': typeof AuthenticatedHrmDesignationsRoute
   '/_authenticated/hrm/documents': typeof AuthenticatedHrmDocumentsRoute
+  '/_authenticated/hrm/holidays': typeof AuthenticatedHrmHolidaysRoute
+  '/_authenticated/hrm/roster': typeof AuthenticatedHrmRosterRoute
+  '/_authenticated/hrm/shifts': typeof AuthenticatedHrmShiftsRoute
+  '/_authenticated/hrm/workforce-settings': typeof AuthenticatedHrmWorkforceSettingsRoute
   '/_authenticated/inventory/adjustments': typeof AuthenticatedInventoryAdjustmentsRoute
   '/_authenticated/inventory/purchase-orders': typeof AuthenticatedInventoryPurchaseOrdersRoute
   '/_authenticated/inventory/settings': typeof AuthenticatedInventorySettingsRoute
@@ -850,6 +888,10 @@ export interface FileRouteTypes {
     | '/hrm/departments'
     | '/hrm/designations'
     | '/hrm/documents'
+    | '/hrm/holidays'
+    | '/hrm/roster'
+    | '/hrm/shifts'
+    | '/hrm/workforce-settings'
     | '/inventory/adjustments'
     | '/inventory/purchase-orders'
     | '/inventory/settings'
@@ -933,6 +975,10 @@ export interface FileRouteTypes {
     | '/hrm/departments'
     | '/hrm/designations'
     | '/hrm/documents'
+    | '/hrm/holidays'
+    | '/hrm/roster'
+    | '/hrm/shifts'
+    | '/hrm/workforce-settings'
     | '/inventory/adjustments'
     | '/inventory/purchase-orders'
     | '/inventory/settings'
@@ -1017,6 +1063,10 @@ export interface FileRouteTypes {
     | '/_authenticated/hrm/departments'
     | '/_authenticated/hrm/designations'
     | '/_authenticated/hrm/documents'
+    | '/_authenticated/hrm/holidays'
+    | '/_authenticated/hrm/roster'
+    | '/_authenticated/hrm/shifts'
+    | '/_authenticated/hrm/workforce-settings'
     | '/_authenticated/inventory/adjustments'
     | '/_authenticated/inventory/purchase-orders'
     | '/_authenticated/inventory/settings'
@@ -1371,6 +1421,34 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedInventoryAdjustmentsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/hrm/workforce-settings': {
+      id: '/_authenticated/hrm/workforce-settings'
+      path: '/hrm/workforce-settings'
+      fullPath: '/hrm/workforce-settings'
+      preLoaderRoute: typeof AuthenticatedHrmWorkforceSettingsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/hrm/shifts': {
+      id: '/_authenticated/hrm/shifts'
+      path: '/hrm/shifts'
+      fullPath: '/hrm/shifts'
+      preLoaderRoute: typeof AuthenticatedHrmShiftsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/hrm/roster': {
+      id: '/_authenticated/hrm/roster'
+      path: '/hrm/roster'
+      fullPath: '/hrm/roster'
+      preLoaderRoute: typeof AuthenticatedHrmRosterRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/hrm/holidays': {
+      id: '/_authenticated/hrm/holidays'
+      path: '/hrm/holidays'
+      fullPath: '/hrm/holidays'
+      preLoaderRoute: typeof AuthenticatedHrmHolidaysRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/hrm/documents': {
       id: '/_authenticated/hrm/documents'
       path: '/hrm/documents'
@@ -1707,6 +1785,10 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedHrmDepartmentsRoute: typeof AuthenticatedHrmDepartmentsRoute
   AuthenticatedHrmDesignationsRoute: typeof AuthenticatedHrmDesignationsRoute
   AuthenticatedHrmDocumentsRoute: typeof AuthenticatedHrmDocumentsRoute
+  AuthenticatedHrmHolidaysRoute: typeof AuthenticatedHrmHolidaysRoute
+  AuthenticatedHrmRosterRoute: typeof AuthenticatedHrmRosterRoute
+  AuthenticatedHrmShiftsRoute: typeof AuthenticatedHrmShiftsRoute
+  AuthenticatedHrmWorkforceSettingsRoute: typeof AuthenticatedHrmWorkforceSettingsRoute
   AuthenticatedInventoryAdjustmentsRoute: typeof AuthenticatedInventoryAdjustmentsRoute
   AuthenticatedInventoryPurchaseOrdersRoute: typeof AuthenticatedInventoryPurchaseOrdersRoute
   AuthenticatedInventorySettingsRoute: typeof AuthenticatedInventorySettingsRoute
@@ -1774,6 +1856,11 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedHrmDepartmentsRoute: AuthenticatedHrmDepartmentsRoute,
   AuthenticatedHrmDesignationsRoute: AuthenticatedHrmDesignationsRoute,
   AuthenticatedHrmDocumentsRoute: AuthenticatedHrmDocumentsRoute,
+  AuthenticatedHrmHolidaysRoute: AuthenticatedHrmHolidaysRoute,
+  AuthenticatedHrmRosterRoute: AuthenticatedHrmRosterRoute,
+  AuthenticatedHrmShiftsRoute: AuthenticatedHrmShiftsRoute,
+  AuthenticatedHrmWorkforceSettingsRoute:
+    AuthenticatedHrmWorkforceSettingsRoute,
   AuthenticatedInventoryAdjustmentsRoute:
     AuthenticatedInventoryAdjustmentsRoute,
   AuthenticatedInventoryPurchaseOrdersRoute:
