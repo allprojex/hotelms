@@ -91,7 +91,7 @@ describe("Phase 3C security and integration", () => {
     expect(biometric).toContain("browserSafeDevice");
     expect(biometric).not.toMatch(/console\.(log|debug)/);
   });
-  it("adds exactly the completed Phase 3C navigation and no payroll", () => {
+  it("keeps Phase 3C navigation and excludes unfinished payroll processing links", () => {
     for (const path of [
       "/hrm/leave",
       "/hrm/leave/calendar",
@@ -100,6 +100,8 @@ describe("Phase 3C security and integration", () => {
       "/hrm/biometric-devices",
     ])
       expect(sidebar).toContain(`to: "${path}"`);
-    expect(sidebar).not.toMatch(/to: "\/hrm\/payroll/);
+    expect(sidebar).not.toMatch(
+      /to: "\/hrm\/payroll\/(runs|payslips|payments|submissions|journals)/,
+    );
   });
 });

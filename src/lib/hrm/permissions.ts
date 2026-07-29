@@ -8,6 +8,8 @@ export const HRM_ADMIN_ROLES: readonly AppRole[] = [
   "hr",
 ];
 
+export const PAYROLL_SENSITIVE_ROLES: readonly AppRole[] = ["super_admin", "hotel_owner", "hr"];
+
 export const HRM_PERMISSIONS = {
   dashboardView: { module: "hrm_dashboard", capability: "view" },
   employeeView: { module: "employees", capability: "view" },
@@ -79,4 +81,31 @@ export const HRM_PERMISSIONS = {
   biometricMappingsManage: { module: "biometric_mappings", capability: "manage_settings" },
   biometricEventsImport: { module: "biometric_events", capability: "create" },
   biometricEventsReview: { module: "biometric_events", capability: "view" },
+  payrollOverviewView: { module: "payroll_overview", capability: "view" },
+  payrollSettingsView: { module: "payroll_settings", capability: "view" },
+  payrollSettingsManage: { module: "payroll_settings", capability: "manage_settings" },
+  payCalendarsView: { module: "pay_calendars", capability: "view" },
+  payCalendarsManage: { module: "pay_calendars", capability: "manage_settings" },
+  salaryStructuresView: { module: "salary_structures", capability: "view" },
+  salaryStructuresManage: { module: "salary_structures", capability: "manage_settings" },
+  payComponentsView: { module: "pay_components", capability: "view" },
+  payComponentsManage: { module: "pay_components", capability: "manage_settings" },
+  employeeCompensationView: { module: "employee_compensation", capability: "view" },
+  employeeCompensationManage: {
+    module: "employee_compensation",
+    capability: "manage_settings",
+  },
+  sensitiveCompensationView: {
+    module: "employee_compensation_sensitive",
+    capability: "view",
+  },
+  paymentDetailsView: { module: "payment_details", capability: "view" },
+  paymentDetailsManage: { module: "payment_details", capability: "manage_settings" },
+  fullPaymentDetailsReveal: { module: "payment_details_full", capability: "view" },
+  paymentDetailsVerify: { module: "payment_details", capability: "approve" },
+  statutoryRulesView: { module: "statutory_rules", capability: "view" },
+  statutoryRulesManage: { module: "statutory_rules", capability: "manage_settings" },
+  openingBalancesView: { module: "opening_balances", capability: "view" },
+  openingBalancesImport: { module: "opening_balances", capability: "create" },
+  openingBalancesManage: { module: "opening_balances", capability: "manage_settings" },
 } as const satisfies Record<string, { module: string; capability: PermissionCapability }>;

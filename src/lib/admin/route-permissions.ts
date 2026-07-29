@@ -59,6 +59,7 @@ export const ROUTE_ROLE_MAP: { prefix: string; roles: AppRole[] }[] = [
   { prefix: "/properties", roles: ADMIN_ROLES },
   { prefix: "/hrm/time-clock", roles: STAFF },
   { prefix: "/hrm/leave", roles: STAFF },
+  { prefix: "/hrm/payroll", roles: HRM },
   { prefix: "/hrm", roles: HRM },
   { prefix: "/accounting/sync", roles: SYNC_ROLES },
   { prefix: "/accounting", roles: ACCOUNTING },
