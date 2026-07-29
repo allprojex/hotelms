@@ -17,7 +17,7 @@ describe("HRM routes and navigation", () => {
     ]) {
       expect(sidebar).toContain(`to: "${route}"`);
     }
-    expect(sidebar).not.toMatch(/\/hrm\/payroll\/(runs|payslips|payments|submissions|journals)/i);
+    expect(sidebar).not.toMatch(/\/hrm\/payroll\/(payslips|payments|submissions|journals)/i);
     expect(sidebar).not.toMatch(/recruitment/i);
   });
 

@@ -101,9 +101,11 @@ import { Route as AuthenticatedPosKotIdRouteImport } from './routes/_authenticat
 import { Route as AuthenticatedHrmPayrollStatutoryRulesRouteImport } from './routes/_authenticated/hrm.payroll.statutory-rules'
 import { Route as AuthenticatedHrmPayrollSettingsRouteImport } from './routes/_authenticated/hrm.payroll.settings'
 import { Route as AuthenticatedHrmPayrollSalaryStructuresRouteImport } from './routes/_authenticated/hrm.payroll.salary-structures'
+import { Route as AuthenticatedHrmPayrollRunsRouteImport } from './routes/_authenticated/hrm.payroll.runs'
 import { Route as AuthenticatedHrmPayrollPaymentDetailsRouteImport } from './routes/_authenticated/hrm.payroll.payment-details'
 import { Route as AuthenticatedHrmPayrollPayComponentsRouteImport } from './routes/_authenticated/hrm.payroll.pay-components'
 import { Route as AuthenticatedHrmPayrollOpeningBalancesRouteImport } from './routes/_authenticated/hrm.payroll.opening-balances'
+import { Route as AuthenticatedHrmPayrollManualInputsRouteImport } from './routes/_authenticated/hrm.payroll.manual-inputs'
 import { Route as AuthenticatedHrmPayrollCompensationRouteImport } from './routes/_authenticated/hrm.payroll.compensation'
 import { Route as AuthenticatedHrmPayrollCalendarsRouteImport } from './routes/_authenticated/hrm.payroll.calendars'
 import { Route as AuthenticatedHrmLeaveTypesRouteImport } from './routes/_authenticated/hrm.leave.types'
@@ -111,6 +113,9 @@ import { Route as AuthenticatedHrmLeaveCalendarRouteImport } from './routes/_aut
 import { Route as AuthenticatedHrmLeaveBalancesRouteImport } from './routes/_authenticated/hrm.leave.balances'
 import { Route as AuthenticatedHrmEmployeesEmployeeIdRouteImport } from './routes/_authenticated/hrm.employees.$employeeId'
 import { Route as AuthenticatedAdminEslPairRouteImport } from './routes/_authenticated/admin_.esl.pair'
+import { Route as AuthenticatedHrmPayrollRunsNewRouteImport } from './routes/_authenticated/hrm.payroll.runs.new'
+import { Route as AuthenticatedHrmPayrollRunsRunIdRouteImport } from './routes/_authenticated/hrm.payroll.runs.$runId'
+import { Route as AuthenticatedHrmPayrollRunsRunIdEmployeesEmployeeIdRouteImport } from './routes/_authenticated/hrm.payroll.runs.$runId.employees.$employeeId'
 
 const ResetPasswordRoute = ResetPasswordRouteImport.update({
   id: '/reset-password',
@@ -624,6 +629,12 @@ const AuthenticatedHrmPayrollSalaryStructuresRoute =
     path: '/salary-structures',
     getParentRoute: () => AuthenticatedHrmPayrollRoute,
   } as any)
+const AuthenticatedHrmPayrollRunsRoute =
+  AuthenticatedHrmPayrollRunsRouteImport.update({
+    id: '/runs',
+    path: '/runs',
+    getParentRoute: () => AuthenticatedHrmPayrollRoute,
+  } as any)
 const AuthenticatedHrmPayrollPaymentDetailsRoute =
   AuthenticatedHrmPayrollPaymentDetailsRouteImport.update({
     id: '/payment-details',
@@ -640,6 +651,12 @@ const AuthenticatedHrmPayrollOpeningBalancesRoute =
   AuthenticatedHrmPayrollOpeningBalancesRouteImport.update({
     id: '/opening-balances',
     path: '/opening-balances',
+    getParentRoute: () => AuthenticatedHrmPayrollRoute,
+  } as any)
+const AuthenticatedHrmPayrollManualInputsRoute =
+  AuthenticatedHrmPayrollManualInputsRouteImport.update({
+    id: '/manual-inputs',
+    path: '/manual-inputs',
     getParentRoute: () => AuthenticatedHrmPayrollRoute,
   } as any)
 const AuthenticatedHrmPayrollCompensationRoute =
@@ -683,6 +700,24 @@ const AuthenticatedAdminEslPairRoute =
     id: '/pair',
     path: '/pair',
     getParentRoute: () => AuthenticatedAdminEslRoute,
+  } as any)
+const AuthenticatedHrmPayrollRunsNewRoute =
+  AuthenticatedHrmPayrollRunsNewRouteImport.update({
+    id: '/new',
+    path: '/new',
+    getParentRoute: () => AuthenticatedHrmPayrollRunsRoute,
+  } as any)
+const AuthenticatedHrmPayrollRunsRunIdRoute =
+  AuthenticatedHrmPayrollRunsRunIdRouteImport.update({
+    id: '/$runId',
+    path: '/$runId',
+    getParentRoute: () => AuthenticatedHrmPayrollRunsRoute,
+  } as any)
+const AuthenticatedHrmPayrollRunsRunIdEmployeesEmployeeIdRoute =
+  AuthenticatedHrmPayrollRunsRunIdEmployeesEmployeeIdRouteImport.update({
+    id: '/employees/$employeeId',
+    path: '/employees/$employeeId',
+    getParentRoute: () => AuthenticatedHrmPayrollRunsRunIdRoute,
   } as any)
 
 export interface FileRoutesByFullPath {
@@ -771,9 +806,11 @@ export interface FileRoutesByFullPath {
   '/hrm/leave/types': typeof AuthenticatedHrmLeaveTypesRoute
   '/hrm/payroll/calendars': typeof AuthenticatedHrmPayrollCalendarsRoute
   '/hrm/payroll/compensation': typeof AuthenticatedHrmPayrollCompensationRoute
+  '/hrm/payroll/manual-inputs': typeof AuthenticatedHrmPayrollManualInputsRoute
   '/hrm/payroll/opening-balances': typeof AuthenticatedHrmPayrollOpeningBalancesRoute
   '/hrm/payroll/pay-components': typeof AuthenticatedHrmPayrollPayComponentsRoute
   '/hrm/payroll/payment-details': typeof AuthenticatedHrmPayrollPaymentDetailsRoute
+  '/hrm/payroll/runs': typeof AuthenticatedHrmPayrollRunsRouteWithChildren
   '/hrm/payroll/salary-structures': typeof AuthenticatedHrmPayrollSalaryStructuresRoute
   '/hrm/payroll/settings': typeof AuthenticatedHrmPayrollSettingsRoute
   '/hrm/payroll/statutory-rules': typeof AuthenticatedHrmPayrollStatutoryRulesRoute
@@ -787,6 +824,9 @@ export interface FileRoutesByFullPath {
   '/api/public/hooks/fx-refresh': typeof ApiPublicHooksFxRefreshRoute
   '/api/public/test/rbac-harness': typeof ApiPublicTestRbacHarnessRoute
   '/hrm/employees/': typeof AuthenticatedHrmEmployeesIndexRoute
+  '/hrm/payroll/runs/$runId': typeof AuthenticatedHrmPayrollRunsRunIdRouteWithChildren
+  '/hrm/payroll/runs/new': typeof AuthenticatedHrmPayrollRunsNewRoute
+  '/hrm/payroll/runs/$runId/employees/$employeeId': typeof AuthenticatedHrmPayrollRunsRunIdEmployeesEmployeeIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -874,9 +914,11 @@ export interface FileRoutesByTo {
   '/hrm/leave/types': typeof AuthenticatedHrmLeaveTypesRoute
   '/hrm/payroll/calendars': typeof AuthenticatedHrmPayrollCalendarsRoute
   '/hrm/payroll/compensation': typeof AuthenticatedHrmPayrollCompensationRoute
+  '/hrm/payroll/manual-inputs': typeof AuthenticatedHrmPayrollManualInputsRoute
   '/hrm/payroll/opening-balances': typeof AuthenticatedHrmPayrollOpeningBalancesRoute
   '/hrm/payroll/pay-components': typeof AuthenticatedHrmPayrollPayComponentsRoute
   '/hrm/payroll/payment-details': typeof AuthenticatedHrmPayrollPaymentDetailsRoute
+  '/hrm/payroll/runs': typeof AuthenticatedHrmPayrollRunsRouteWithChildren
   '/hrm/payroll/salary-structures': typeof AuthenticatedHrmPayrollSalaryStructuresRoute
   '/hrm/payroll/settings': typeof AuthenticatedHrmPayrollSettingsRoute
   '/hrm/payroll/statutory-rules': typeof AuthenticatedHrmPayrollStatutoryRulesRoute
@@ -890,6 +932,9 @@ export interface FileRoutesByTo {
   '/api/public/hooks/fx-refresh': typeof ApiPublicHooksFxRefreshRoute
   '/api/public/test/rbac-harness': typeof ApiPublicTestRbacHarnessRoute
   '/hrm/employees': typeof AuthenticatedHrmEmployeesIndexRoute
+  '/hrm/payroll/runs/$runId': typeof AuthenticatedHrmPayrollRunsRunIdRouteWithChildren
+  '/hrm/payroll/runs/new': typeof AuthenticatedHrmPayrollRunsNewRoute
+  '/hrm/payroll/runs/$runId/employees/$employeeId': typeof AuthenticatedHrmPayrollRunsRunIdEmployeesEmployeeIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -979,9 +1024,11 @@ export interface FileRoutesById {
   '/_authenticated/hrm/leave/types': typeof AuthenticatedHrmLeaveTypesRoute
   '/_authenticated/hrm/payroll/calendars': typeof AuthenticatedHrmPayrollCalendarsRoute
   '/_authenticated/hrm/payroll/compensation': typeof AuthenticatedHrmPayrollCompensationRoute
+  '/_authenticated/hrm/payroll/manual-inputs': typeof AuthenticatedHrmPayrollManualInputsRoute
   '/_authenticated/hrm/payroll/opening-balances': typeof AuthenticatedHrmPayrollOpeningBalancesRoute
   '/_authenticated/hrm/payroll/pay-components': typeof AuthenticatedHrmPayrollPayComponentsRoute
   '/_authenticated/hrm/payroll/payment-details': typeof AuthenticatedHrmPayrollPaymentDetailsRoute
+  '/_authenticated/hrm/payroll/runs': typeof AuthenticatedHrmPayrollRunsRouteWithChildren
   '/_authenticated/hrm/payroll/salary-structures': typeof AuthenticatedHrmPayrollSalaryStructuresRoute
   '/_authenticated/hrm/payroll/settings': typeof AuthenticatedHrmPayrollSettingsRoute
   '/_authenticated/hrm/payroll/statutory-rules': typeof AuthenticatedHrmPayrollStatutoryRulesRoute
@@ -995,6 +1042,9 @@ export interface FileRoutesById {
   '/api/public/hooks/fx-refresh': typeof ApiPublicHooksFxRefreshRoute
   '/api/public/test/rbac-harness': typeof ApiPublicTestRbacHarnessRoute
   '/_authenticated/hrm/employees/': typeof AuthenticatedHrmEmployeesIndexRoute
+  '/_authenticated/hrm/payroll/runs/$runId': typeof AuthenticatedHrmPayrollRunsRunIdRouteWithChildren
+  '/_authenticated/hrm/payroll/runs/new': typeof AuthenticatedHrmPayrollRunsNewRoute
+  '/_authenticated/hrm/payroll/runs/$runId/employees/$employeeId': typeof AuthenticatedHrmPayrollRunsRunIdEmployeesEmployeeIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -1084,9 +1134,11 @@ export interface FileRouteTypes {
     | '/hrm/leave/types'
     | '/hrm/payroll/calendars'
     | '/hrm/payroll/compensation'
+    | '/hrm/payroll/manual-inputs'
     | '/hrm/payroll/opening-balances'
     | '/hrm/payroll/pay-components'
     | '/hrm/payroll/payment-details'
+    | '/hrm/payroll/runs'
     | '/hrm/payroll/salary-structures'
     | '/hrm/payroll/settings'
     | '/hrm/payroll/statutory-rules'
@@ -1100,6 +1152,9 @@ export interface FileRouteTypes {
     | '/api/public/hooks/fx-refresh'
     | '/api/public/test/rbac-harness'
     | '/hrm/employees/'
+    | '/hrm/payroll/runs/$runId'
+    | '/hrm/payroll/runs/new'
+    | '/hrm/payroll/runs/$runId/employees/$employeeId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -1187,9 +1242,11 @@ export interface FileRouteTypes {
     | '/hrm/leave/types'
     | '/hrm/payroll/calendars'
     | '/hrm/payroll/compensation'
+    | '/hrm/payroll/manual-inputs'
     | '/hrm/payroll/opening-balances'
     | '/hrm/payroll/pay-components'
     | '/hrm/payroll/payment-details'
+    | '/hrm/payroll/runs'
     | '/hrm/payroll/salary-structures'
     | '/hrm/payroll/settings'
     | '/hrm/payroll/statutory-rules'
@@ -1203,6 +1260,9 @@ export interface FileRouteTypes {
     | '/api/public/hooks/fx-refresh'
     | '/api/public/test/rbac-harness'
     | '/hrm/employees'
+    | '/hrm/payroll/runs/$runId'
+    | '/hrm/payroll/runs/new'
+    | '/hrm/payroll/runs/$runId/employees/$employeeId'
   id:
     | '__root__'
     | '/'
@@ -1291,9 +1351,11 @@ export interface FileRouteTypes {
     | '/_authenticated/hrm/leave/types'
     | '/_authenticated/hrm/payroll/calendars'
     | '/_authenticated/hrm/payroll/compensation'
+    | '/_authenticated/hrm/payroll/manual-inputs'
     | '/_authenticated/hrm/payroll/opening-balances'
     | '/_authenticated/hrm/payroll/pay-components'
     | '/_authenticated/hrm/payroll/payment-details'
+    | '/_authenticated/hrm/payroll/runs'
     | '/_authenticated/hrm/payroll/salary-structures'
     | '/_authenticated/hrm/payroll/settings'
     | '/_authenticated/hrm/payroll/statutory-rules'
@@ -1307,6 +1369,9 @@ export interface FileRouteTypes {
     | '/api/public/hooks/fx-refresh'
     | '/api/public/test/rbac-harness'
     | '/_authenticated/hrm/employees/'
+    | '/_authenticated/hrm/payroll/runs/$runId'
+    | '/_authenticated/hrm/payroll/runs/new'
+    | '/_authenticated/hrm/payroll/runs/$runId/employees/$employeeId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -1977,6 +2042,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedHrmPayrollSalaryStructuresRouteImport
       parentRoute: typeof AuthenticatedHrmPayrollRoute
     }
+    '/_authenticated/hrm/payroll/runs': {
+      id: '/_authenticated/hrm/payroll/runs'
+      path: '/runs'
+      fullPath: '/hrm/payroll/runs'
+      preLoaderRoute: typeof AuthenticatedHrmPayrollRunsRouteImport
+      parentRoute: typeof AuthenticatedHrmPayrollRoute
+    }
     '/_authenticated/hrm/payroll/payment-details': {
       id: '/_authenticated/hrm/payroll/payment-details'
       path: '/payment-details'
@@ -1996,6 +2068,13 @@ declare module '@tanstack/react-router' {
       path: '/opening-balances'
       fullPath: '/hrm/payroll/opening-balances'
       preLoaderRoute: typeof AuthenticatedHrmPayrollOpeningBalancesRouteImport
+      parentRoute: typeof AuthenticatedHrmPayrollRoute
+    }
+    '/_authenticated/hrm/payroll/manual-inputs': {
+      id: '/_authenticated/hrm/payroll/manual-inputs'
+      path: '/manual-inputs'
+      fullPath: '/hrm/payroll/manual-inputs'
+      preLoaderRoute: typeof AuthenticatedHrmPayrollManualInputsRouteImport
       parentRoute: typeof AuthenticatedHrmPayrollRoute
     }
     '/_authenticated/hrm/payroll/compensation': {
@@ -2047,6 +2126,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminEslPairRouteImport
       parentRoute: typeof AuthenticatedAdminEslRoute
     }
+    '/_authenticated/hrm/payroll/runs/new': {
+      id: '/_authenticated/hrm/payroll/runs/new'
+      path: '/new'
+      fullPath: '/hrm/payroll/runs/new'
+      preLoaderRoute: typeof AuthenticatedHrmPayrollRunsNewRouteImport
+      parentRoute: typeof AuthenticatedHrmPayrollRunsRoute
+    }
+    '/_authenticated/hrm/payroll/runs/$runId': {
+      id: '/_authenticated/hrm/payroll/runs/$runId'
+      path: '/$runId'
+      fullPath: '/hrm/payroll/runs/$runId'
+      preLoaderRoute: typeof AuthenticatedHrmPayrollRunsRunIdRouteImport
+      parentRoute: typeof AuthenticatedHrmPayrollRunsRoute
+    }
+    '/_authenticated/hrm/payroll/runs/$runId/employees/$employeeId': {
+      id: '/_authenticated/hrm/payroll/runs/$runId/employees/$employeeId'
+      path: '/employees/$employeeId'
+      fullPath: '/hrm/payroll/runs/$runId/employees/$employeeId'
+      preLoaderRoute: typeof AuthenticatedHrmPayrollRunsRunIdEmployeesEmployeeIdRouteImport
+      parentRoute: typeof AuthenticatedHrmPayrollRunsRunIdRoute
+    }
   }
 }
 
@@ -2080,12 +2180,46 @@ const AuthenticatedHrmLeaveRouteWithChildren =
     AuthenticatedHrmLeaveRouteChildren,
   )
 
+interface AuthenticatedHrmPayrollRunsRunIdRouteChildren {
+  AuthenticatedHrmPayrollRunsRunIdEmployeesEmployeeIdRoute: typeof AuthenticatedHrmPayrollRunsRunIdEmployeesEmployeeIdRoute
+}
+
+const AuthenticatedHrmPayrollRunsRunIdRouteChildren: AuthenticatedHrmPayrollRunsRunIdRouteChildren =
+  {
+    AuthenticatedHrmPayrollRunsRunIdEmployeesEmployeeIdRoute:
+      AuthenticatedHrmPayrollRunsRunIdEmployeesEmployeeIdRoute,
+  }
+
+const AuthenticatedHrmPayrollRunsRunIdRouteWithChildren =
+  AuthenticatedHrmPayrollRunsRunIdRoute._addFileChildren(
+    AuthenticatedHrmPayrollRunsRunIdRouteChildren,
+  )
+
+interface AuthenticatedHrmPayrollRunsRouteChildren {
+  AuthenticatedHrmPayrollRunsRunIdRoute: typeof AuthenticatedHrmPayrollRunsRunIdRouteWithChildren
+  AuthenticatedHrmPayrollRunsNewRoute: typeof AuthenticatedHrmPayrollRunsNewRoute
+}
+
+const AuthenticatedHrmPayrollRunsRouteChildren: AuthenticatedHrmPayrollRunsRouteChildren =
+  {
+    AuthenticatedHrmPayrollRunsRunIdRoute:
+      AuthenticatedHrmPayrollRunsRunIdRouteWithChildren,
+    AuthenticatedHrmPayrollRunsNewRoute: AuthenticatedHrmPayrollRunsNewRoute,
+  }
+
+const AuthenticatedHrmPayrollRunsRouteWithChildren =
+  AuthenticatedHrmPayrollRunsRoute._addFileChildren(
+    AuthenticatedHrmPayrollRunsRouteChildren,
+  )
+
 interface AuthenticatedHrmPayrollRouteChildren {
   AuthenticatedHrmPayrollCalendarsRoute: typeof AuthenticatedHrmPayrollCalendarsRoute
   AuthenticatedHrmPayrollCompensationRoute: typeof AuthenticatedHrmPayrollCompensationRoute
+  AuthenticatedHrmPayrollManualInputsRoute: typeof AuthenticatedHrmPayrollManualInputsRoute
   AuthenticatedHrmPayrollOpeningBalancesRoute: typeof AuthenticatedHrmPayrollOpeningBalancesRoute
   AuthenticatedHrmPayrollPayComponentsRoute: typeof AuthenticatedHrmPayrollPayComponentsRoute
   AuthenticatedHrmPayrollPaymentDetailsRoute: typeof AuthenticatedHrmPayrollPaymentDetailsRoute
+  AuthenticatedHrmPayrollRunsRoute: typeof AuthenticatedHrmPayrollRunsRouteWithChildren
   AuthenticatedHrmPayrollSalaryStructuresRoute: typeof AuthenticatedHrmPayrollSalaryStructuresRoute
   AuthenticatedHrmPayrollSettingsRoute: typeof AuthenticatedHrmPayrollSettingsRoute
   AuthenticatedHrmPayrollStatutoryRulesRoute: typeof AuthenticatedHrmPayrollStatutoryRulesRoute
@@ -2097,12 +2231,16 @@ const AuthenticatedHrmPayrollRouteChildren: AuthenticatedHrmPayrollRouteChildren
       AuthenticatedHrmPayrollCalendarsRoute,
     AuthenticatedHrmPayrollCompensationRoute:
       AuthenticatedHrmPayrollCompensationRoute,
+    AuthenticatedHrmPayrollManualInputsRoute:
+      AuthenticatedHrmPayrollManualInputsRoute,
     AuthenticatedHrmPayrollOpeningBalancesRoute:
       AuthenticatedHrmPayrollOpeningBalancesRoute,
     AuthenticatedHrmPayrollPayComponentsRoute:
       AuthenticatedHrmPayrollPayComponentsRoute,
     AuthenticatedHrmPayrollPaymentDetailsRoute:
       AuthenticatedHrmPayrollPaymentDetailsRoute,
+    AuthenticatedHrmPayrollRunsRoute:
+      AuthenticatedHrmPayrollRunsRouteWithChildren,
     AuthenticatedHrmPayrollSalaryStructuresRoute:
       AuthenticatedHrmPayrollSalaryStructuresRoute,
     AuthenticatedHrmPayrollSettingsRoute: AuthenticatedHrmPayrollSettingsRoute,

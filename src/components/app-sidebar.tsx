@@ -104,7 +104,9 @@ type NavItem = {
     | "employeeCompensation"
     | "paymentDetails"
     | "statutoryRules"
-    | "openingBalances";
+    | "openingBalances"
+    | "payrollRuns"
+    | "payrollManualInputs";
 };
 
 // One accent hue per nav group; the token itself is defined in src/styles.css
@@ -445,6 +447,20 @@ const opsGroups: { label: string; items: NavItem[] }[] = [
         icon: Upload,
         description: "Source-backed payroll migration staging.",
         hrmPermission: "openingBalances",
+      },
+      {
+        title: "Draft Payroll Runs",
+        to: "/hrm/payroll/runs",
+        icon: ClipboardList,
+        description: "Calculate and review versioned draft payroll.",
+        hrmPermission: "payrollRuns",
+      },
+      {
+        title: "Manual Payroll Inputs",
+        to: "/hrm/payroll/manual-inputs",
+        icon: FileText,
+        description: "Source-backed one-time draft payroll inputs.",
+        hrmPermission: "payrollManualInputs",
       },
     ],
   },
@@ -844,6 +860,18 @@ export function AppSidebar() {
     capability: "view",
     defaultRoles: PAYROLL_SENSITIVE_ROLES,
   });
+  const payrollRuns = usePermission({
+    propertyId,
+    module: "payroll_runs",
+    capability: "view",
+    defaultRoles: PAYROLL_SENSITIVE_ROLES,
+  });
+  const payrollManualInputs = usePermission({
+    propertyId,
+    module: "payroll_manual_inputs",
+    capability: "view",
+    defaultRoles: PAYROLL_SENSITIVE_ROLES,
+  });
   const hrmVisibility = {
     dashboard: hrmDashboard.allowed,
     employees: hrmEmployees.allowed,
@@ -871,6 +899,8 @@ export function AppSidebar() {
     paymentDetails: paymentDetails.allowed,
     statutoryRules: statutoryRules.allowed,
     openingBalances: openingBalances.allowed,
+    payrollRuns: payrollRuns.allowed,
+    payrollManualInputs: payrollManualInputs.allowed,
   };
   const canSee = (required?: AppRole[]) => {
     if (!required) return true;
@@ -927,6 +957,8 @@ export function AppSidebar() {
     hrmVisibility.paymentDetails,
     hrmVisibility.statutoryRules,
     hrmVisibility.openingBalances,
+    hrmVisibility.payrollRuns,
+    hrmVisibility.payrollManualInputs,
   ]);
 
   function handleNavigate() {

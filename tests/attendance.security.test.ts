@@ -62,9 +62,7 @@ describe("Phase 3B integrity and authorization", () => {
   it("adds only Attendance and Time Clock navigation for Phase 3B", () => {
     expect(sidebar).toContain('to: "/hrm/attendance"');
     expect(sidebar).toContain('to: "/hrm/time-clock"');
-    expect(sidebar).not.toMatch(
-      /to: "\/hrm\/payroll\/(runs|payslips|payments|submissions|journals)/,
-    );
+    expect(sidebar).not.toMatch(/to: "\/hrm\/payroll\/(payslips|payments|submissions|journals)/);
     expect(routePermissions).toContain('{ prefix: "/hrm/time-clock", roles: STAFF }');
   });
 

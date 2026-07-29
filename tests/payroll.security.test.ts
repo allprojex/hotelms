@@ -103,11 +103,11 @@ describe("Phase 4A payroll security and integration", () => {
       "/hrm/payroll/payment-details",
       "/hrm/payroll/statutory-rules",
       "/hrm/payroll/opening-balances",
+      "/hrm/payroll/runs",
+      "/hrm/payroll/manual-inputs",
     ])
       expect(sidebar).toContain(`to: "${path}"`);
-    expect(sidebar).not.toMatch(
-      /to: "\/hrm\/payroll\/(runs|payslips|payments|submissions|journals)"/,
-    );
+    expect(sidebar).not.toMatch(/to: "\/hrm\/payroll\/(payslips|payments|submissions|journals)"/);
   });
 
   it("defines all Phase 4A permission boundaries", () => {
