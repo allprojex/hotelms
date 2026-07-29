@@ -52,12 +52,14 @@ import { Route as AuthenticatedInventorySettingsRouteImport } from './routes/_au
 import { Route as AuthenticatedInventoryPurchaseOrdersRouteImport } from './routes/_authenticated/inventory.purchase-orders'
 import { Route as AuthenticatedInventoryAdjustmentsRouteImport } from './routes/_authenticated/inventory.adjustments'
 import { Route as AuthenticatedHrmWorkforceSettingsRouteImport } from './routes/_authenticated/hrm.workforce-settings'
+import { Route as AuthenticatedHrmTimeClockRouteImport } from './routes/_authenticated/hrm.time-clock'
 import { Route as AuthenticatedHrmShiftsRouteImport } from './routes/_authenticated/hrm.shifts'
 import { Route as AuthenticatedHrmRosterRouteImport } from './routes/_authenticated/hrm.roster'
 import { Route as AuthenticatedHrmHolidaysRouteImport } from './routes/_authenticated/hrm.holidays'
 import { Route as AuthenticatedHrmDocumentsRouteImport } from './routes/_authenticated/hrm.documents'
 import { Route as AuthenticatedHrmDesignationsRouteImport } from './routes/_authenticated/hrm.designations'
 import { Route as AuthenticatedHrmDepartmentsRouteImport } from './routes/_authenticated/hrm.departments'
+import { Route as AuthenticatedHrmAttendanceRouteImport } from './routes/_authenticated/hrm.attendance'
 import { Route as AuthenticatedHrmAnnouncementsRouteImport } from './routes/_authenticated/hrm.announcements'
 import { Route as AuthenticatedGuestsIdRouteImport } from './routes/_authenticated/guests.$id'
 import { Route as AuthenticatedChannelsIdRouteImport } from './routes/_authenticated/channels.$id'
@@ -327,6 +329,12 @@ const AuthenticatedHrmWorkforceSettingsRoute =
     path: '/hrm/workforce-settings',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedHrmTimeClockRoute =
+  AuthenticatedHrmTimeClockRouteImport.update({
+    id: '/hrm/time-clock',
+    path: '/hrm/time-clock',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedHrmShiftsRoute = AuthenticatedHrmShiftsRouteImport.update({
   id: '/hrm/shifts',
   path: '/hrm/shifts',
@@ -359,6 +367,12 @@ const AuthenticatedHrmDepartmentsRoute =
   AuthenticatedHrmDepartmentsRouteImport.update({
     id: '/hrm/departments',
     path: '/hrm/departments',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedHrmAttendanceRoute =
+  AuthenticatedHrmAttendanceRouteImport.update({
+    id: '/hrm/attendance',
+    path: '/hrm/attendance',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedHrmAnnouncementsRoute =
@@ -620,12 +634,14 @@ export interface FileRoutesByFullPath {
   '/channels/$id': typeof AuthenticatedChannelsIdRoute
   '/guests/$id': typeof AuthenticatedGuestsIdRoute
   '/hrm/announcements': typeof AuthenticatedHrmAnnouncementsRoute
+  '/hrm/attendance': typeof AuthenticatedHrmAttendanceRoute
   '/hrm/departments': typeof AuthenticatedHrmDepartmentsRoute
   '/hrm/designations': typeof AuthenticatedHrmDesignationsRoute
   '/hrm/documents': typeof AuthenticatedHrmDocumentsRoute
   '/hrm/holidays': typeof AuthenticatedHrmHolidaysRoute
   '/hrm/roster': typeof AuthenticatedHrmRosterRoute
   '/hrm/shifts': typeof AuthenticatedHrmShiftsRoute
+  '/hrm/time-clock': typeof AuthenticatedHrmTimeClockRoute
   '/hrm/workforce-settings': typeof AuthenticatedHrmWorkforceSettingsRoute
   '/inventory/adjustments': typeof AuthenticatedInventoryAdjustmentsRoute
   '/inventory/purchase-orders': typeof AuthenticatedInventoryPurchaseOrdersRoute
@@ -707,12 +723,14 @@ export interface FileRoutesByTo {
   '/channels/$id': typeof AuthenticatedChannelsIdRoute
   '/guests/$id': typeof AuthenticatedGuestsIdRoute
   '/hrm/announcements': typeof AuthenticatedHrmAnnouncementsRoute
+  '/hrm/attendance': typeof AuthenticatedHrmAttendanceRoute
   '/hrm/departments': typeof AuthenticatedHrmDepartmentsRoute
   '/hrm/designations': typeof AuthenticatedHrmDesignationsRoute
   '/hrm/documents': typeof AuthenticatedHrmDocumentsRoute
   '/hrm/holidays': typeof AuthenticatedHrmHolidaysRoute
   '/hrm/roster': typeof AuthenticatedHrmRosterRoute
   '/hrm/shifts': typeof AuthenticatedHrmShiftsRoute
+  '/hrm/time-clock': typeof AuthenticatedHrmTimeClockRoute
   '/hrm/workforce-settings': typeof AuthenticatedHrmWorkforceSettingsRoute
   '/inventory/adjustments': typeof AuthenticatedInventoryAdjustmentsRoute
   '/inventory/purchase-orders': typeof AuthenticatedInventoryPurchaseOrdersRoute
@@ -796,12 +814,14 @@ export interface FileRoutesById {
   '/_authenticated/channels/$id': typeof AuthenticatedChannelsIdRoute
   '/_authenticated/guests/$id': typeof AuthenticatedGuestsIdRoute
   '/_authenticated/hrm/announcements': typeof AuthenticatedHrmAnnouncementsRoute
+  '/_authenticated/hrm/attendance': typeof AuthenticatedHrmAttendanceRoute
   '/_authenticated/hrm/departments': typeof AuthenticatedHrmDepartmentsRoute
   '/_authenticated/hrm/designations': typeof AuthenticatedHrmDesignationsRoute
   '/_authenticated/hrm/documents': typeof AuthenticatedHrmDocumentsRoute
   '/_authenticated/hrm/holidays': typeof AuthenticatedHrmHolidaysRoute
   '/_authenticated/hrm/roster': typeof AuthenticatedHrmRosterRoute
   '/_authenticated/hrm/shifts': typeof AuthenticatedHrmShiftsRoute
+  '/_authenticated/hrm/time-clock': typeof AuthenticatedHrmTimeClockRoute
   '/_authenticated/hrm/workforce-settings': typeof AuthenticatedHrmWorkforceSettingsRoute
   '/_authenticated/inventory/adjustments': typeof AuthenticatedInventoryAdjustmentsRoute
   '/_authenticated/inventory/purchase-orders': typeof AuthenticatedInventoryPurchaseOrdersRoute
@@ -885,12 +905,14 @@ export interface FileRouteTypes {
     | '/channels/$id'
     | '/guests/$id'
     | '/hrm/announcements'
+    | '/hrm/attendance'
     | '/hrm/departments'
     | '/hrm/designations'
     | '/hrm/documents'
     | '/hrm/holidays'
     | '/hrm/roster'
     | '/hrm/shifts'
+    | '/hrm/time-clock'
     | '/hrm/workforce-settings'
     | '/inventory/adjustments'
     | '/inventory/purchase-orders'
@@ -972,12 +994,14 @@ export interface FileRouteTypes {
     | '/channels/$id'
     | '/guests/$id'
     | '/hrm/announcements'
+    | '/hrm/attendance'
     | '/hrm/departments'
     | '/hrm/designations'
     | '/hrm/documents'
     | '/hrm/holidays'
     | '/hrm/roster'
     | '/hrm/shifts'
+    | '/hrm/time-clock'
     | '/hrm/workforce-settings'
     | '/inventory/adjustments'
     | '/inventory/purchase-orders'
@@ -1060,12 +1084,14 @@ export interface FileRouteTypes {
     | '/_authenticated/channels/$id'
     | '/_authenticated/guests/$id'
     | '/_authenticated/hrm/announcements'
+    | '/_authenticated/hrm/attendance'
     | '/_authenticated/hrm/departments'
     | '/_authenticated/hrm/designations'
     | '/_authenticated/hrm/documents'
     | '/_authenticated/hrm/holidays'
     | '/_authenticated/hrm/roster'
     | '/_authenticated/hrm/shifts'
+    | '/_authenticated/hrm/time-clock'
     | '/_authenticated/hrm/workforce-settings'
     | '/_authenticated/inventory/adjustments'
     | '/_authenticated/inventory/purchase-orders'
@@ -1428,6 +1454,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedHrmWorkforceSettingsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/hrm/time-clock': {
+      id: '/_authenticated/hrm/time-clock'
+      path: '/hrm/time-clock'
+      fullPath: '/hrm/time-clock'
+      preLoaderRoute: typeof AuthenticatedHrmTimeClockRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/hrm/shifts': {
       id: '/_authenticated/hrm/shifts'
       path: '/hrm/shifts'
@@ -1468,6 +1501,13 @@ declare module '@tanstack/react-router' {
       path: '/hrm/departments'
       fullPath: '/hrm/departments'
       preLoaderRoute: typeof AuthenticatedHrmDepartmentsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/hrm/attendance': {
+      id: '/_authenticated/hrm/attendance'
+      path: '/hrm/attendance'
+      fullPath: '/hrm/attendance'
+      preLoaderRoute: typeof AuthenticatedHrmAttendanceRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/hrm/announcements': {
@@ -1782,12 +1822,14 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedChannelsIdRoute: typeof AuthenticatedChannelsIdRoute
   AuthenticatedGuestsIdRoute: typeof AuthenticatedGuestsIdRoute
   AuthenticatedHrmAnnouncementsRoute: typeof AuthenticatedHrmAnnouncementsRoute
+  AuthenticatedHrmAttendanceRoute: typeof AuthenticatedHrmAttendanceRoute
   AuthenticatedHrmDepartmentsRoute: typeof AuthenticatedHrmDepartmentsRoute
   AuthenticatedHrmDesignationsRoute: typeof AuthenticatedHrmDesignationsRoute
   AuthenticatedHrmDocumentsRoute: typeof AuthenticatedHrmDocumentsRoute
   AuthenticatedHrmHolidaysRoute: typeof AuthenticatedHrmHolidaysRoute
   AuthenticatedHrmRosterRoute: typeof AuthenticatedHrmRosterRoute
   AuthenticatedHrmShiftsRoute: typeof AuthenticatedHrmShiftsRoute
+  AuthenticatedHrmTimeClockRoute: typeof AuthenticatedHrmTimeClockRoute
   AuthenticatedHrmWorkforceSettingsRoute: typeof AuthenticatedHrmWorkforceSettingsRoute
   AuthenticatedInventoryAdjustmentsRoute: typeof AuthenticatedInventoryAdjustmentsRoute
   AuthenticatedInventoryPurchaseOrdersRoute: typeof AuthenticatedInventoryPurchaseOrdersRoute
@@ -1853,12 +1895,14 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedChannelsIdRoute: AuthenticatedChannelsIdRoute,
   AuthenticatedGuestsIdRoute: AuthenticatedGuestsIdRoute,
   AuthenticatedHrmAnnouncementsRoute: AuthenticatedHrmAnnouncementsRoute,
+  AuthenticatedHrmAttendanceRoute: AuthenticatedHrmAttendanceRoute,
   AuthenticatedHrmDepartmentsRoute: AuthenticatedHrmDepartmentsRoute,
   AuthenticatedHrmDesignationsRoute: AuthenticatedHrmDesignationsRoute,
   AuthenticatedHrmDocumentsRoute: AuthenticatedHrmDocumentsRoute,
   AuthenticatedHrmHolidaysRoute: AuthenticatedHrmHolidaysRoute,
   AuthenticatedHrmRosterRoute: AuthenticatedHrmRosterRoute,
   AuthenticatedHrmShiftsRoute: AuthenticatedHrmShiftsRoute,
+  AuthenticatedHrmTimeClockRoute: AuthenticatedHrmTimeClockRoute,
   AuthenticatedHrmWorkforceSettingsRoute:
     AuthenticatedHrmWorkforceSettingsRoute,
   AuthenticatedInventoryAdjustmentsRoute:

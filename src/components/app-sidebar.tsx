@@ -29,7 +29,7 @@ type NavItem = {
   icon: any;
   description: string;
   requireRoles?: AppRole[];
-  hrmPermission?: "dashboard" | "employees" | "departments" | "designations" | "documents" | "announcements" | "shifts" | "roster" | "holidays" | "workforceSettings";
+  hrmPermission?: "dashboard" | "employees" | "departments" | "designations" | "documents" | "announcements" | "shifts" | "roster" | "holidays" | "workforceSettings" | "attendance" | "timeClock";
 };
 
 // One accent hue per nav group; the token itself is defined in src/styles.css
@@ -113,6 +113,8 @@ const opsGroups: { label: string; items: NavItem[] }[] = [
       { title: "Duty Roster", to: "/hrm/roster", icon: ClipboardList, description: "Assign and publish employee duty schedules.", hrmPermission: "roster" },
       { title: "Holiday Calendar", to: "/hrm/holidays", icon: CalendarHeart, description: "Property and department holiday dates.", hrmPermission: "holidays" },
       { title: "Workforce Settings", to: "/hrm/workforce-settings", icon: SlidersHorizontal, description: "Timezone and workforce time rules.", hrmPermission: "workforceSettings" },
+      { title: "Attendance", to: "/hrm/attendance", icon: Activity, description: "Attendance review, adjustments, approvals, and reports.", hrmPermission: "attendance" },
+      { title: "Time Clock", to: "/hrm/time-clock", icon: CalendarClock, description: "Record your own work and break events.", hrmPermission: "timeClock" },
     ],
   },
   // 7. Accounting — back office
@@ -187,6 +189,8 @@ export function AppSidebar() {
   const hrmRoster = usePermission({ propertyId, module: "duty_roster", capability: "view", defaultRoles: HRM_ADMIN_ROLES });
   const hrmHolidays = usePermission({ propertyId, module: "holidays", capability: "view", defaultRoles: HRM_ADMIN_ROLES });
   const hrmWorkforceSettings = usePermission({ propertyId, module: "workforce_settings", capability: "view", defaultRoles: HRM_ADMIN_ROLES });
+  const hrmAttendance = usePermission({ propertyId, module: "attendance", capability: "view", defaultRoles: HRM_ADMIN_ROLES });
+  const hrmTimeClock = usePermission({ propertyId, module: "time_clock", capability: "view", defaultRoles: HRM_ADMIN_ROLES });
   const hrmVisibility = {
     dashboard: hrmDashboard.allowed,
     employees: hrmEmployees.allowed,
@@ -198,6 +202,8 @@ export function AppSidebar() {
     roster: hrmRoster.allowed,
     holidays: hrmHolidays.allowed,
     workforceSettings: hrmWorkforceSettings.allowed,
+    attendance: hrmAttendance.allowed,
+    timeClock: hrmTimeClock.allowed,
   };
   const canSee = (required?: AppRole[]) => {
     if (!required) return true;
@@ -223,7 +229,7 @@ export function AppSidebar() {
       }))
       .filter((g) => g.items.length > 0);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q, roleRows, propertyId, hrmVisibility.dashboard, hrmVisibility.employees, hrmVisibility.departments, hrmVisibility.designations, hrmVisibility.documents, hrmVisibility.announcements, hrmVisibility.shifts, hrmVisibility.roster, hrmVisibility.holidays, hrmVisibility.workforceSettings]);
+  }, [q, roleRows, propertyId, hrmVisibility.dashboard, hrmVisibility.employees, hrmVisibility.departments, hrmVisibility.designations, hrmVisibility.documents, hrmVisibility.announcements, hrmVisibility.shifts, hrmVisibility.roster, hrmVisibility.holidays, hrmVisibility.workforceSettings, hrmVisibility.attendance, hrmVisibility.timeClock]);
 
   function handleNavigate() {
     // SRS §2.1: collapse after selecting a menu item to maximize workspace.

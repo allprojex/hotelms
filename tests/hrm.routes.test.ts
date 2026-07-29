@@ -17,7 +17,7 @@ describe("HRM routes and navigation", () => {
     ]) {
       expect(sidebar).toContain(`to: "${route}"`);
     }
-    expect(sidebar).not.toMatch(/attendance|payroll|leave|recruitment/i);
+    expect(sidebar).not.toMatch(/payroll|leave|recruitment|biometric/i);
   });
 
   it("keeps the authenticated route guard scoped to HRM administrators", () => {

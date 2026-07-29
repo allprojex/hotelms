@@ -21,6 +21,24 @@ const INVENTORY: AppRole[] = [...ADMIN_ROLES, "accountant", "storekeeper"];
 
 const REPORTS: AppRole[] = [...EXEC_ROLES, "auditor"];
 const HRM: AppRole[] = [...ADMIN_ROLES, "hr"];
+const STAFF: AppRole[] = [
+  ...HRM,
+  "manager",
+  "front_desk",
+  "reservations",
+  "cashier",
+  "accountant",
+  "housekeeping_supervisor",
+  "housekeeping",
+  "maintenance",
+  "kitchen",
+  "restaurant_manager",
+  "waiter",
+  "storekeeper",
+  "guest_relations",
+  "security",
+  "auditor",
+];
 
 export const ROUTE_ROLE_MAP: { prefix: string; roles: AppRole[] }[] = [
   { prefix: "/admin/rbac-preview", roles: ["super_admin"] },
@@ -39,6 +57,7 @@ export const ROUTE_ROLE_MAP: { prefix: string; roles: AppRole[] }[] = [
   { prefix: "/settings/roles", roles: [...ADMIN_ROLES, "hr"] },
   { prefix: "/settings/guest-id-types", roles: ADMIN_ROLES },
   { prefix: "/properties", roles: ADMIN_ROLES },
+  { prefix: "/hrm/time-clock", roles: STAFF },
   { prefix: "/hrm", roles: HRM },
   { prefix: "/accounting/sync", roles: SYNC_ROLES },
   { prefix: "/accounting", roles: ACCOUNTING },

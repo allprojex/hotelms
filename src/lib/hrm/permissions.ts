@@ -43,4 +43,22 @@ export const HRM_PERMISSIONS = {
   rosterPublish: { module: "duty_roster", capability: "approve" },
   holidayView: { module: "holidays", capability: "view" },
   holidayManage: { module: "holidays", capability: "manage_settings" },
+  attendanceView: { module: "attendance", capability: "view" },
+  attendanceCreate: { module: "attendance", capability: "create" },
+  attendanceEdit: { module: "attendance", capability: "edit" },
+  attendanceApprove: { module: "attendance", capability: "approve" },
+  attendanceExport: { module: "attendance", capability: "export" },
+  attendancePrint: { module: "attendance", capability: "print" },
+  ownAttendanceView: { module: "attendance_own", capability: "view" },
+  ownTimeClockUse: { module: "time_clock", capability: "view" },
+  attendanceEventsView: { module: "attendance_events", capability: "view" },
+  attendanceAdjustmentView: { module: "attendance_adjustments", capability: "view" },
+  attendanceAdjustmentCreate: {
+    module: "attendance_adjustments",
+    capability: "create",
+  },
+  attendanceAdjustmentApprove: {
+    module: "attendance_adjustments",
+    capability: "approve",
+  },
 } as const satisfies Record<string, { module: string; capability: PermissionCapability }>;
