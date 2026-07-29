@@ -33,6 +33,7 @@ import { Route as AuthenticatedRoomsIndexRouteImport } from './routes/_authentic
 import { Route as AuthenticatedReservationsIndexRouteImport } from './routes/_authenticated/reservations.index'
 import { Route as AuthenticatedPosIndexRouteImport } from './routes/_authenticated/pos.index'
 import { Route as AuthenticatedInventoryIndexRouteImport } from './routes/_authenticated/inventory.index'
+import { Route as AuthenticatedHrmIndexRouteImport } from './routes/_authenticated/hrm.index'
 import { Route as AuthenticatedGuestsIndexRouteImport } from './routes/_authenticated/guests.index'
 import { Route as AuthenticatedChannelsIndexRouteImport } from './routes/_authenticated/channels.index'
 import { Route as AuthenticatedAccountingIndexRouteImport } from './routes/_authenticated/accounting.index'
@@ -50,6 +51,10 @@ import { Route as AuthenticatedInventoryTransfersRouteImport } from './routes/_a
 import { Route as AuthenticatedInventorySettingsRouteImport } from './routes/_authenticated/inventory.settings'
 import { Route as AuthenticatedInventoryPurchaseOrdersRouteImport } from './routes/_authenticated/inventory.purchase-orders'
 import { Route as AuthenticatedInventoryAdjustmentsRouteImport } from './routes/_authenticated/inventory.adjustments'
+import { Route as AuthenticatedHrmDocumentsRouteImport } from './routes/_authenticated/hrm.documents'
+import { Route as AuthenticatedHrmDesignationsRouteImport } from './routes/_authenticated/hrm.designations'
+import { Route as AuthenticatedHrmDepartmentsRouteImport } from './routes/_authenticated/hrm.departments'
+import { Route as AuthenticatedHrmAnnouncementsRouteImport } from './routes/_authenticated/hrm.announcements'
 import { Route as AuthenticatedGuestsIdRouteImport } from './routes/_authenticated/guests.$id'
 import { Route as AuthenticatedChannelsIdRouteImport } from './routes/_authenticated/channels.$id'
 import { Route as AuthenticatedAdminUploadsRouteImport } from './routes/_authenticated/admin_.uploads'
@@ -74,6 +79,7 @@ import { Route as AuthenticatedAccountingFxRouteImport } from './routes/_authent
 import { Route as AuthenticatedAccountingArRouteImport } from './routes/_authenticated/accounting.ar'
 import { Route as AuthenticatedAccountingApRouteImport } from './routes/_authenticated/accounting.ap'
 import { Route as AuthenticatedAccountingAccountsRouteImport } from './routes/_authenticated/accounting.accounts'
+import { Route as AuthenticatedHrmEmployeesIndexRouteImport } from './routes/_authenticated/hrm.employees.index'
 import { Route as ApiPublicTestRbacHarnessRouteImport } from './routes/api/public/test/rbac-harness'
 import { Route as ApiPublicHooksFxRefreshRouteImport } from './routes/api/public/hooks/fx-refresh'
 import { Route as ApiPublicHooksChannelSyncRouteImport } from './routes/api/public/hooks/channel-sync'
@@ -83,6 +89,7 @@ import { Route as ApiPublicHooksAnalyticsExportsRouteImport } from './routes/api
 import { Route as ApiPublicHooksAccountingSyncRouteImport } from './routes/api/public/hooks/accounting-sync'
 import { Route as AuthenticatedPosOrderIdRouteImport } from './routes/_authenticated/pos.order.$id'
 import { Route as AuthenticatedPosKotIdRouteImport } from './routes/_authenticated/pos.kot.$id'
+import { Route as AuthenticatedHrmEmployeesEmployeeIdRouteImport } from './routes/_authenticated/hrm.employees.$employeeId'
 import { Route as AuthenticatedAdminEslPairRouteImport } from './routes/_authenticated/admin_.esl.pair'
 
 const ResetPasswordRoute = ResetPasswordRouteImport.update({
@@ -208,6 +215,11 @@ const AuthenticatedInventoryIndexRoute =
     path: '/inventory/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedHrmIndexRoute = AuthenticatedHrmIndexRouteImport.update({
+  id: '/hrm/',
+  path: '/hrm/',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedGuestsIndexRoute =
   AuthenticatedGuestsIndexRouteImport.update({
     id: '/guests/',
@@ -303,6 +315,30 @@ const AuthenticatedInventoryAdjustmentsRoute =
   AuthenticatedInventoryAdjustmentsRouteImport.update({
     id: '/inventory/adjustments',
     path: '/inventory/adjustments',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedHrmDocumentsRoute =
+  AuthenticatedHrmDocumentsRouteImport.update({
+    id: '/hrm/documents',
+    path: '/hrm/documents',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedHrmDesignationsRoute =
+  AuthenticatedHrmDesignationsRouteImport.update({
+    id: '/hrm/designations',
+    path: '/hrm/designations',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedHrmDepartmentsRoute =
+  AuthenticatedHrmDepartmentsRouteImport.update({
+    id: '/hrm/departments',
+    path: '/hrm/departments',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedHrmAnnouncementsRoute =
+  AuthenticatedHrmAnnouncementsRouteImport.update({
+    id: '/hrm/announcements',
+    path: '/hrm/announcements',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedGuestsIdRoute = AuthenticatedGuestsIdRouteImport.update({
@@ -444,6 +480,12 @@ const AuthenticatedAccountingAccountsRoute =
     path: '/accounting/accounts',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedHrmEmployeesIndexRoute =
+  AuthenticatedHrmEmployeesIndexRouteImport.update({
+    id: '/hrm/employees/',
+    path: '/hrm/employees/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const ApiPublicTestRbacHarnessRoute =
   ApiPublicTestRbacHarnessRouteImport.update({
     id: '/api/public/test/rbac-harness',
@@ -494,6 +536,12 @@ const AuthenticatedPosKotIdRoute = AuthenticatedPosKotIdRouteImport.update({
   path: '/pos/kot/$id',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedHrmEmployeesEmployeeIdRoute =
+  AuthenticatedHrmEmployeesEmployeeIdRouteImport.update({
+    id: '/hrm/employees/$employeeId',
+    path: '/hrm/employees/$employeeId',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedAdminEslPairRoute =
   AuthenticatedAdminEslPairRouteImport.update({
     id: '/pair',
@@ -545,6 +593,10 @@ export interface FileRoutesByFullPath {
   '/admin/uploads': typeof AuthenticatedAdminUploadsRoute
   '/channels/$id': typeof AuthenticatedChannelsIdRoute
   '/guests/$id': typeof AuthenticatedGuestsIdRoute
+  '/hrm/announcements': typeof AuthenticatedHrmAnnouncementsRoute
+  '/hrm/departments': typeof AuthenticatedHrmDepartmentsRoute
+  '/hrm/designations': typeof AuthenticatedHrmDesignationsRoute
+  '/hrm/documents': typeof AuthenticatedHrmDocumentsRoute
   '/inventory/adjustments': typeof AuthenticatedInventoryAdjustmentsRoute
   '/inventory/purchase-orders': typeof AuthenticatedInventoryPurchaseOrdersRoute
   '/inventory/settings': typeof AuthenticatedInventorySettingsRoute
@@ -562,11 +614,13 @@ export interface FileRoutesByFullPath {
   '/accounting/': typeof AuthenticatedAccountingIndexRoute
   '/channels/': typeof AuthenticatedChannelsIndexRoute
   '/guests/': typeof AuthenticatedGuestsIndexRoute
+  '/hrm/': typeof AuthenticatedHrmIndexRoute
   '/inventory/': typeof AuthenticatedInventoryIndexRoute
   '/pos/': typeof AuthenticatedPosIndexRoute
   '/reservations/': typeof AuthenticatedReservationsIndexRoute
   '/rooms/': typeof AuthenticatedRoomsIndexRoute
   '/admin/esl/pair': typeof AuthenticatedAdminEslPairRoute
+  '/hrm/employees/$employeeId': typeof AuthenticatedHrmEmployeesEmployeeIdRoute
   '/pos/kot/$id': typeof AuthenticatedPosKotIdRoute
   '/pos/order/$id': typeof AuthenticatedPosOrderIdRoute
   '/api/public/hooks/accounting-sync': typeof ApiPublicHooksAccountingSyncRoute
@@ -576,6 +630,7 @@ export interface FileRoutesByFullPath {
   '/api/public/hooks/channel-sync': typeof ApiPublicHooksChannelSyncRoute
   '/api/public/hooks/fx-refresh': typeof ApiPublicHooksFxRefreshRoute
   '/api/public/test/rbac-harness': typeof ApiPublicTestRbacHarnessRoute
+  '/hrm/employees/': typeof AuthenticatedHrmEmployeesIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -621,6 +676,10 @@ export interface FileRoutesByTo {
   '/admin/uploads': typeof AuthenticatedAdminUploadsRoute
   '/channels/$id': typeof AuthenticatedChannelsIdRoute
   '/guests/$id': typeof AuthenticatedGuestsIdRoute
+  '/hrm/announcements': typeof AuthenticatedHrmAnnouncementsRoute
+  '/hrm/departments': typeof AuthenticatedHrmDepartmentsRoute
+  '/hrm/designations': typeof AuthenticatedHrmDesignationsRoute
+  '/hrm/documents': typeof AuthenticatedHrmDocumentsRoute
   '/inventory/adjustments': typeof AuthenticatedInventoryAdjustmentsRoute
   '/inventory/purchase-orders': typeof AuthenticatedInventoryPurchaseOrdersRoute
   '/inventory/settings': typeof AuthenticatedInventorySettingsRoute
@@ -638,11 +697,13 @@ export interface FileRoutesByTo {
   '/accounting': typeof AuthenticatedAccountingIndexRoute
   '/channels': typeof AuthenticatedChannelsIndexRoute
   '/guests': typeof AuthenticatedGuestsIndexRoute
+  '/hrm': typeof AuthenticatedHrmIndexRoute
   '/inventory': typeof AuthenticatedInventoryIndexRoute
   '/pos': typeof AuthenticatedPosIndexRoute
   '/reservations': typeof AuthenticatedReservationsIndexRoute
   '/rooms': typeof AuthenticatedRoomsIndexRoute
   '/admin/esl/pair': typeof AuthenticatedAdminEslPairRoute
+  '/hrm/employees/$employeeId': typeof AuthenticatedHrmEmployeesEmployeeIdRoute
   '/pos/kot/$id': typeof AuthenticatedPosKotIdRoute
   '/pos/order/$id': typeof AuthenticatedPosOrderIdRoute
   '/api/public/hooks/accounting-sync': typeof ApiPublicHooksAccountingSyncRoute
@@ -652,6 +713,7 @@ export interface FileRoutesByTo {
   '/api/public/hooks/channel-sync': typeof ApiPublicHooksChannelSyncRoute
   '/api/public/hooks/fx-refresh': typeof ApiPublicHooksFxRefreshRoute
   '/api/public/test/rbac-harness': typeof ApiPublicTestRbacHarnessRoute
+  '/hrm/employees': typeof AuthenticatedHrmEmployeesIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -699,6 +761,10 @@ export interface FileRoutesById {
   '/_authenticated/admin_/uploads': typeof AuthenticatedAdminUploadsRoute
   '/_authenticated/channels/$id': typeof AuthenticatedChannelsIdRoute
   '/_authenticated/guests/$id': typeof AuthenticatedGuestsIdRoute
+  '/_authenticated/hrm/announcements': typeof AuthenticatedHrmAnnouncementsRoute
+  '/_authenticated/hrm/departments': typeof AuthenticatedHrmDepartmentsRoute
+  '/_authenticated/hrm/designations': typeof AuthenticatedHrmDesignationsRoute
+  '/_authenticated/hrm/documents': typeof AuthenticatedHrmDocumentsRoute
   '/_authenticated/inventory/adjustments': typeof AuthenticatedInventoryAdjustmentsRoute
   '/_authenticated/inventory/purchase-orders': typeof AuthenticatedInventoryPurchaseOrdersRoute
   '/_authenticated/inventory/settings': typeof AuthenticatedInventorySettingsRoute
@@ -716,11 +782,13 @@ export interface FileRoutesById {
   '/_authenticated/accounting/': typeof AuthenticatedAccountingIndexRoute
   '/_authenticated/channels/': typeof AuthenticatedChannelsIndexRoute
   '/_authenticated/guests/': typeof AuthenticatedGuestsIndexRoute
+  '/_authenticated/hrm/': typeof AuthenticatedHrmIndexRoute
   '/_authenticated/inventory/': typeof AuthenticatedInventoryIndexRoute
   '/_authenticated/pos/': typeof AuthenticatedPosIndexRoute
   '/_authenticated/reservations/': typeof AuthenticatedReservationsIndexRoute
   '/_authenticated/rooms/': typeof AuthenticatedRoomsIndexRoute
   '/_authenticated/admin_/esl/pair': typeof AuthenticatedAdminEslPairRoute
+  '/_authenticated/hrm/employees/$employeeId': typeof AuthenticatedHrmEmployeesEmployeeIdRoute
   '/_authenticated/pos/kot/$id': typeof AuthenticatedPosKotIdRoute
   '/_authenticated/pos/order/$id': typeof AuthenticatedPosOrderIdRoute
   '/api/public/hooks/accounting-sync': typeof ApiPublicHooksAccountingSyncRoute
@@ -730,6 +798,7 @@ export interface FileRoutesById {
   '/api/public/hooks/channel-sync': typeof ApiPublicHooksChannelSyncRoute
   '/api/public/hooks/fx-refresh': typeof ApiPublicHooksFxRefreshRoute
   '/api/public/test/rbac-harness': typeof ApiPublicTestRbacHarnessRoute
+  '/_authenticated/hrm/employees/': typeof AuthenticatedHrmEmployeesIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -777,6 +846,10 @@ export interface FileRouteTypes {
     | '/admin/uploads'
     | '/channels/$id'
     | '/guests/$id'
+    | '/hrm/announcements'
+    | '/hrm/departments'
+    | '/hrm/designations'
+    | '/hrm/documents'
     | '/inventory/adjustments'
     | '/inventory/purchase-orders'
     | '/inventory/settings'
@@ -794,11 +867,13 @@ export interface FileRouteTypes {
     | '/accounting/'
     | '/channels/'
     | '/guests/'
+    | '/hrm/'
     | '/inventory/'
     | '/pos/'
     | '/reservations/'
     | '/rooms/'
     | '/admin/esl/pair'
+    | '/hrm/employees/$employeeId'
     | '/pos/kot/$id'
     | '/pos/order/$id'
     | '/api/public/hooks/accounting-sync'
@@ -808,6 +883,7 @@ export interface FileRouteTypes {
     | '/api/public/hooks/channel-sync'
     | '/api/public/hooks/fx-refresh'
     | '/api/public/test/rbac-harness'
+    | '/hrm/employees/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -853,6 +929,10 @@ export interface FileRouteTypes {
     | '/admin/uploads'
     | '/channels/$id'
     | '/guests/$id'
+    | '/hrm/announcements'
+    | '/hrm/departments'
+    | '/hrm/designations'
+    | '/hrm/documents'
     | '/inventory/adjustments'
     | '/inventory/purchase-orders'
     | '/inventory/settings'
@@ -870,11 +950,13 @@ export interface FileRouteTypes {
     | '/accounting'
     | '/channels'
     | '/guests'
+    | '/hrm'
     | '/inventory'
     | '/pos'
     | '/reservations'
     | '/rooms'
     | '/admin/esl/pair'
+    | '/hrm/employees/$employeeId'
     | '/pos/kot/$id'
     | '/pos/order/$id'
     | '/api/public/hooks/accounting-sync'
@@ -884,6 +966,7 @@ export interface FileRouteTypes {
     | '/api/public/hooks/channel-sync'
     | '/api/public/hooks/fx-refresh'
     | '/api/public/test/rbac-harness'
+    | '/hrm/employees'
   id:
     | '__root__'
     | '/'
@@ -930,6 +1013,10 @@ export interface FileRouteTypes {
     | '/_authenticated/admin_/uploads'
     | '/_authenticated/channels/$id'
     | '/_authenticated/guests/$id'
+    | '/_authenticated/hrm/announcements'
+    | '/_authenticated/hrm/departments'
+    | '/_authenticated/hrm/designations'
+    | '/_authenticated/hrm/documents'
     | '/_authenticated/inventory/adjustments'
     | '/_authenticated/inventory/purchase-orders'
     | '/_authenticated/inventory/settings'
@@ -947,11 +1034,13 @@ export interface FileRouteTypes {
     | '/_authenticated/accounting/'
     | '/_authenticated/channels/'
     | '/_authenticated/guests/'
+    | '/_authenticated/hrm/'
     | '/_authenticated/inventory/'
     | '/_authenticated/pos/'
     | '/_authenticated/reservations/'
     | '/_authenticated/rooms/'
     | '/_authenticated/admin_/esl/pair'
+    | '/_authenticated/hrm/employees/$employeeId'
     | '/_authenticated/pos/kot/$id'
     | '/_authenticated/pos/order/$id'
     | '/api/public/hooks/accounting-sync'
@@ -961,6 +1050,7 @@ export interface FileRouteTypes {
     | '/api/public/hooks/channel-sync'
     | '/api/public/hooks/fx-refresh'
     | '/api/public/test/rbac-harness'
+    | '/_authenticated/hrm/employees/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -1155,6 +1245,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedInventoryIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/hrm/': {
+      id: '/_authenticated/hrm/'
+      path: '/hrm'
+      fullPath: '/hrm/'
+      preLoaderRoute: typeof AuthenticatedHrmIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/guests/': {
       id: '/_authenticated/guests/'
       path: '/guests'
@@ -1272,6 +1369,34 @@ declare module '@tanstack/react-router' {
       path: '/inventory/adjustments'
       fullPath: '/inventory/adjustments'
       preLoaderRoute: typeof AuthenticatedInventoryAdjustmentsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/hrm/documents': {
+      id: '/_authenticated/hrm/documents'
+      path: '/hrm/documents'
+      fullPath: '/hrm/documents'
+      preLoaderRoute: typeof AuthenticatedHrmDocumentsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/hrm/designations': {
+      id: '/_authenticated/hrm/designations'
+      path: '/hrm/designations'
+      fullPath: '/hrm/designations'
+      preLoaderRoute: typeof AuthenticatedHrmDesignationsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/hrm/departments': {
+      id: '/_authenticated/hrm/departments'
+      path: '/hrm/departments'
+      fullPath: '/hrm/departments'
+      preLoaderRoute: typeof AuthenticatedHrmDepartmentsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/hrm/announcements': {
+      id: '/_authenticated/hrm/announcements'
+      path: '/hrm/announcements'
+      fullPath: '/hrm/announcements'
+      preLoaderRoute: typeof AuthenticatedHrmAnnouncementsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/guests/$id': {
@@ -1442,6 +1567,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAccountingAccountsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/hrm/employees/': {
+      id: '/_authenticated/hrm/employees/'
+      path: '/hrm/employees'
+      fullPath: '/hrm/employees/'
+      preLoaderRoute: typeof AuthenticatedHrmEmployeesIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/api/public/test/rbac-harness': {
       id: '/api/public/test/rbac-harness'
       path: '/api/public/test/rbac-harness'
@@ -1505,6 +1637,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedPosKotIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/hrm/employees/$employeeId': {
+      id: '/_authenticated/hrm/employees/$employeeId'
+      path: '/hrm/employees/$employeeId'
+      fullPath: '/hrm/employees/$employeeId'
+      preLoaderRoute: typeof AuthenticatedHrmEmployeesEmployeeIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/admin_/esl/pair': {
       id: '/_authenticated/admin_/esl/pair'
       path: '/pair'
@@ -1564,6 +1703,10 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedAdminUploadsRoute: typeof AuthenticatedAdminUploadsRoute
   AuthenticatedChannelsIdRoute: typeof AuthenticatedChannelsIdRoute
   AuthenticatedGuestsIdRoute: typeof AuthenticatedGuestsIdRoute
+  AuthenticatedHrmAnnouncementsRoute: typeof AuthenticatedHrmAnnouncementsRoute
+  AuthenticatedHrmDepartmentsRoute: typeof AuthenticatedHrmDepartmentsRoute
+  AuthenticatedHrmDesignationsRoute: typeof AuthenticatedHrmDesignationsRoute
+  AuthenticatedHrmDocumentsRoute: typeof AuthenticatedHrmDocumentsRoute
   AuthenticatedInventoryAdjustmentsRoute: typeof AuthenticatedInventoryAdjustmentsRoute
   AuthenticatedInventoryPurchaseOrdersRoute: typeof AuthenticatedInventoryPurchaseOrdersRoute
   AuthenticatedInventorySettingsRoute: typeof AuthenticatedInventorySettingsRoute
@@ -1578,12 +1721,15 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedAccountingIndexRoute: typeof AuthenticatedAccountingIndexRoute
   AuthenticatedChannelsIndexRoute: typeof AuthenticatedChannelsIndexRoute
   AuthenticatedGuestsIndexRoute: typeof AuthenticatedGuestsIndexRoute
+  AuthenticatedHrmIndexRoute: typeof AuthenticatedHrmIndexRoute
   AuthenticatedInventoryIndexRoute: typeof AuthenticatedInventoryIndexRoute
   AuthenticatedPosIndexRoute: typeof AuthenticatedPosIndexRoute
   AuthenticatedReservationsIndexRoute: typeof AuthenticatedReservationsIndexRoute
   AuthenticatedRoomsIndexRoute: typeof AuthenticatedRoomsIndexRoute
+  AuthenticatedHrmEmployeesEmployeeIdRoute: typeof AuthenticatedHrmEmployeesEmployeeIdRoute
   AuthenticatedPosKotIdRoute: typeof AuthenticatedPosKotIdRoute
   AuthenticatedPosOrderIdRoute: typeof AuthenticatedPosOrderIdRoute
+  AuthenticatedHrmEmployeesIndexRoute: typeof AuthenticatedHrmEmployeesIndexRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
@@ -1624,6 +1770,10 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAdminUploadsRoute: AuthenticatedAdminUploadsRoute,
   AuthenticatedChannelsIdRoute: AuthenticatedChannelsIdRoute,
   AuthenticatedGuestsIdRoute: AuthenticatedGuestsIdRoute,
+  AuthenticatedHrmAnnouncementsRoute: AuthenticatedHrmAnnouncementsRoute,
+  AuthenticatedHrmDepartmentsRoute: AuthenticatedHrmDepartmentsRoute,
+  AuthenticatedHrmDesignationsRoute: AuthenticatedHrmDesignationsRoute,
+  AuthenticatedHrmDocumentsRoute: AuthenticatedHrmDocumentsRoute,
   AuthenticatedInventoryAdjustmentsRoute:
     AuthenticatedInventoryAdjustmentsRoute,
   AuthenticatedInventoryPurchaseOrdersRoute:
@@ -1641,12 +1791,16 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAccountingIndexRoute: AuthenticatedAccountingIndexRoute,
   AuthenticatedChannelsIndexRoute: AuthenticatedChannelsIndexRoute,
   AuthenticatedGuestsIndexRoute: AuthenticatedGuestsIndexRoute,
+  AuthenticatedHrmIndexRoute: AuthenticatedHrmIndexRoute,
   AuthenticatedInventoryIndexRoute: AuthenticatedInventoryIndexRoute,
   AuthenticatedPosIndexRoute: AuthenticatedPosIndexRoute,
   AuthenticatedReservationsIndexRoute: AuthenticatedReservationsIndexRoute,
   AuthenticatedRoomsIndexRoute: AuthenticatedRoomsIndexRoute,
+  AuthenticatedHrmEmployeesEmployeeIdRoute:
+    AuthenticatedHrmEmployeesEmployeeIdRoute,
   AuthenticatedPosKotIdRoute: AuthenticatedPosKotIdRoute,
   AuthenticatedPosOrderIdRoute: AuthenticatedPosOrderIdRoute,
+  AuthenticatedHrmEmployeesIndexRoute: AuthenticatedHrmEmployeesIndexRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =

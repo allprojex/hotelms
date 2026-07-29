@@ -14,11 +14,13 @@ import {
   Radio, Package, Wallet, TrendingUp, Utensils, Truck, ArrowLeftRight,
   Boxes, AlertTriangle, FileText, Moon, Settings2, Share2, ShieldCheck,
   Search, Bell, Upload, ScrollText, Wifi, Grid3x3, IdCard, PackageOpen, HardDriveDownload,
-  ShieldAlert, Printer, Recycle, LifeBuoy, Activity,
+  ShieldAlert, Printer, Recycle, LifeBuoy, Activity, BriefcaseBusiness, Megaphone,
 } from "lucide-react";
 import { useUserRoles, EXEC_ROLES, SYNC_ROLES, type AppRole } from "@/hooks/use-user-roles";
 import { useActiveProperty } from "@/hooks/use-active-property";
 import { ADMIN_ROLES } from "@/lib/admin/permissions";
+import { usePermission } from "@/hooks/use-permission";
+import { HRM_ADMIN_ROLES } from "@/lib/hrm/permissions";
 
 type NavItem = {
   title: string;
@@ -26,6 +28,7 @@ type NavItem = {
   icon: any;
   description: string;
   requireRoles?: AppRole[];
+  hrmPermission?: "dashboard" | "employees" | "departments" | "designations" | "documents" | "announcements";
 };
 
 // One accent hue per nav group; the token itself is defined in src/styles.css
@@ -37,6 +40,7 @@ const GROUP_ACCENT: Record<string, string> = {
   "Point of Sale": "var(--nav-pos)",
   "Inventory": "var(--nav-inventory)",
   "Distribution": "var(--nav-distribution)",
+  "Human Resources": "var(--nav-hrm)",
   "Accounting": "var(--nav-accounting)",
   "Insights": "var(--nav-insights)",
   "Administration": "var(--nav-administration)",
@@ -93,6 +97,17 @@ const opsGroups: { label: string; items: NavItem[] }[] = [
     label: "Distribution",
     items: [
       { title: "Channel Manager", to: "/channels", icon: Radio, description: "OTA sync (Booking.com, Expedia, Airbnb)." },
+    ],
+  },
+  {
+    label: "Human Resources",
+    items: [
+      { title: "HRM Dashboard", to: "/hrm", icon: BriefcaseBusiness, description: "Employee and HR operations overview.", hrmPermission: "dashboard" },
+      { title: "Employees", to: "/hrm/employees", icon: Users, description: "Employee records and professional profiles.", hrmPermission: "employees" },
+      { title: "Departments", to: "/hrm/departments", icon: Building2, description: "Property department structure.", hrmPermission: "departments" },
+      { title: "Designations", to: "/hrm/designations", icon: IdCard, description: "Job titles, levels, and department alignment.", hrmPermission: "designations" },
+      { title: "Employee Documents", to: "/hrm/documents", icon: FileText, description: "Private employee document records.", hrmPermission: "documents" },
+      { title: "Staff Announcements", to: "/hrm/announcements", icon: Megaphone, description: "Internal property staff notices.", hrmPermission: "announcements" },
     ],
   },
   // 7. Accounting — back office
@@ -157,6 +172,20 @@ export function AppSidebar() {
   const rolesQ = useUserRoles();
   const roleRows = rolesQ.data ?? [];
   const isSuper = roleRows.some((r) => r.role === "super_admin");
+  const hrmDashboard = usePermission({ propertyId, module: "hrm_dashboard", capability: "view", defaultRoles: HRM_ADMIN_ROLES });
+  const hrmEmployees = usePermission({ propertyId, module: "employees", capability: "view", defaultRoles: HRM_ADMIN_ROLES });
+  const hrmDepartments = usePermission({ propertyId, module: "departments", capability: "view", defaultRoles: HRM_ADMIN_ROLES });
+  const hrmDesignations = usePermission({ propertyId, module: "designations", capability: "view", defaultRoles: HRM_ADMIN_ROLES });
+  const hrmDocuments = usePermission({ propertyId, module: "employee_documents", capability: "view", defaultRoles: HRM_ADMIN_ROLES });
+  const hrmAnnouncements = usePermission({ propertyId, module: "staff_announcements", capability: "view", defaultRoles: HRM_ADMIN_ROLES });
+  const hrmVisibility = {
+    dashboard: hrmDashboard.allowed,
+    employees: hrmEmployees.allowed,
+    departments: hrmDepartments.allowed,
+    designations: hrmDesignations.allowed,
+    documents: hrmDocuments.allowed,
+    announcements: hrmAnnouncements.allowed,
+  };
   const canSee = (required?: AppRole[]) => {
     if (!required) return true;
     if (isSuper) return true;
@@ -173,6 +202,7 @@ export function AppSidebar() {
         ...g,
         items: g.items
           .filter((it) => canSee(it.requireRoles))
+          .filter((it) => !it.hrmPermission || hrmVisibility[it.hrmPermission])
           .filter((it) => !q ||
             it.title.toLowerCase().includes(q) ||
             it.description.toLowerCase().includes(q))
@@ -180,7 +210,7 @@ export function AppSidebar() {
       }))
       .filter((g) => g.items.length > 0);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q, roleRows, propertyId]);
+  }, [q, roleRows, propertyId, hrmVisibility.dashboard, hrmVisibility.employees, hrmVisibility.departments, hrmVisibility.designations, hrmVisibility.documents, hrmVisibility.announcements]);
 
   function handleNavigate() {
     // SRS §2.1: collapse after selecting a menu item to maximize workspace.

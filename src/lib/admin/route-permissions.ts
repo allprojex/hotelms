@@ -9,10 +9,18 @@ import { ADMIN_ROLES } from "@/lib/admin/permissions";
 const FRONT_OFFICE: AppRole[] = [...ADMIN_ROLES, "front_desk", "reservations", "guest_relations"];
 const HOUSEKEEPING: AppRole[] = [...ADMIN_ROLES, "housekeeping_supervisor", "housekeeping"];
 const ACCOUNTING: AppRole[] = [...ADMIN_ROLES, "accountant", "auditor"];
-const POS: AppRole[] = [...ADMIN_ROLES, "cashier", "front_desk", "restaurant_manager", "waiter", "kitchen"];
+const POS: AppRole[] = [
+  ...ADMIN_ROLES,
+  "cashier",
+  "front_desk",
+  "restaurant_manager",
+  "waiter",
+  "kitchen",
+];
 const INVENTORY: AppRole[] = [...ADMIN_ROLES, "accountant", "storekeeper"];
 
 const REPORTS: AppRole[] = [...EXEC_ROLES, "auditor"];
+const HRM: AppRole[] = [...ADMIN_ROLES, "hr"];
 
 export const ROUTE_ROLE_MAP: { prefix: string; roles: AppRole[] }[] = [
   { prefix: "/admin/rbac-preview", roles: ["super_admin"] },
@@ -31,6 +39,7 @@ export const ROUTE_ROLE_MAP: { prefix: string; roles: AppRole[] }[] = [
   { prefix: "/settings/roles", roles: [...ADMIN_ROLES, "hr"] },
   { prefix: "/settings/guest-id-types", roles: ADMIN_ROLES },
   { prefix: "/properties", roles: ADMIN_ROLES },
+  { prefix: "/hrm", roles: HRM },
   { prefix: "/accounting/sync", roles: SYNC_ROLES },
   { prefix: "/accounting", roles: ACCOUNTING },
   { prefix: "/analytics", roles: REPORTS },
@@ -42,14 +51,17 @@ export const ROUTE_ROLE_MAP: { prefix: string; roles: AppRole[] }[] = [
   { prefix: "/rates", roles: [...ADMIN_ROLES, "reservations"] },
   { prefix: "/housekeeping", roles: [...HOUSEKEEPING, "maintenance"] },
   { prefix: "/reservations", roles: FRONT_OFFICE },
-  { prefix: "/calendar", roles: [...FRONT_OFFICE, "housekeeping_supervisor", "housekeeping", "security"] },
+  {
+    prefix: "/calendar",
+    roles: [...FRONT_OFFICE, "housekeeping_supervisor", "housekeeping", "security"],
+  },
   { prefix: "/guests", roles: FRONT_OFFICE },
 ];
 
 export function requiredRolesFor(path: string): AppRole[] | null {
-  const match = ROUTE_ROLE_MAP
-    .filter((e) => path === e.prefix || path.startsWith(e.prefix + "/"))
-    .sort((a, b) => b.prefix.length - a.prefix.length)[0];
+  const match = ROUTE_ROLE_MAP.filter(
+    (e) => path === e.prefix || path.startsWith(e.prefix + "/"),
+  ).sort((a, b) => b.prefix.length - a.prefix.length)[0];
   return match?.roles ?? null;
 }
 
