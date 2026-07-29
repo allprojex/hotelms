@@ -55,10 +55,12 @@ import { Route as AuthenticatedHrmWorkforceSettingsRouteImport } from './routes/
 import { Route as AuthenticatedHrmTimeClockRouteImport } from './routes/_authenticated/hrm.time-clock'
 import { Route as AuthenticatedHrmShiftsRouteImport } from './routes/_authenticated/hrm.shifts'
 import { Route as AuthenticatedHrmRosterRouteImport } from './routes/_authenticated/hrm.roster'
+import { Route as AuthenticatedHrmLeaveRouteImport } from './routes/_authenticated/hrm.leave'
 import { Route as AuthenticatedHrmHolidaysRouteImport } from './routes/_authenticated/hrm.holidays'
 import { Route as AuthenticatedHrmDocumentsRouteImport } from './routes/_authenticated/hrm.documents'
 import { Route as AuthenticatedHrmDesignationsRouteImport } from './routes/_authenticated/hrm.designations'
 import { Route as AuthenticatedHrmDepartmentsRouteImport } from './routes/_authenticated/hrm.departments'
+import { Route as AuthenticatedHrmBiometricDevicesRouteImport } from './routes/_authenticated/hrm.biometric-devices'
 import { Route as AuthenticatedHrmAttendanceRouteImport } from './routes/_authenticated/hrm.attendance'
 import { Route as AuthenticatedHrmAnnouncementsRouteImport } from './routes/_authenticated/hrm.announcements'
 import { Route as AuthenticatedGuestsIdRouteImport } from './routes/_authenticated/guests.$id'
@@ -95,6 +97,9 @@ import { Route as ApiPublicHooksAnalyticsExportsRouteImport } from './routes/api
 import { Route as ApiPublicHooksAccountingSyncRouteImport } from './routes/api/public/hooks/accounting-sync'
 import { Route as AuthenticatedPosOrderIdRouteImport } from './routes/_authenticated/pos.order.$id'
 import { Route as AuthenticatedPosKotIdRouteImport } from './routes/_authenticated/pos.kot.$id'
+import { Route as AuthenticatedHrmLeaveTypesRouteImport } from './routes/_authenticated/hrm.leave.types'
+import { Route as AuthenticatedHrmLeaveCalendarRouteImport } from './routes/_authenticated/hrm.leave.calendar'
+import { Route as AuthenticatedHrmLeaveBalancesRouteImport } from './routes/_authenticated/hrm.leave.balances'
 import { Route as AuthenticatedHrmEmployeesEmployeeIdRouteImport } from './routes/_authenticated/hrm.employees.$employeeId'
 import { Route as AuthenticatedAdminEslPairRouteImport } from './routes/_authenticated/admin_.esl.pair'
 
@@ -345,6 +350,11 @@ const AuthenticatedHrmRosterRoute = AuthenticatedHrmRosterRouteImport.update({
   path: '/hrm/roster',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedHrmLeaveRoute = AuthenticatedHrmLeaveRouteImport.update({
+  id: '/hrm/leave',
+  path: '/hrm/leave',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedHrmHolidaysRoute =
   AuthenticatedHrmHolidaysRouteImport.update({
     id: '/hrm/holidays',
@@ -367,6 +377,12 @@ const AuthenticatedHrmDepartmentsRoute =
   AuthenticatedHrmDepartmentsRouteImport.update({
     id: '/hrm/departments',
     path: '/hrm/departments',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedHrmBiometricDevicesRoute =
+  AuthenticatedHrmBiometricDevicesRouteImport.update({
+    id: '/hrm/biometric-devices',
+    path: '/hrm/biometric-devices',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedHrmAttendanceRoute =
@@ -576,6 +592,24 @@ const AuthenticatedPosKotIdRoute = AuthenticatedPosKotIdRouteImport.update({
   path: '/pos/kot/$id',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedHrmLeaveTypesRoute =
+  AuthenticatedHrmLeaveTypesRouteImport.update({
+    id: '/types',
+    path: '/types',
+    getParentRoute: () => AuthenticatedHrmLeaveRoute,
+  } as any)
+const AuthenticatedHrmLeaveCalendarRoute =
+  AuthenticatedHrmLeaveCalendarRouteImport.update({
+    id: '/calendar',
+    path: '/calendar',
+    getParentRoute: () => AuthenticatedHrmLeaveRoute,
+  } as any)
+const AuthenticatedHrmLeaveBalancesRoute =
+  AuthenticatedHrmLeaveBalancesRouteImport.update({
+    id: '/balances',
+    path: '/balances',
+    getParentRoute: () => AuthenticatedHrmLeaveRoute,
+  } as any)
 const AuthenticatedHrmEmployeesEmployeeIdRoute =
   AuthenticatedHrmEmployeesEmployeeIdRouteImport.update({
     id: '/hrm/employees/$employeeId',
@@ -635,10 +669,12 @@ export interface FileRoutesByFullPath {
   '/guests/$id': typeof AuthenticatedGuestsIdRoute
   '/hrm/announcements': typeof AuthenticatedHrmAnnouncementsRoute
   '/hrm/attendance': typeof AuthenticatedHrmAttendanceRoute
+  '/hrm/biometric-devices': typeof AuthenticatedHrmBiometricDevicesRoute
   '/hrm/departments': typeof AuthenticatedHrmDepartmentsRoute
   '/hrm/designations': typeof AuthenticatedHrmDesignationsRoute
   '/hrm/documents': typeof AuthenticatedHrmDocumentsRoute
   '/hrm/holidays': typeof AuthenticatedHrmHolidaysRoute
+  '/hrm/leave': typeof AuthenticatedHrmLeaveRouteWithChildren
   '/hrm/roster': typeof AuthenticatedHrmRosterRoute
   '/hrm/shifts': typeof AuthenticatedHrmShiftsRoute
   '/hrm/time-clock': typeof AuthenticatedHrmTimeClockRoute
@@ -667,6 +703,9 @@ export interface FileRoutesByFullPath {
   '/rooms/': typeof AuthenticatedRoomsIndexRoute
   '/admin/esl/pair': typeof AuthenticatedAdminEslPairRoute
   '/hrm/employees/$employeeId': typeof AuthenticatedHrmEmployeesEmployeeIdRoute
+  '/hrm/leave/balances': typeof AuthenticatedHrmLeaveBalancesRoute
+  '/hrm/leave/calendar': typeof AuthenticatedHrmLeaveCalendarRoute
+  '/hrm/leave/types': typeof AuthenticatedHrmLeaveTypesRoute
   '/pos/kot/$id': typeof AuthenticatedPosKotIdRoute
   '/pos/order/$id': typeof AuthenticatedPosOrderIdRoute
   '/api/public/hooks/accounting-sync': typeof ApiPublicHooksAccountingSyncRoute
@@ -724,10 +763,12 @@ export interface FileRoutesByTo {
   '/guests/$id': typeof AuthenticatedGuestsIdRoute
   '/hrm/announcements': typeof AuthenticatedHrmAnnouncementsRoute
   '/hrm/attendance': typeof AuthenticatedHrmAttendanceRoute
+  '/hrm/biometric-devices': typeof AuthenticatedHrmBiometricDevicesRoute
   '/hrm/departments': typeof AuthenticatedHrmDepartmentsRoute
   '/hrm/designations': typeof AuthenticatedHrmDesignationsRoute
   '/hrm/documents': typeof AuthenticatedHrmDocumentsRoute
   '/hrm/holidays': typeof AuthenticatedHrmHolidaysRoute
+  '/hrm/leave': typeof AuthenticatedHrmLeaveRouteWithChildren
   '/hrm/roster': typeof AuthenticatedHrmRosterRoute
   '/hrm/shifts': typeof AuthenticatedHrmShiftsRoute
   '/hrm/time-clock': typeof AuthenticatedHrmTimeClockRoute
@@ -756,6 +797,9 @@ export interface FileRoutesByTo {
   '/rooms': typeof AuthenticatedRoomsIndexRoute
   '/admin/esl/pair': typeof AuthenticatedAdminEslPairRoute
   '/hrm/employees/$employeeId': typeof AuthenticatedHrmEmployeesEmployeeIdRoute
+  '/hrm/leave/balances': typeof AuthenticatedHrmLeaveBalancesRoute
+  '/hrm/leave/calendar': typeof AuthenticatedHrmLeaveCalendarRoute
+  '/hrm/leave/types': typeof AuthenticatedHrmLeaveTypesRoute
   '/pos/kot/$id': typeof AuthenticatedPosKotIdRoute
   '/pos/order/$id': typeof AuthenticatedPosOrderIdRoute
   '/api/public/hooks/accounting-sync': typeof ApiPublicHooksAccountingSyncRoute
@@ -815,10 +859,12 @@ export interface FileRoutesById {
   '/_authenticated/guests/$id': typeof AuthenticatedGuestsIdRoute
   '/_authenticated/hrm/announcements': typeof AuthenticatedHrmAnnouncementsRoute
   '/_authenticated/hrm/attendance': typeof AuthenticatedHrmAttendanceRoute
+  '/_authenticated/hrm/biometric-devices': typeof AuthenticatedHrmBiometricDevicesRoute
   '/_authenticated/hrm/departments': typeof AuthenticatedHrmDepartmentsRoute
   '/_authenticated/hrm/designations': typeof AuthenticatedHrmDesignationsRoute
   '/_authenticated/hrm/documents': typeof AuthenticatedHrmDocumentsRoute
   '/_authenticated/hrm/holidays': typeof AuthenticatedHrmHolidaysRoute
+  '/_authenticated/hrm/leave': typeof AuthenticatedHrmLeaveRouteWithChildren
   '/_authenticated/hrm/roster': typeof AuthenticatedHrmRosterRoute
   '/_authenticated/hrm/shifts': typeof AuthenticatedHrmShiftsRoute
   '/_authenticated/hrm/time-clock': typeof AuthenticatedHrmTimeClockRoute
@@ -847,6 +893,9 @@ export interface FileRoutesById {
   '/_authenticated/rooms/': typeof AuthenticatedRoomsIndexRoute
   '/_authenticated/admin_/esl/pair': typeof AuthenticatedAdminEslPairRoute
   '/_authenticated/hrm/employees/$employeeId': typeof AuthenticatedHrmEmployeesEmployeeIdRoute
+  '/_authenticated/hrm/leave/balances': typeof AuthenticatedHrmLeaveBalancesRoute
+  '/_authenticated/hrm/leave/calendar': typeof AuthenticatedHrmLeaveCalendarRoute
+  '/_authenticated/hrm/leave/types': typeof AuthenticatedHrmLeaveTypesRoute
   '/_authenticated/pos/kot/$id': typeof AuthenticatedPosKotIdRoute
   '/_authenticated/pos/order/$id': typeof AuthenticatedPosOrderIdRoute
   '/api/public/hooks/accounting-sync': typeof ApiPublicHooksAccountingSyncRoute
@@ -906,10 +955,12 @@ export interface FileRouteTypes {
     | '/guests/$id'
     | '/hrm/announcements'
     | '/hrm/attendance'
+    | '/hrm/biometric-devices'
     | '/hrm/departments'
     | '/hrm/designations'
     | '/hrm/documents'
     | '/hrm/holidays'
+    | '/hrm/leave'
     | '/hrm/roster'
     | '/hrm/shifts'
     | '/hrm/time-clock'
@@ -938,6 +989,9 @@ export interface FileRouteTypes {
     | '/rooms/'
     | '/admin/esl/pair'
     | '/hrm/employees/$employeeId'
+    | '/hrm/leave/balances'
+    | '/hrm/leave/calendar'
+    | '/hrm/leave/types'
     | '/pos/kot/$id'
     | '/pos/order/$id'
     | '/api/public/hooks/accounting-sync'
@@ -995,10 +1049,12 @@ export interface FileRouteTypes {
     | '/guests/$id'
     | '/hrm/announcements'
     | '/hrm/attendance'
+    | '/hrm/biometric-devices'
     | '/hrm/departments'
     | '/hrm/designations'
     | '/hrm/documents'
     | '/hrm/holidays'
+    | '/hrm/leave'
     | '/hrm/roster'
     | '/hrm/shifts'
     | '/hrm/time-clock'
@@ -1027,6 +1083,9 @@ export interface FileRouteTypes {
     | '/rooms'
     | '/admin/esl/pair'
     | '/hrm/employees/$employeeId'
+    | '/hrm/leave/balances'
+    | '/hrm/leave/calendar'
+    | '/hrm/leave/types'
     | '/pos/kot/$id'
     | '/pos/order/$id'
     | '/api/public/hooks/accounting-sync'
@@ -1085,10 +1144,12 @@ export interface FileRouteTypes {
     | '/_authenticated/guests/$id'
     | '/_authenticated/hrm/announcements'
     | '/_authenticated/hrm/attendance'
+    | '/_authenticated/hrm/biometric-devices'
     | '/_authenticated/hrm/departments'
     | '/_authenticated/hrm/designations'
     | '/_authenticated/hrm/documents'
     | '/_authenticated/hrm/holidays'
+    | '/_authenticated/hrm/leave'
     | '/_authenticated/hrm/roster'
     | '/_authenticated/hrm/shifts'
     | '/_authenticated/hrm/time-clock'
@@ -1117,6 +1178,9 @@ export interface FileRouteTypes {
     | '/_authenticated/rooms/'
     | '/_authenticated/admin_/esl/pair'
     | '/_authenticated/hrm/employees/$employeeId'
+    | '/_authenticated/hrm/leave/balances'
+    | '/_authenticated/hrm/leave/calendar'
+    | '/_authenticated/hrm/leave/types'
     | '/_authenticated/pos/kot/$id'
     | '/_authenticated/pos/order/$id'
     | '/api/public/hooks/accounting-sync'
@@ -1475,6 +1539,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedHrmRosterRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/hrm/leave': {
+      id: '/_authenticated/hrm/leave'
+      path: '/hrm/leave'
+      fullPath: '/hrm/leave'
+      preLoaderRoute: typeof AuthenticatedHrmLeaveRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/hrm/holidays': {
       id: '/_authenticated/hrm/holidays'
       path: '/hrm/holidays'
@@ -1501,6 +1572,13 @@ declare module '@tanstack/react-router' {
       path: '/hrm/departments'
       fullPath: '/hrm/departments'
       preLoaderRoute: typeof AuthenticatedHrmDepartmentsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/hrm/biometric-devices': {
+      id: '/_authenticated/hrm/biometric-devices'
+      path: '/hrm/biometric-devices'
+      fullPath: '/hrm/biometric-devices'
+      preLoaderRoute: typeof AuthenticatedHrmBiometricDevicesRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/hrm/attendance': {
@@ -1755,6 +1833,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedPosKotIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/hrm/leave/types': {
+      id: '/_authenticated/hrm/leave/types'
+      path: '/types'
+      fullPath: '/hrm/leave/types'
+      preLoaderRoute: typeof AuthenticatedHrmLeaveTypesRouteImport
+      parentRoute: typeof AuthenticatedHrmLeaveRoute
+    }
+    '/_authenticated/hrm/leave/calendar': {
+      id: '/_authenticated/hrm/leave/calendar'
+      path: '/calendar'
+      fullPath: '/hrm/leave/calendar'
+      preLoaderRoute: typeof AuthenticatedHrmLeaveCalendarRouteImport
+      parentRoute: typeof AuthenticatedHrmLeaveRoute
+    }
+    '/_authenticated/hrm/leave/balances': {
+      id: '/_authenticated/hrm/leave/balances'
+      path: '/balances'
+      fullPath: '/hrm/leave/balances'
+      preLoaderRoute: typeof AuthenticatedHrmLeaveBalancesRouteImport
+      parentRoute: typeof AuthenticatedHrmLeaveRoute
+    }
     '/_authenticated/hrm/employees/$employeeId': {
       id: '/_authenticated/hrm/employees/$employeeId'
       path: '/hrm/employees/$employeeId'
@@ -1783,6 +1882,23 @@ const AuthenticatedAdminEslRouteChildren: AuthenticatedAdminEslRouteChildren = {
 const AuthenticatedAdminEslRouteWithChildren =
   AuthenticatedAdminEslRoute._addFileChildren(
     AuthenticatedAdminEslRouteChildren,
+  )
+
+interface AuthenticatedHrmLeaveRouteChildren {
+  AuthenticatedHrmLeaveBalancesRoute: typeof AuthenticatedHrmLeaveBalancesRoute
+  AuthenticatedHrmLeaveCalendarRoute: typeof AuthenticatedHrmLeaveCalendarRoute
+  AuthenticatedHrmLeaveTypesRoute: typeof AuthenticatedHrmLeaveTypesRoute
+}
+
+const AuthenticatedHrmLeaveRouteChildren: AuthenticatedHrmLeaveRouteChildren = {
+  AuthenticatedHrmLeaveBalancesRoute: AuthenticatedHrmLeaveBalancesRoute,
+  AuthenticatedHrmLeaveCalendarRoute: AuthenticatedHrmLeaveCalendarRoute,
+  AuthenticatedHrmLeaveTypesRoute: AuthenticatedHrmLeaveTypesRoute,
+}
+
+const AuthenticatedHrmLeaveRouteWithChildren =
+  AuthenticatedHrmLeaveRoute._addFileChildren(
+    AuthenticatedHrmLeaveRouteChildren,
   )
 
 interface AuthenticatedRouteRouteChildren {
@@ -1823,10 +1939,12 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedGuestsIdRoute: typeof AuthenticatedGuestsIdRoute
   AuthenticatedHrmAnnouncementsRoute: typeof AuthenticatedHrmAnnouncementsRoute
   AuthenticatedHrmAttendanceRoute: typeof AuthenticatedHrmAttendanceRoute
+  AuthenticatedHrmBiometricDevicesRoute: typeof AuthenticatedHrmBiometricDevicesRoute
   AuthenticatedHrmDepartmentsRoute: typeof AuthenticatedHrmDepartmentsRoute
   AuthenticatedHrmDesignationsRoute: typeof AuthenticatedHrmDesignationsRoute
   AuthenticatedHrmDocumentsRoute: typeof AuthenticatedHrmDocumentsRoute
   AuthenticatedHrmHolidaysRoute: typeof AuthenticatedHrmHolidaysRoute
+  AuthenticatedHrmLeaveRoute: typeof AuthenticatedHrmLeaveRouteWithChildren
   AuthenticatedHrmRosterRoute: typeof AuthenticatedHrmRosterRoute
   AuthenticatedHrmShiftsRoute: typeof AuthenticatedHrmShiftsRoute
   AuthenticatedHrmTimeClockRoute: typeof AuthenticatedHrmTimeClockRoute
@@ -1896,10 +2014,12 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedGuestsIdRoute: AuthenticatedGuestsIdRoute,
   AuthenticatedHrmAnnouncementsRoute: AuthenticatedHrmAnnouncementsRoute,
   AuthenticatedHrmAttendanceRoute: AuthenticatedHrmAttendanceRoute,
+  AuthenticatedHrmBiometricDevicesRoute: AuthenticatedHrmBiometricDevicesRoute,
   AuthenticatedHrmDepartmentsRoute: AuthenticatedHrmDepartmentsRoute,
   AuthenticatedHrmDesignationsRoute: AuthenticatedHrmDesignationsRoute,
   AuthenticatedHrmDocumentsRoute: AuthenticatedHrmDocumentsRoute,
   AuthenticatedHrmHolidaysRoute: AuthenticatedHrmHolidaysRoute,
+  AuthenticatedHrmLeaveRoute: AuthenticatedHrmLeaveRouteWithChildren,
   AuthenticatedHrmRosterRoute: AuthenticatedHrmRosterRoute,
   AuthenticatedHrmShiftsRoute: AuthenticatedHrmShiftsRoute,
   AuthenticatedHrmTimeClockRoute: AuthenticatedHrmTimeClockRoute,

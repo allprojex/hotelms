@@ -64,6 +64,6 @@ describe("Phase 3A database and authorization", () => {
     for (const path of ["/hrm/shifts", "/hrm/roster", "/hrm/holidays", "/hrm/workforce-settings"]) {
       expect(sidebar).toContain(`to: "${path}"`);
     }
-    expect(sidebar).not.toMatch(/to: "\/hrm\/(leave|biometric|payroll)/);
+    expect(sidebar).not.toMatch(/to: "\/hrm\/payroll/);
   });
 });

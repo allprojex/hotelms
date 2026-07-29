@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import type { CSSProperties } from "react";
 import { Link, useRouterState } from "@tanstack/react-router";
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel,
@@ -17,6 +18,7 @@ import {
   ShieldAlert, Printer, Recycle, LifeBuoy, Activity, BriefcaseBusiness, Megaphone,
   CalendarClock, CalendarHeart, SlidersHorizontal,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { useUserRoles, EXEC_ROLES, SYNC_ROLES, type AppRole } from "@/hooks/use-user-roles";
 import { useActiveProperty } from "@/hooks/use-active-property";
 import { ADMIN_ROLES } from "@/lib/admin/permissions";
@@ -26,10 +28,10 @@ import { HRM_ADMIN_ROLES } from "@/lib/hrm/permissions";
 type NavItem = {
   title: string;
   to: string;
-  icon: any;
+  icon: LucideIcon;
   description: string;
   requireRoles?: AppRole[];
-  hrmPermission?: "dashboard" | "employees" | "departments" | "designations" | "documents" | "announcements" | "shifts" | "roster" | "holidays" | "workforceSettings" | "attendance" | "timeClock";
+  hrmPermission?: "dashboard" | "employees" | "departments" | "designations" | "documents" | "announcements" | "shifts" | "roster" | "holidays" | "workforceSettings" | "attendance" | "timeClock" | "leave" | "leaveCalendar" | "leaveTypes" | "leaveBalances" | "biometricDevices";
 };
 
 // One accent hue per nav group; the token itself is defined in src/styles.css
@@ -115,6 +117,11 @@ const opsGroups: { label: string; items: NavItem[] }[] = [
       { title: "Workforce Settings", to: "/hrm/workforce-settings", icon: SlidersHorizontal, description: "Timezone and workforce time rules.", hrmPermission: "workforceSettings" },
       { title: "Attendance", to: "/hrm/attendance", icon: Activity, description: "Attendance review, adjustments, approvals, and reports.", hrmPermission: "attendance" },
       { title: "Time Clock", to: "/hrm/time-clock", icon: CalendarClock, description: "Record your own work and break events.", hrmPermission: "timeClock" },
+      { title: "Leave Management", to: "/hrm/leave", icon: CalendarDays, description: "Request, review, and approve employee leave.", hrmPermission: "leave" },
+      { title: "Leave Calendar", to: "/hrm/leave/calendar", icon: CalendarHeart, description: "Approved property leave calendar.", hrmPermission: "leaveCalendar" },
+      { title: "Leave Types", to: "/hrm/leave/types", icon: Settings2, description: "Configure property leave policies.", hrmPermission: "leaveTypes" },
+      { title: "Leave Balances", to: "/hrm/leave/balances", icon: BarChart3, description: "Employee leave entitlement balances.", hrmPermission: "leaveBalances" },
+      { title: "Biometric Devices", to: "/hrm/biometric-devices", icon: ShieldCheck, description: "Vendor-neutral device integration architecture.", hrmPermission: "biometricDevices" },
     ],
   },
   // 7. Accounting — back office
@@ -191,6 +198,11 @@ export function AppSidebar() {
   const hrmWorkforceSettings = usePermission({ propertyId, module: "workforce_settings", capability: "view", defaultRoles: HRM_ADMIN_ROLES });
   const hrmAttendance = usePermission({ propertyId, module: "attendance", capability: "view", defaultRoles: HRM_ADMIN_ROLES });
   const hrmTimeClock = usePermission({ propertyId, module: "time_clock", capability: "view", defaultRoles: HRM_ADMIN_ROLES });
+  const hrmLeave = usePermission({ propertyId, module: "leave_own", capability: "view", defaultRoles: HRM_ADMIN_ROLES });
+  const hrmLeaveCalendar = usePermission({ propertyId, module: "leave_calendar", capability: "view", defaultRoles: HRM_ADMIN_ROLES });
+  const hrmLeaveTypes = usePermission({ propertyId, module: "leave_settings", capability: "view", defaultRoles: HRM_ADMIN_ROLES });
+  const hrmLeaveBalances = usePermission({ propertyId, module: "leave_balances", capability: "view", defaultRoles: HRM_ADMIN_ROLES });
+  const hrmBiometricDevices = usePermission({ propertyId, module: "biometric_devices", capability: "view", defaultRoles: HRM_ADMIN_ROLES });
   const hrmVisibility = {
     dashboard: hrmDashboard.allowed,
     employees: hrmEmployees.allowed,
@@ -204,6 +216,11 @@ export function AppSidebar() {
     workforceSettings: hrmWorkforceSettings.allowed,
     attendance: hrmAttendance.allowed,
     timeClock: hrmTimeClock.allowed,
+    leave: hrmLeave.allowed,
+    leaveCalendar: hrmLeaveCalendar.allowed,
+    leaveTypes: hrmLeaveTypes.allowed,
+    leaveBalances: hrmLeaveBalances.allowed,
+    biometricDevices: hrmBiometricDevices.allowed,
   };
   const canSee = (required?: AppRole[]) => {
     if (!required) return true;
@@ -229,7 +246,7 @@ export function AppSidebar() {
       }))
       .filter((g) => g.items.length > 0);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q, roleRows, propertyId, hrmVisibility.dashboard, hrmVisibility.employees, hrmVisibility.departments, hrmVisibility.designations, hrmVisibility.documents, hrmVisibility.announcements, hrmVisibility.shifts, hrmVisibility.roster, hrmVisibility.holidays, hrmVisibility.workforceSettings, hrmVisibility.attendance, hrmVisibility.timeClock]);
+  }, [q, roleRows, propertyId, hrmVisibility.dashboard, hrmVisibility.employees, hrmVisibility.departments, hrmVisibility.designations, hrmVisibility.documents, hrmVisibility.announcements, hrmVisibility.shifts, hrmVisibility.roster, hrmVisibility.holidays, hrmVisibility.workforceSettings, hrmVisibility.attendance, hrmVisibility.timeClock, hrmVisibility.leave, hrmVisibility.leaveCalendar, hrmVisibility.leaveTypes, hrmVisibility.leaveBalances, hrmVisibility.biometricDevices]);
 
   function handleNavigate() {
     // SRS §2.1: collapse after selecting a menu item to maximize workspace.
@@ -275,7 +292,7 @@ export function AppSidebar() {
             return (
               <SidebarGroup
                 key={group.label}
-                style={accent ? ({ ["--nav-accent" as any]: accent }) : undefined}
+                style={accent ? ({ "--nav-accent": accent } as CSSProperties) : undefined}
               >
                 <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
                 <SidebarGroupContent>
@@ -289,7 +306,7 @@ export function AppSidebar() {
                               <SidebarMenuButton
                                 asChild
                                 isActive={active}
-                                tooltip={collapsed ? { children: (<div><div className="font-medium">{item.title}</div><div className="text-[10px] opacity-75 mt-0.5">{item.description}</div></div>) } as any : undefined}
+                                tooltip={collapsed ? { children: (<div><div className="font-medium">{item.title}</div><div className="text-[10px] opacity-75 mt-0.5">{item.description}</div></div>) } : undefined}
                                 className={
                                   active
                                     ? "relative nav-tab-3d nav-tab-3d-active nav-accent-border border-l-2 rounded-md"

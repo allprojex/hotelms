@@ -379,6 +379,7 @@ function EditDialog({
   const [departmentId, setDepartmentId] = useState(row.department?.id ?? "");
   const [dutyDate, setDutyDate] = useState(row.duty_date);
   const [workLocation, setWorkLocation] = useState(row.work_location ?? "");
+  const [leaveOverrideReason, setLeaveOverrideReason] = useState("");
   const [busy, setBusy] = useState(false);
   async function submit() {
     setBusy(true);
@@ -392,6 +393,7 @@ function EditDialog({
           departmentId: departmentId || null,
           dutyDate,
           workLocation,
+          leaveOverrideReason,
         },
       });
       toast.success("Roster assignment updated");
@@ -449,6 +451,16 @@ function EditDialog({
               onChange={(event) => setWorkLocation(event.target.value)}
             />
           </div>
+          <div className="space-y-1">
+            <Label htmlFor="edit-leave-override">
+              Leave conflict override reason (authorized overrides only)
+            </Label>
+            <Input
+              id="edit-leave-override"
+              value={leaveOverrideReason}
+              onChange={(event) => setLeaveOverrideReason(event.target.value)}
+            />
+          </div>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
@@ -480,6 +492,7 @@ function AssignDialog({
   const [from, setFrom] = useState(new Date().toISOString().slice(0, 10));
   const [to, setTo] = useState(from);
   const [workLocation, setWorkLocation] = useState("");
+  const [leaveOverrideReason, setLeaveOverrideReason] = useState("");
   const [busy, setBusy] = useState(false);
   const dates = useMemo(() => dateRange(from, to), [from, to]);
 
@@ -494,6 +507,7 @@ function AssignDialog({
           dutyDates: dates,
           departmentId: departmentId || null,
           workLocation,
+          leaveOverrideReason,
         },
       });
       toast.success(`${result.created} roster assignments created`);
@@ -564,6 +578,16 @@ function AssignDialog({
               id="assignment-location"
               value={workLocation}
               onChange={(event) => setWorkLocation(event.target.value)}
+            />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="assignment-leave-override">
+              Leave conflict override reason (authorized overrides only)
+            </Label>
+            <Input
+              id="assignment-leave-override"
+              value={leaveOverrideReason}
+              onChange={(event) => setLeaveOverrideReason(event.target.value)}
             />
           </div>
           <p className="text-xs text-muted-foreground">

@@ -88,6 +88,7 @@ async function persistRosterAssignment(
     departmentId?: string | null;
     workLocation?: string | null;
     notes?: string | null;
+    leaveOverrideReason?: string | null;
   },
 ) {
   const db = context.supabase as any;
@@ -104,6 +105,7 @@ async function persistRosterAssignment(
     department_id: data.departmentId || null,
     work_location: data.workLocation?.trim() || null,
     notes: data.notes?.trim() || null,
+    leave_override_reason: data.leaveOverrideReason?.trim() || null,
     created_by: current.data?.created_by ?? context.userId,
     updated_by: context.userId,
     starts_at: new Date().toISOString(),
@@ -491,6 +493,7 @@ export const saveRosterAssignment = createServerFn({ method: "POST" })
       dutyDate: string;
       departmentId?: string | null;
       workLocation?: string;
+      leaveOverrideReason?: string;
       notes?: string;
     }) => {
       propertyId(data.propertyId);
@@ -513,6 +516,7 @@ export const bulkAssignRoster = createServerFn({ method: "POST" })
       dutyDates: string[];
       departmentId?: string | null;
       workLocation?: string;
+      leaveOverrideReason?: string;
     }) => {
       propertyId(data.propertyId);
       if (!data.employeeIds.length || !data.dutyDates.length)
@@ -525,17 +529,20 @@ export const bulkAssignRoster = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await authorize(context, data.propertyId, HRM_PERMISSIONS.rosterManage);
     const db = context.supabase as any;
-    const result = await db.rpc("bulk_assign_hr_duty_roster", {
+    const result = await db.rpc("bulk_assign_hr_duty_roster_with_leave_override", {
       _property_id: data.propertyId,
       _employee_ids: [...new Set(data.employeeIds)],
       _shift_id: data.shiftId,
       _duty_dates: [...new Set(data.dutyDates)],
       _department_id: data.departmentId || null,
       _work_location: data.workLocation?.trim() || null,
+      _leave_override_reason: data.leaveOverrideReason?.trim() || null,
     });
     if (result.error) throw new Error(`Bulk assignment failed: ${result.error.message}`);
     await audit(context, data.propertyId, "create", "hr_duty_roster_bulk", data.propertyId, null, {
       created: result.data,
+      leaveOverride: Boolean(data.leaveOverrideReason?.trim()),
+      leaveOverrideReason: data.leaveOverrideReason?.trim() || null,
     });
     return { created: Number(result.data ?? 0) };
   });
