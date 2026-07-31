@@ -107,7 +107,6 @@ describe("Phase 4A payroll security and integration", () => {
       "/hrm/payroll/manual-inputs",
     ])
       expect(sidebar).toContain(`to: "${path}"`);
-    expect(sidebar).not.toMatch(/to: "\/hrm\/payroll\/(payslips|payments|submissions|journals)"/);
   });
 
   it("defines all Phase 4A permission boundaries", () => {

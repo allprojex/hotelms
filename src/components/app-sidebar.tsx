@@ -30,6 +30,7 @@ import {
   UserCog,
   Settings,
   ClipboardList,
+  Lock,
   ShoppingCart,
   Radio,
   Package,
@@ -64,6 +65,7 @@ import {
   CalendarClock,
   CalendarHeart,
   SlidersHorizontal,
+  RotateCcw,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useUserRoles, EXEC_ROLES, SYNC_ROLES, type AppRole } from "@/hooks/use-user-roles";
@@ -106,7 +108,15 @@ type NavItem = {
     | "statutoryRules"
     | "openingBalances"
     | "payrollRuns"
-    | "payrollManualInputs";
+    | "payrollManualInputs"
+    | "payrollApprovals"
+    | "finalizedPayroll"
+    | "payslips"
+    | "paymentBatches"
+    | "paymentTemplates"
+    | "statutoryLiabilities"
+    | "journalDrafts"
+    | "payrollCorrections";
 };
 
 // One accent hue per nav group; the token itself is defined in src/styles.css
@@ -461,6 +471,62 @@ const opsGroups: { label: string; items: NavItem[] }[] = [
         icon: FileText,
         description: "Source-backed one-time draft payroll inputs.",
         hrmPermission: "payrollManualInputs",
+      },
+      {
+        title: "Payroll Approvals",
+        to: "/hrm/payroll/approvals",
+        icon: ShieldCheck,
+        description: "Submit, approve, reject and return payroll runs.",
+        hrmPermission: "payrollApprovals",
+      },
+      {
+        title: "Finalized Payroll",
+        to: "/hrm/payroll/finalized",
+        icon: Lock,
+        description: "Immutable finalized payroll snapshots.",
+        hrmPermission: "finalizedPayroll",
+      },
+      {
+        title: "Payslips",
+        to: "/hrm/payroll/payslips",
+        icon: FileText,
+        description: "Generated payslip versions and publication.",
+        hrmPermission: "payslips",
+      },
+      {
+        title: "Payment Preparation",
+        to: "/hrm/payroll/payment-batches",
+        icon: Wallet,
+        description: "Prepared payment batches and export status.",
+        hrmPermission: "paymentBatches",
+      },
+      {
+        title: "Payment Export Templates",
+        to: "/hrm/payroll/payment-templates",
+        icon: Settings2,
+        description: "Safe bank and mobile-money file templates.",
+        hrmPermission: "paymentTemplates",
+      },
+      {
+        title: "Statutory Liabilities",
+        to: "/hrm/payroll/statutory-liabilities",
+        icon: ScrollText,
+        description: "Finalized liability summaries, not submissions.",
+        hrmPermission: "statutoryLiabilities",
+      },
+      {
+        title: "Journal Drafts",
+        to: "/hrm/payroll/journals",
+        icon: ClipboardList,
+        description: "Accounting journal drafts, not posted entries.",
+        hrmPermission: "journalDrafts",
+      },
+      {
+        title: "Payroll Corrections",
+        to: "/hrm/payroll/corrections",
+        icon: RotateCcw,
+        description: "Correction, supplemental and reversal foundations.",
+        hrmPermission: "payrollCorrections",
       },
     ],
   },
@@ -872,6 +938,54 @@ export function AppSidebar() {
     capability: "view",
     defaultRoles: PAYROLL_SENSITIVE_ROLES,
   });
+  const payrollApprovals = usePermission({
+    propertyId,
+    module: "payroll_approvals",
+    capability: "view",
+    defaultRoles: PAYROLL_SENSITIVE_ROLES,
+  });
+  const finalizedPayroll = usePermission({
+    propertyId,
+    module: "finalized_payroll",
+    capability: "view",
+    defaultRoles: PAYROLL_SENSITIVE_ROLES,
+  });
+  const payslips = usePermission({
+    propertyId,
+    module: "payslips",
+    capability: "view",
+    defaultRoles: PAYROLL_SENSITIVE_ROLES,
+  });
+  const paymentBatches = usePermission({
+    propertyId,
+    module: "payroll_payment_batches",
+    capability: "view",
+    defaultRoles: PAYROLL_SENSITIVE_ROLES,
+  });
+  const paymentTemplates = usePermission({
+    propertyId,
+    module: "payroll_payment_templates",
+    capability: "view",
+    defaultRoles: PAYROLL_SENSITIVE_ROLES,
+  });
+  const statutoryLiabilities = usePermission({
+    propertyId,
+    module: "payroll_statutory_liabilities",
+    capability: "view",
+    defaultRoles: PAYROLL_SENSITIVE_ROLES,
+  });
+  const journalDrafts = usePermission({
+    propertyId,
+    module: "payroll_journal_drafts",
+    capability: "view",
+    defaultRoles: PAYROLL_SENSITIVE_ROLES,
+  });
+  const payrollCorrections = usePermission({
+    propertyId,
+    module: "payroll_corrections",
+    capability: "create",
+    defaultRoles: PAYROLL_SENSITIVE_ROLES,
+  });
   const hrmVisibility = {
     dashboard: hrmDashboard.allowed,
     employees: hrmEmployees.allowed,
@@ -901,6 +1015,14 @@ export function AppSidebar() {
     openingBalances: openingBalances.allowed,
     payrollRuns: payrollRuns.allowed,
     payrollManualInputs: payrollManualInputs.allowed,
+    payrollApprovals: payrollApprovals.allowed,
+    finalizedPayroll: finalizedPayroll.allowed,
+    payslips: payslips.allowed,
+    paymentBatches: paymentBatches.allowed,
+    paymentTemplates: paymentTemplates.allowed,
+    statutoryLiabilities: statutoryLiabilities.allowed,
+    journalDrafts: journalDrafts.allowed,
+    payrollCorrections: payrollCorrections.allowed,
   };
   const canSee = (required?: AppRole[]) => {
     if (!required) return true;

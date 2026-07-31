@@ -99,15 +99,23 @@ import { Route as ApiPublicHooksAccountingSyncRouteImport } from './routes/api/p
 import { Route as AuthenticatedPosOrderIdRouteImport } from './routes/_authenticated/pos.order.$id'
 import { Route as AuthenticatedPosKotIdRouteImport } from './routes/_authenticated/pos.kot.$id'
 import { Route as AuthenticatedHrmPayrollStatutoryRulesRouteImport } from './routes/_authenticated/hrm.payroll.statutory-rules'
+import { Route as AuthenticatedHrmPayrollStatutoryLiabilitiesRouteImport } from './routes/_authenticated/hrm.payroll.statutory-liabilities'
 import { Route as AuthenticatedHrmPayrollSettingsRouteImport } from './routes/_authenticated/hrm.payroll.settings'
 import { Route as AuthenticatedHrmPayrollSalaryStructuresRouteImport } from './routes/_authenticated/hrm.payroll.salary-structures'
 import { Route as AuthenticatedHrmPayrollRunsRouteImport } from './routes/_authenticated/hrm.payroll.runs'
+import { Route as AuthenticatedHrmPayrollPayslipsRouteImport } from './routes/_authenticated/hrm.payroll.payslips'
+import { Route as AuthenticatedHrmPayrollPaymentTemplatesRouteImport } from './routes/_authenticated/hrm.payroll.payment-templates'
 import { Route as AuthenticatedHrmPayrollPaymentDetailsRouteImport } from './routes/_authenticated/hrm.payroll.payment-details'
+import { Route as AuthenticatedHrmPayrollPaymentBatchesRouteImport } from './routes/_authenticated/hrm.payroll.payment-batches'
 import { Route as AuthenticatedHrmPayrollPayComponentsRouteImport } from './routes/_authenticated/hrm.payroll.pay-components'
 import { Route as AuthenticatedHrmPayrollOpeningBalancesRouteImport } from './routes/_authenticated/hrm.payroll.opening-balances'
 import { Route as AuthenticatedHrmPayrollManualInputsRouteImport } from './routes/_authenticated/hrm.payroll.manual-inputs'
+import { Route as AuthenticatedHrmPayrollJournalsRouteImport } from './routes/_authenticated/hrm.payroll.journals'
+import { Route as AuthenticatedHrmPayrollFinalizedRouteImport } from './routes/_authenticated/hrm.payroll.finalized'
+import { Route as AuthenticatedHrmPayrollCorrectionsRouteImport } from './routes/_authenticated/hrm.payroll.corrections'
 import { Route as AuthenticatedHrmPayrollCompensationRouteImport } from './routes/_authenticated/hrm.payroll.compensation'
 import { Route as AuthenticatedHrmPayrollCalendarsRouteImport } from './routes/_authenticated/hrm.payroll.calendars'
+import { Route as AuthenticatedHrmPayrollApprovalsRouteImport } from './routes/_authenticated/hrm.payroll.approvals'
 import { Route as AuthenticatedHrmLeaveTypesRouteImport } from './routes/_authenticated/hrm.leave.types'
 import { Route as AuthenticatedHrmLeaveCalendarRouteImport } from './routes/_authenticated/hrm.leave.calendar'
 import { Route as AuthenticatedHrmLeaveBalancesRouteImport } from './routes/_authenticated/hrm.leave.balances'
@@ -115,6 +123,8 @@ import { Route as AuthenticatedHrmEmployeesEmployeeIdRouteImport } from './route
 import { Route as AuthenticatedAdminEslPairRouteImport } from './routes/_authenticated/admin_.esl.pair'
 import { Route as AuthenticatedHrmPayrollRunsNewRouteImport } from './routes/_authenticated/hrm.payroll.runs.new'
 import { Route as AuthenticatedHrmPayrollRunsRunIdRouteImport } from './routes/_authenticated/hrm.payroll.runs.$runId'
+import { Route as AuthenticatedHrmPayrollFinalizedPayrollIdRouteImport } from './routes/_authenticated/hrm.payroll.finalized.$payrollId'
+import { Route as AuthenticatedHrmPayrollRunsRunIdApprovalRouteImport } from './routes/_authenticated/hrm.payroll.runs.$runId.approval'
 import { Route as AuthenticatedHrmPayrollRunsRunIdEmployeesEmployeeIdRouteImport } from './routes/_authenticated/hrm.payroll.runs.$runId.employees.$employeeId'
 
 const ResetPasswordRoute = ResetPasswordRouteImport.update({
@@ -617,6 +627,12 @@ const AuthenticatedHrmPayrollStatutoryRulesRoute =
     path: '/statutory-rules',
     getParentRoute: () => AuthenticatedHrmPayrollRoute,
   } as any)
+const AuthenticatedHrmPayrollStatutoryLiabilitiesRoute =
+  AuthenticatedHrmPayrollStatutoryLiabilitiesRouteImport.update({
+    id: '/statutory-liabilities',
+    path: '/statutory-liabilities',
+    getParentRoute: () => AuthenticatedHrmPayrollRoute,
+  } as any)
 const AuthenticatedHrmPayrollSettingsRoute =
   AuthenticatedHrmPayrollSettingsRouteImport.update({
     id: '/settings',
@@ -635,10 +651,28 @@ const AuthenticatedHrmPayrollRunsRoute =
     path: '/runs',
     getParentRoute: () => AuthenticatedHrmPayrollRoute,
   } as any)
+const AuthenticatedHrmPayrollPayslipsRoute =
+  AuthenticatedHrmPayrollPayslipsRouteImport.update({
+    id: '/payslips',
+    path: '/payslips',
+    getParentRoute: () => AuthenticatedHrmPayrollRoute,
+  } as any)
+const AuthenticatedHrmPayrollPaymentTemplatesRoute =
+  AuthenticatedHrmPayrollPaymentTemplatesRouteImport.update({
+    id: '/payment-templates',
+    path: '/payment-templates',
+    getParentRoute: () => AuthenticatedHrmPayrollRoute,
+  } as any)
 const AuthenticatedHrmPayrollPaymentDetailsRoute =
   AuthenticatedHrmPayrollPaymentDetailsRouteImport.update({
     id: '/payment-details',
     path: '/payment-details',
+    getParentRoute: () => AuthenticatedHrmPayrollRoute,
+  } as any)
+const AuthenticatedHrmPayrollPaymentBatchesRoute =
+  AuthenticatedHrmPayrollPaymentBatchesRouteImport.update({
+    id: '/payment-batches',
+    path: '/payment-batches',
     getParentRoute: () => AuthenticatedHrmPayrollRoute,
   } as any)
 const AuthenticatedHrmPayrollPayComponentsRoute =
@@ -659,6 +693,24 @@ const AuthenticatedHrmPayrollManualInputsRoute =
     path: '/manual-inputs',
     getParentRoute: () => AuthenticatedHrmPayrollRoute,
   } as any)
+const AuthenticatedHrmPayrollJournalsRoute =
+  AuthenticatedHrmPayrollJournalsRouteImport.update({
+    id: '/journals',
+    path: '/journals',
+    getParentRoute: () => AuthenticatedHrmPayrollRoute,
+  } as any)
+const AuthenticatedHrmPayrollFinalizedRoute =
+  AuthenticatedHrmPayrollFinalizedRouteImport.update({
+    id: '/finalized',
+    path: '/finalized',
+    getParentRoute: () => AuthenticatedHrmPayrollRoute,
+  } as any)
+const AuthenticatedHrmPayrollCorrectionsRoute =
+  AuthenticatedHrmPayrollCorrectionsRouteImport.update({
+    id: '/corrections',
+    path: '/corrections',
+    getParentRoute: () => AuthenticatedHrmPayrollRoute,
+  } as any)
 const AuthenticatedHrmPayrollCompensationRoute =
   AuthenticatedHrmPayrollCompensationRouteImport.update({
     id: '/compensation',
@@ -669,6 +721,12 @@ const AuthenticatedHrmPayrollCalendarsRoute =
   AuthenticatedHrmPayrollCalendarsRouteImport.update({
     id: '/calendars',
     path: '/calendars',
+    getParentRoute: () => AuthenticatedHrmPayrollRoute,
+  } as any)
+const AuthenticatedHrmPayrollApprovalsRoute =
+  AuthenticatedHrmPayrollApprovalsRouteImport.update({
+    id: '/approvals',
+    path: '/approvals',
     getParentRoute: () => AuthenticatedHrmPayrollRoute,
   } as any)
 const AuthenticatedHrmLeaveTypesRoute =
@@ -712,6 +770,18 @@ const AuthenticatedHrmPayrollRunsRunIdRoute =
     id: '/$runId',
     path: '/$runId',
     getParentRoute: () => AuthenticatedHrmPayrollRunsRoute,
+  } as any)
+const AuthenticatedHrmPayrollFinalizedPayrollIdRoute =
+  AuthenticatedHrmPayrollFinalizedPayrollIdRouteImport.update({
+    id: '/$payrollId',
+    path: '/$payrollId',
+    getParentRoute: () => AuthenticatedHrmPayrollFinalizedRoute,
+  } as any)
+const AuthenticatedHrmPayrollRunsRunIdApprovalRoute =
+  AuthenticatedHrmPayrollRunsRunIdApprovalRouteImport.update({
+    id: '/approval',
+    path: '/approval',
+    getParentRoute: () => AuthenticatedHrmPayrollRunsRunIdRoute,
   } as any)
 const AuthenticatedHrmPayrollRunsRunIdEmployeesEmployeeIdRoute =
   AuthenticatedHrmPayrollRunsRunIdEmployeesEmployeeIdRouteImport.update({
@@ -804,15 +874,23 @@ export interface FileRoutesByFullPath {
   '/hrm/leave/balances': typeof AuthenticatedHrmLeaveBalancesRoute
   '/hrm/leave/calendar': typeof AuthenticatedHrmLeaveCalendarRoute
   '/hrm/leave/types': typeof AuthenticatedHrmLeaveTypesRoute
+  '/hrm/payroll/approvals': typeof AuthenticatedHrmPayrollApprovalsRoute
   '/hrm/payroll/calendars': typeof AuthenticatedHrmPayrollCalendarsRoute
   '/hrm/payroll/compensation': typeof AuthenticatedHrmPayrollCompensationRoute
+  '/hrm/payroll/corrections': typeof AuthenticatedHrmPayrollCorrectionsRoute
+  '/hrm/payroll/finalized': typeof AuthenticatedHrmPayrollFinalizedRouteWithChildren
+  '/hrm/payroll/journals': typeof AuthenticatedHrmPayrollJournalsRoute
   '/hrm/payroll/manual-inputs': typeof AuthenticatedHrmPayrollManualInputsRoute
   '/hrm/payroll/opening-balances': typeof AuthenticatedHrmPayrollOpeningBalancesRoute
   '/hrm/payroll/pay-components': typeof AuthenticatedHrmPayrollPayComponentsRoute
+  '/hrm/payroll/payment-batches': typeof AuthenticatedHrmPayrollPaymentBatchesRoute
   '/hrm/payroll/payment-details': typeof AuthenticatedHrmPayrollPaymentDetailsRoute
+  '/hrm/payroll/payment-templates': typeof AuthenticatedHrmPayrollPaymentTemplatesRoute
+  '/hrm/payroll/payslips': typeof AuthenticatedHrmPayrollPayslipsRoute
   '/hrm/payroll/runs': typeof AuthenticatedHrmPayrollRunsRouteWithChildren
   '/hrm/payroll/salary-structures': typeof AuthenticatedHrmPayrollSalaryStructuresRoute
   '/hrm/payroll/settings': typeof AuthenticatedHrmPayrollSettingsRoute
+  '/hrm/payroll/statutory-liabilities': typeof AuthenticatedHrmPayrollStatutoryLiabilitiesRoute
   '/hrm/payroll/statutory-rules': typeof AuthenticatedHrmPayrollStatutoryRulesRoute
   '/pos/kot/$id': typeof AuthenticatedPosKotIdRoute
   '/pos/order/$id': typeof AuthenticatedPosOrderIdRoute
@@ -824,8 +902,10 @@ export interface FileRoutesByFullPath {
   '/api/public/hooks/fx-refresh': typeof ApiPublicHooksFxRefreshRoute
   '/api/public/test/rbac-harness': typeof ApiPublicTestRbacHarnessRoute
   '/hrm/employees/': typeof AuthenticatedHrmEmployeesIndexRoute
+  '/hrm/payroll/finalized/$payrollId': typeof AuthenticatedHrmPayrollFinalizedPayrollIdRoute
   '/hrm/payroll/runs/$runId': typeof AuthenticatedHrmPayrollRunsRunIdRouteWithChildren
   '/hrm/payroll/runs/new': typeof AuthenticatedHrmPayrollRunsNewRoute
+  '/hrm/payroll/runs/$runId/approval': typeof AuthenticatedHrmPayrollRunsRunIdApprovalRoute
   '/hrm/payroll/runs/$runId/employees/$employeeId': typeof AuthenticatedHrmPayrollRunsRunIdEmployeesEmployeeIdRoute
 }
 export interface FileRoutesByTo {
@@ -912,15 +992,23 @@ export interface FileRoutesByTo {
   '/hrm/leave/balances': typeof AuthenticatedHrmLeaveBalancesRoute
   '/hrm/leave/calendar': typeof AuthenticatedHrmLeaveCalendarRoute
   '/hrm/leave/types': typeof AuthenticatedHrmLeaveTypesRoute
+  '/hrm/payroll/approvals': typeof AuthenticatedHrmPayrollApprovalsRoute
   '/hrm/payroll/calendars': typeof AuthenticatedHrmPayrollCalendarsRoute
   '/hrm/payroll/compensation': typeof AuthenticatedHrmPayrollCompensationRoute
+  '/hrm/payroll/corrections': typeof AuthenticatedHrmPayrollCorrectionsRoute
+  '/hrm/payroll/finalized': typeof AuthenticatedHrmPayrollFinalizedRouteWithChildren
+  '/hrm/payroll/journals': typeof AuthenticatedHrmPayrollJournalsRoute
   '/hrm/payroll/manual-inputs': typeof AuthenticatedHrmPayrollManualInputsRoute
   '/hrm/payroll/opening-balances': typeof AuthenticatedHrmPayrollOpeningBalancesRoute
   '/hrm/payroll/pay-components': typeof AuthenticatedHrmPayrollPayComponentsRoute
+  '/hrm/payroll/payment-batches': typeof AuthenticatedHrmPayrollPaymentBatchesRoute
   '/hrm/payroll/payment-details': typeof AuthenticatedHrmPayrollPaymentDetailsRoute
+  '/hrm/payroll/payment-templates': typeof AuthenticatedHrmPayrollPaymentTemplatesRoute
+  '/hrm/payroll/payslips': typeof AuthenticatedHrmPayrollPayslipsRoute
   '/hrm/payroll/runs': typeof AuthenticatedHrmPayrollRunsRouteWithChildren
   '/hrm/payroll/salary-structures': typeof AuthenticatedHrmPayrollSalaryStructuresRoute
   '/hrm/payroll/settings': typeof AuthenticatedHrmPayrollSettingsRoute
+  '/hrm/payroll/statutory-liabilities': typeof AuthenticatedHrmPayrollStatutoryLiabilitiesRoute
   '/hrm/payroll/statutory-rules': typeof AuthenticatedHrmPayrollStatutoryRulesRoute
   '/pos/kot/$id': typeof AuthenticatedPosKotIdRoute
   '/pos/order/$id': typeof AuthenticatedPosOrderIdRoute
@@ -932,8 +1020,10 @@ export interface FileRoutesByTo {
   '/api/public/hooks/fx-refresh': typeof ApiPublicHooksFxRefreshRoute
   '/api/public/test/rbac-harness': typeof ApiPublicTestRbacHarnessRoute
   '/hrm/employees': typeof AuthenticatedHrmEmployeesIndexRoute
+  '/hrm/payroll/finalized/$payrollId': typeof AuthenticatedHrmPayrollFinalizedPayrollIdRoute
   '/hrm/payroll/runs/$runId': typeof AuthenticatedHrmPayrollRunsRunIdRouteWithChildren
   '/hrm/payroll/runs/new': typeof AuthenticatedHrmPayrollRunsNewRoute
+  '/hrm/payroll/runs/$runId/approval': typeof AuthenticatedHrmPayrollRunsRunIdApprovalRoute
   '/hrm/payroll/runs/$runId/employees/$employeeId': typeof AuthenticatedHrmPayrollRunsRunIdEmployeesEmployeeIdRoute
 }
 export interface FileRoutesById {
@@ -1022,15 +1112,23 @@ export interface FileRoutesById {
   '/_authenticated/hrm/leave/balances': typeof AuthenticatedHrmLeaveBalancesRoute
   '/_authenticated/hrm/leave/calendar': typeof AuthenticatedHrmLeaveCalendarRoute
   '/_authenticated/hrm/leave/types': typeof AuthenticatedHrmLeaveTypesRoute
+  '/_authenticated/hrm/payroll/approvals': typeof AuthenticatedHrmPayrollApprovalsRoute
   '/_authenticated/hrm/payroll/calendars': typeof AuthenticatedHrmPayrollCalendarsRoute
   '/_authenticated/hrm/payroll/compensation': typeof AuthenticatedHrmPayrollCompensationRoute
+  '/_authenticated/hrm/payroll/corrections': typeof AuthenticatedHrmPayrollCorrectionsRoute
+  '/_authenticated/hrm/payroll/finalized': typeof AuthenticatedHrmPayrollFinalizedRouteWithChildren
+  '/_authenticated/hrm/payroll/journals': typeof AuthenticatedHrmPayrollJournalsRoute
   '/_authenticated/hrm/payroll/manual-inputs': typeof AuthenticatedHrmPayrollManualInputsRoute
   '/_authenticated/hrm/payroll/opening-balances': typeof AuthenticatedHrmPayrollOpeningBalancesRoute
   '/_authenticated/hrm/payroll/pay-components': typeof AuthenticatedHrmPayrollPayComponentsRoute
+  '/_authenticated/hrm/payroll/payment-batches': typeof AuthenticatedHrmPayrollPaymentBatchesRoute
   '/_authenticated/hrm/payroll/payment-details': typeof AuthenticatedHrmPayrollPaymentDetailsRoute
+  '/_authenticated/hrm/payroll/payment-templates': typeof AuthenticatedHrmPayrollPaymentTemplatesRoute
+  '/_authenticated/hrm/payroll/payslips': typeof AuthenticatedHrmPayrollPayslipsRoute
   '/_authenticated/hrm/payroll/runs': typeof AuthenticatedHrmPayrollRunsRouteWithChildren
   '/_authenticated/hrm/payroll/salary-structures': typeof AuthenticatedHrmPayrollSalaryStructuresRoute
   '/_authenticated/hrm/payroll/settings': typeof AuthenticatedHrmPayrollSettingsRoute
+  '/_authenticated/hrm/payroll/statutory-liabilities': typeof AuthenticatedHrmPayrollStatutoryLiabilitiesRoute
   '/_authenticated/hrm/payroll/statutory-rules': typeof AuthenticatedHrmPayrollStatutoryRulesRoute
   '/_authenticated/pos/kot/$id': typeof AuthenticatedPosKotIdRoute
   '/_authenticated/pos/order/$id': typeof AuthenticatedPosOrderIdRoute
@@ -1042,8 +1140,10 @@ export interface FileRoutesById {
   '/api/public/hooks/fx-refresh': typeof ApiPublicHooksFxRefreshRoute
   '/api/public/test/rbac-harness': typeof ApiPublicTestRbacHarnessRoute
   '/_authenticated/hrm/employees/': typeof AuthenticatedHrmEmployeesIndexRoute
+  '/_authenticated/hrm/payroll/finalized/$payrollId': typeof AuthenticatedHrmPayrollFinalizedPayrollIdRoute
   '/_authenticated/hrm/payroll/runs/$runId': typeof AuthenticatedHrmPayrollRunsRunIdRouteWithChildren
   '/_authenticated/hrm/payroll/runs/new': typeof AuthenticatedHrmPayrollRunsNewRoute
+  '/_authenticated/hrm/payroll/runs/$runId/approval': typeof AuthenticatedHrmPayrollRunsRunIdApprovalRoute
   '/_authenticated/hrm/payroll/runs/$runId/employees/$employeeId': typeof AuthenticatedHrmPayrollRunsRunIdEmployeesEmployeeIdRoute
 }
 export interface FileRouteTypes {
@@ -1132,15 +1232,23 @@ export interface FileRouteTypes {
     | '/hrm/leave/balances'
     | '/hrm/leave/calendar'
     | '/hrm/leave/types'
+    | '/hrm/payroll/approvals'
     | '/hrm/payroll/calendars'
     | '/hrm/payroll/compensation'
+    | '/hrm/payroll/corrections'
+    | '/hrm/payroll/finalized'
+    | '/hrm/payroll/journals'
     | '/hrm/payroll/manual-inputs'
     | '/hrm/payroll/opening-balances'
     | '/hrm/payroll/pay-components'
+    | '/hrm/payroll/payment-batches'
     | '/hrm/payroll/payment-details'
+    | '/hrm/payroll/payment-templates'
+    | '/hrm/payroll/payslips'
     | '/hrm/payroll/runs'
     | '/hrm/payroll/salary-structures'
     | '/hrm/payroll/settings'
+    | '/hrm/payroll/statutory-liabilities'
     | '/hrm/payroll/statutory-rules'
     | '/pos/kot/$id'
     | '/pos/order/$id'
@@ -1152,8 +1260,10 @@ export interface FileRouteTypes {
     | '/api/public/hooks/fx-refresh'
     | '/api/public/test/rbac-harness'
     | '/hrm/employees/'
+    | '/hrm/payroll/finalized/$payrollId'
     | '/hrm/payroll/runs/$runId'
     | '/hrm/payroll/runs/new'
+    | '/hrm/payroll/runs/$runId/approval'
     | '/hrm/payroll/runs/$runId/employees/$employeeId'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -1240,15 +1350,23 @@ export interface FileRouteTypes {
     | '/hrm/leave/balances'
     | '/hrm/leave/calendar'
     | '/hrm/leave/types'
+    | '/hrm/payroll/approvals'
     | '/hrm/payroll/calendars'
     | '/hrm/payroll/compensation'
+    | '/hrm/payroll/corrections'
+    | '/hrm/payroll/finalized'
+    | '/hrm/payroll/journals'
     | '/hrm/payroll/manual-inputs'
     | '/hrm/payroll/opening-balances'
     | '/hrm/payroll/pay-components'
+    | '/hrm/payroll/payment-batches'
     | '/hrm/payroll/payment-details'
+    | '/hrm/payroll/payment-templates'
+    | '/hrm/payroll/payslips'
     | '/hrm/payroll/runs'
     | '/hrm/payroll/salary-structures'
     | '/hrm/payroll/settings'
+    | '/hrm/payroll/statutory-liabilities'
     | '/hrm/payroll/statutory-rules'
     | '/pos/kot/$id'
     | '/pos/order/$id'
@@ -1260,8 +1378,10 @@ export interface FileRouteTypes {
     | '/api/public/hooks/fx-refresh'
     | '/api/public/test/rbac-harness'
     | '/hrm/employees'
+    | '/hrm/payroll/finalized/$payrollId'
     | '/hrm/payroll/runs/$runId'
     | '/hrm/payroll/runs/new'
+    | '/hrm/payroll/runs/$runId/approval'
     | '/hrm/payroll/runs/$runId/employees/$employeeId'
   id:
     | '__root__'
@@ -1349,15 +1469,23 @@ export interface FileRouteTypes {
     | '/_authenticated/hrm/leave/balances'
     | '/_authenticated/hrm/leave/calendar'
     | '/_authenticated/hrm/leave/types'
+    | '/_authenticated/hrm/payroll/approvals'
     | '/_authenticated/hrm/payroll/calendars'
     | '/_authenticated/hrm/payroll/compensation'
+    | '/_authenticated/hrm/payroll/corrections'
+    | '/_authenticated/hrm/payroll/finalized'
+    | '/_authenticated/hrm/payroll/journals'
     | '/_authenticated/hrm/payroll/manual-inputs'
     | '/_authenticated/hrm/payroll/opening-balances'
     | '/_authenticated/hrm/payroll/pay-components'
+    | '/_authenticated/hrm/payroll/payment-batches'
     | '/_authenticated/hrm/payroll/payment-details'
+    | '/_authenticated/hrm/payroll/payment-templates'
+    | '/_authenticated/hrm/payroll/payslips'
     | '/_authenticated/hrm/payroll/runs'
     | '/_authenticated/hrm/payroll/salary-structures'
     | '/_authenticated/hrm/payroll/settings'
+    | '/_authenticated/hrm/payroll/statutory-liabilities'
     | '/_authenticated/hrm/payroll/statutory-rules'
     | '/_authenticated/pos/kot/$id'
     | '/_authenticated/pos/order/$id'
@@ -1369,8 +1497,10 @@ export interface FileRouteTypes {
     | '/api/public/hooks/fx-refresh'
     | '/api/public/test/rbac-harness'
     | '/_authenticated/hrm/employees/'
+    | '/_authenticated/hrm/payroll/finalized/$payrollId'
     | '/_authenticated/hrm/payroll/runs/$runId'
     | '/_authenticated/hrm/payroll/runs/new'
+    | '/_authenticated/hrm/payroll/runs/$runId/approval'
     | '/_authenticated/hrm/payroll/runs/$runId/employees/$employeeId'
   fileRoutesById: FileRoutesById
 }
@@ -2028,6 +2158,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedHrmPayrollStatutoryRulesRouteImport
       parentRoute: typeof AuthenticatedHrmPayrollRoute
     }
+    '/_authenticated/hrm/payroll/statutory-liabilities': {
+      id: '/_authenticated/hrm/payroll/statutory-liabilities'
+      path: '/statutory-liabilities'
+      fullPath: '/hrm/payroll/statutory-liabilities'
+      preLoaderRoute: typeof AuthenticatedHrmPayrollStatutoryLiabilitiesRouteImport
+      parentRoute: typeof AuthenticatedHrmPayrollRoute
+    }
     '/_authenticated/hrm/payroll/settings': {
       id: '/_authenticated/hrm/payroll/settings'
       path: '/settings'
@@ -2049,11 +2186,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedHrmPayrollRunsRouteImport
       parentRoute: typeof AuthenticatedHrmPayrollRoute
     }
+    '/_authenticated/hrm/payroll/payslips': {
+      id: '/_authenticated/hrm/payroll/payslips'
+      path: '/payslips'
+      fullPath: '/hrm/payroll/payslips'
+      preLoaderRoute: typeof AuthenticatedHrmPayrollPayslipsRouteImport
+      parentRoute: typeof AuthenticatedHrmPayrollRoute
+    }
+    '/_authenticated/hrm/payroll/payment-templates': {
+      id: '/_authenticated/hrm/payroll/payment-templates'
+      path: '/payment-templates'
+      fullPath: '/hrm/payroll/payment-templates'
+      preLoaderRoute: typeof AuthenticatedHrmPayrollPaymentTemplatesRouteImport
+      parentRoute: typeof AuthenticatedHrmPayrollRoute
+    }
     '/_authenticated/hrm/payroll/payment-details': {
       id: '/_authenticated/hrm/payroll/payment-details'
       path: '/payment-details'
       fullPath: '/hrm/payroll/payment-details'
       preLoaderRoute: typeof AuthenticatedHrmPayrollPaymentDetailsRouteImport
+      parentRoute: typeof AuthenticatedHrmPayrollRoute
+    }
+    '/_authenticated/hrm/payroll/payment-batches': {
+      id: '/_authenticated/hrm/payroll/payment-batches'
+      path: '/payment-batches'
+      fullPath: '/hrm/payroll/payment-batches'
+      preLoaderRoute: typeof AuthenticatedHrmPayrollPaymentBatchesRouteImport
       parentRoute: typeof AuthenticatedHrmPayrollRoute
     }
     '/_authenticated/hrm/payroll/pay-components': {
@@ -2077,6 +2235,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedHrmPayrollManualInputsRouteImport
       parentRoute: typeof AuthenticatedHrmPayrollRoute
     }
+    '/_authenticated/hrm/payroll/journals': {
+      id: '/_authenticated/hrm/payroll/journals'
+      path: '/journals'
+      fullPath: '/hrm/payroll/journals'
+      preLoaderRoute: typeof AuthenticatedHrmPayrollJournalsRouteImport
+      parentRoute: typeof AuthenticatedHrmPayrollRoute
+    }
+    '/_authenticated/hrm/payroll/finalized': {
+      id: '/_authenticated/hrm/payroll/finalized'
+      path: '/finalized'
+      fullPath: '/hrm/payroll/finalized'
+      preLoaderRoute: typeof AuthenticatedHrmPayrollFinalizedRouteImport
+      parentRoute: typeof AuthenticatedHrmPayrollRoute
+    }
+    '/_authenticated/hrm/payroll/corrections': {
+      id: '/_authenticated/hrm/payroll/corrections'
+      path: '/corrections'
+      fullPath: '/hrm/payroll/corrections'
+      preLoaderRoute: typeof AuthenticatedHrmPayrollCorrectionsRouteImport
+      parentRoute: typeof AuthenticatedHrmPayrollRoute
+    }
     '/_authenticated/hrm/payroll/compensation': {
       id: '/_authenticated/hrm/payroll/compensation'
       path: '/compensation'
@@ -2089,6 +2268,13 @@ declare module '@tanstack/react-router' {
       path: '/calendars'
       fullPath: '/hrm/payroll/calendars'
       preLoaderRoute: typeof AuthenticatedHrmPayrollCalendarsRouteImport
+      parentRoute: typeof AuthenticatedHrmPayrollRoute
+    }
+    '/_authenticated/hrm/payroll/approvals': {
+      id: '/_authenticated/hrm/payroll/approvals'
+      path: '/approvals'
+      fullPath: '/hrm/payroll/approvals'
+      preLoaderRoute: typeof AuthenticatedHrmPayrollApprovalsRouteImport
       parentRoute: typeof AuthenticatedHrmPayrollRoute
     }
     '/_authenticated/hrm/leave/types': {
@@ -2140,6 +2326,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedHrmPayrollRunsRunIdRouteImport
       parentRoute: typeof AuthenticatedHrmPayrollRunsRoute
     }
+    '/_authenticated/hrm/payroll/finalized/$payrollId': {
+      id: '/_authenticated/hrm/payroll/finalized/$payrollId'
+      path: '/$payrollId'
+      fullPath: '/hrm/payroll/finalized/$payrollId'
+      preLoaderRoute: typeof AuthenticatedHrmPayrollFinalizedPayrollIdRouteImport
+      parentRoute: typeof AuthenticatedHrmPayrollFinalizedRoute
+    }
+    '/_authenticated/hrm/payroll/runs/$runId/approval': {
+      id: '/_authenticated/hrm/payroll/runs/$runId/approval'
+      path: '/approval'
+      fullPath: '/hrm/payroll/runs/$runId/approval'
+      preLoaderRoute: typeof AuthenticatedHrmPayrollRunsRunIdApprovalRouteImport
+      parentRoute: typeof AuthenticatedHrmPayrollRunsRunIdRoute
+    }
     '/_authenticated/hrm/payroll/runs/$runId/employees/$employeeId': {
       id: '/_authenticated/hrm/payroll/runs/$runId/employees/$employeeId'
       path: '/employees/$employeeId'
@@ -2180,12 +2380,30 @@ const AuthenticatedHrmLeaveRouteWithChildren =
     AuthenticatedHrmLeaveRouteChildren,
   )
 
+interface AuthenticatedHrmPayrollFinalizedRouteChildren {
+  AuthenticatedHrmPayrollFinalizedPayrollIdRoute: typeof AuthenticatedHrmPayrollFinalizedPayrollIdRoute
+}
+
+const AuthenticatedHrmPayrollFinalizedRouteChildren: AuthenticatedHrmPayrollFinalizedRouteChildren =
+  {
+    AuthenticatedHrmPayrollFinalizedPayrollIdRoute:
+      AuthenticatedHrmPayrollFinalizedPayrollIdRoute,
+  }
+
+const AuthenticatedHrmPayrollFinalizedRouteWithChildren =
+  AuthenticatedHrmPayrollFinalizedRoute._addFileChildren(
+    AuthenticatedHrmPayrollFinalizedRouteChildren,
+  )
+
 interface AuthenticatedHrmPayrollRunsRunIdRouteChildren {
+  AuthenticatedHrmPayrollRunsRunIdApprovalRoute: typeof AuthenticatedHrmPayrollRunsRunIdApprovalRoute
   AuthenticatedHrmPayrollRunsRunIdEmployeesEmployeeIdRoute: typeof AuthenticatedHrmPayrollRunsRunIdEmployeesEmployeeIdRoute
 }
 
 const AuthenticatedHrmPayrollRunsRunIdRouteChildren: AuthenticatedHrmPayrollRunsRunIdRouteChildren =
   {
+    AuthenticatedHrmPayrollRunsRunIdApprovalRoute:
+      AuthenticatedHrmPayrollRunsRunIdApprovalRoute,
     AuthenticatedHrmPayrollRunsRunIdEmployeesEmployeeIdRoute:
       AuthenticatedHrmPayrollRunsRunIdEmployeesEmployeeIdRoute,
   }
@@ -2213,37 +2431,59 @@ const AuthenticatedHrmPayrollRunsRouteWithChildren =
   )
 
 interface AuthenticatedHrmPayrollRouteChildren {
+  AuthenticatedHrmPayrollApprovalsRoute: typeof AuthenticatedHrmPayrollApprovalsRoute
   AuthenticatedHrmPayrollCalendarsRoute: typeof AuthenticatedHrmPayrollCalendarsRoute
   AuthenticatedHrmPayrollCompensationRoute: typeof AuthenticatedHrmPayrollCompensationRoute
+  AuthenticatedHrmPayrollCorrectionsRoute: typeof AuthenticatedHrmPayrollCorrectionsRoute
+  AuthenticatedHrmPayrollFinalizedRoute: typeof AuthenticatedHrmPayrollFinalizedRouteWithChildren
+  AuthenticatedHrmPayrollJournalsRoute: typeof AuthenticatedHrmPayrollJournalsRoute
   AuthenticatedHrmPayrollManualInputsRoute: typeof AuthenticatedHrmPayrollManualInputsRoute
   AuthenticatedHrmPayrollOpeningBalancesRoute: typeof AuthenticatedHrmPayrollOpeningBalancesRoute
   AuthenticatedHrmPayrollPayComponentsRoute: typeof AuthenticatedHrmPayrollPayComponentsRoute
+  AuthenticatedHrmPayrollPaymentBatchesRoute: typeof AuthenticatedHrmPayrollPaymentBatchesRoute
   AuthenticatedHrmPayrollPaymentDetailsRoute: typeof AuthenticatedHrmPayrollPaymentDetailsRoute
+  AuthenticatedHrmPayrollPaymentTemplatesRoute: typeof AuthenticatedHrmPayrollPaymentTemplatesRoute
+  AuthenticatedHrmPayrollPayslipsRoute: typeof AuthenticatedHrmPayrollPayslipsRoute
   AuthenticatedHrmPayrollRunsRoute: typeof AuthenticatedHrmPayrollRunsRouteWithChildren
   AuthenticatedHrmPayrollSalaryStructuresRoute: typeof AuthenticatedHrmPayrollSalaryStructuresRoute
   AuthenticatedHrmPayrollSettingsRoute: typeof AuthenticatedHrmPayrollSettingsRoute
+  AuthenticatedHrmPayrollStatutoryLiabilitiesRoute: typeof AuthenticatedHrmPayrollStatutoryLiabilitiesRoute
   AuthenticatedHrmPayrollStatutoryRulesRoute: typeof AuthenticatedHrmPayrollStatutoryRulesRoute
 }
 
 const AuthenticatedHrmPayrollRouteChildren: AuthenticatedHrmPayrollRouteChildren =
   {
+    AuthenticatedHrmPayrollApprovalsRoute:
+      AuthenticatedHrmPayrollApprovalsRoute,
     AuthenticatedHrmPayrollCalendarsRoute:
       AuthenticatedHrmPayrollCalendarsRoute,
     AuthenticatedHrmPayrollCompensationRoute:
       AuthenticatedHrmPayrollCompensationRoute,
+    AuthenticatedHrmPayrollCorrectionsRoute:
+      AuthenticatedHrmPayrollCorrectionsRoute,
+    AuthenticatedHrmPayrollFinalizedRoute:
+      AuthenticatedHrmPayrollFinalizedRouteWithChildren,
+    AuthenticatedHrmPayrollJournalsRoute: AuthenticatedHrmPayrollJournalsRoute,
     AuthenticatedHrmPayrollManualInputsRoute:
       AuthenticatedHrmPayrollManualInputsRoute,
     AuthenticatedHrmPayrollOpeningBalancesRoute:
       AuthenticatedHrmPayrollOpeningBalancesRoute,
     AuthenticatedHrmPayrollPayComponentsRoute:
       AuthenticatedHrmPayrollPayComponentsRoute,
+    AuthenticatedHrmPayrollPaymentBatchesRoute:
+      AuthenticatedHrmPayrollPaymentBatchesRoute,
     AuthenticatedHrmPayrollPaymentDetailsRoute:
       AuthenticatedHrmPayrollPaymentDetailsRoute,
+    AuthenticatedHrmPayrollPaymentTemplatesRoute:
+      AuthenticatedHrmPayrollPaymentTemplatesRoute,
+    AuthenticatedHrmPayrollPayslipsRoute: AuthenticatedHrmPayrollPayslipsRoute,
     AuthenticatedHrmPayrollRunsRoute:
       AuthenticatedHrmPayrollRunsRouteWithChildren,
     AuthenticatedHrmPayrollSalaryStructuresRoute:
       AuthenticatedHrmPayrollSalaryStructuresRoute,
     AuthenticatedHrmPayrollSettingsRoute: AuthenticatedHrmPayrollSettingsRoute,
+    AuthenticatedHrmPayrollStatutoryLiabilitiesRoute:
+      AuthenticatedHrmPayrollStatutoryLiabilitiesRoute,
     AuthenticatedHrmPayrollStatutoryRulesRoute:
       AuthenticatedHrmPayrollStatutoryRulesRoute,
   }

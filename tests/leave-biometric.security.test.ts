@@ -100,6 +100,5 @@ describe("Phase 3C security and integration", () => {
       "/hrm/biometric-devices",
     ])
       expect(sidebar).toContain(`to: "${path}"`);
-    expect(sidebar).not.toMatch(/to: "\/hrm\/payroll\/(payslips|payments|submissions|journals)/);
   });
 });
