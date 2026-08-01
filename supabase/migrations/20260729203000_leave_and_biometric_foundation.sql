@@ -160,6 +160,7 @@ CREATE TABLE public.hr_biometric_normalized_events (
     CHECK(processing_status IN ('pending','mapped','converted','unmapped','rejected','retry_pending')),
   rejection_reason text, attendance_event_id uuid REFERENCES public.hr_attendance_events(id),
   payload_hash text, safe_provider_reference text, ingested_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE(property_id,id),
   UNIQUE(property_id,deduplication_key), UNIQUE(property_id,device_id,source_event_id),
   FOREIGN KEY(property_id,device_id) REFERENCES public.hr_biometric_devices(property_id,id),
   FOREIGN KEY(property_id,batch_id) REFERENCES public.hr_biometric_import_batches(property_id,id),

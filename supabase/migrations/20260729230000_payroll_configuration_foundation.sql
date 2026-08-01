@@ -742,8 +742,8 @@ INSERT INTO public.payroll_settings(
   property_id,effective_from,currency,jurisdiction_code,timezone,created_by,updated_by
 )
 SELECT p.id,current_date,p.base_currency,'UNSPECIFIED',p.timezone,
-  COALESCE(p.created_by,(SELECT id FROM public.profiles ORDER BY created_at LIMIT 1)),
-  COALESCE(p.created_by,(SELECT id FROM public.profiles ORDER BY created_at LIMIT 1))
+  COALESCE(auth.uid(),(SELECT id FROM public.profiles ORDER BY created_at LIMIT 1)),
+  COALESCE(auth.uid(),(SELECT id FROM public.profiles ORDER BY created_at LIMIT 1))
 FROM public.properties p
 WHERE NOT EXISTS(SELECT 1 FROM public.payroll_settings s WHERE s.property_id=p.id);
 
