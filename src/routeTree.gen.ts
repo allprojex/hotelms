@@ -79,6 +79,7 @@ import { Route as AuthenticatedAdminHealthRouteImport } from './routes/_authenti
 import { Route as AuthenticatedAdminEslRouteImport } from './routes/_authenticated/admin_.esl'
 import { Route as AuthenticatedAdminBackupRouteImport } from './routes/_authenticated/admin_.backup'
 import { Route as AuthenticatedAdminAuditRouteImport } from './routes/_authenticated/admin_.audit'
+import { Route as AuthenticatedAccountingVendorsRouteImport } from './routes/_authenticated/accounting.vendors'
 import { Route as AuthenticatedAccountingSyncRouteImport } from './routes/_authenticated/accounting.sync'
 import { Route as AuthenticatedAccountingReportsRouteImport } from './routes/_authenticated/accounting.reports'
 import { Route as AuthenticatedAccountingPostingRulesRouteImport } from './routes/_authenticated/accounting.posting-rules'
@@ -86,7 +87,12 @@ import { Route as AuthenticatedAccountingPeriodsRouteImport } from './routes/_au
 import { Route as AuthenticatedAccountingNightAuditRouteImport } from './routes/_authenticated/accounting.night-audit'
 import { Route as AuthenticatedAccountingJournalRouteImport } from './routes/_authenticated/accounting.journal'
 import { Route as AuthenticatedAccountingFxRouteImport } from './routes/_authenticated/accounting.fx'
+import { Route as AuthenticatedAccountingExpensesRouteImport } from './routes/_authenticated/accounting.expenses'
+import { Route as AuthenticatedAccountingExpenseCategoriesRouteImport } from './routes/_authenticated/accounting.expense-categories'
+import { Route as AuthenticatedAccountingCostCentresRouteImport } from './routes/_authenticated/accounting.cost-centres'
+import { Route as AuthenticatedAccountingCorrectionsRouteImport } from './routes/_authenticated/accounting.corrections'
 import { Route as AuthenticatedAccountingArRouteImport } from './routes/_authenticated/accounting.ar'
+import { Route as AuthenticatedAccountingApprovalsRouteImport } from './routes/_authenticated/accounting.approvals'
 import { Route as AuthenticatedAccountingApRouteImport } from './routes/_authenticated/accounting.ap'
 import { Route as AuthenticatedAccountingAccountsRouteImport } from './routes/_authenticated/accounting.accounts'
 import { Route as AuthenticatedHrmEmployeesIndexRouteImport } from './routes/_authenticated/hrm.employees.index'
@@ -123,6 +129,8 @@ import { Route as AuthenticatedHrmLeaveBalancesRouteImport } from './routes/_aut
 import { Route as AuthenticatedHrmEmployeesEmployeeIdRouteImport } from './routes/_authenticated/hrm.employees.$employeeId'
 import { Route as AuthenticatedAdminSecurityPasskeysRouteImport } from './routes/_authenticated/admin_.security.passkeys'
 import { Route as AuthenticatedAdminEslPairRouteImport } from './routes/_authenticated/admin_.esl.pair'
+import { Route as AuthenticatedAccountingExpensesNewRouteImport } from './routes/_authenticated/accounting.expenses.new'
+import { Route as AuthenticatedAccountingExpensesExpenseIdRouteImport } from './routes/_authenticated/accounting.expenses.$expenseId'
 import { Route as AuthenticatedHrmPayrollRunsNewRouteImport } from './routes/_authenticated/hrm.payroll.runs.new'
 import { Route as AuthenticatedHrmPayrollRunsRunIdRouteImport } from './routes/_authenticated/hrm.payroll.runs.$runId'
 import { Route as AuthenticatedHrmPayrollFinalizedPayrollIdRouteImport } from './routes/_authenticated/hrm.payroll.finalized.$payrollId'
@@ -513,6 +521,12 @@ const AuthenticatedAdminAuditRoute = AuthenticatedAdminAuditRouteImport.update({
   path: '/admin/audit',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedAccountingVendorsRoute =
+  AuthenticatedAccountingVendorsRouteImport.update({
+    id: '/accounting/vendors',
+    path: '/accounting/vendors',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedAccountingSyncRoute =
   AuthenticatedAccountingSyncRouteImport.update({
     id: '/accounting/sync',
@@ -555,10 +569,40 @@ const AuthenticatedAccountingFxRoute =
     path: '/accounting/fx',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedAccountingExpensesRoute =
+  AuthenticatedAccountingExpensesRouteImport.update({
+    id: '/accounting/expenses',
+    path: '/accounting/expenses',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedAccountingExpenseCategoriesRoute =
+  AuthenticatedAccountingExpenseCategoriesRouteImport.update({
+    id: '/accounting/expense-categories',
+    path: '/accounting/expense-categories',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedAccountingCostCentresRoute =
+  AuthenticatedAccountingCostCentresRouteImport.update({
+    id: '/accounting/cost-centres',
+    path: '/accounting/cost-centres',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedAccountingCorrectionsRoute =
+  AuthenticatedAccountingCorrectionsRouteImport.update({
+    id: '/accounting/corrections',
+    path: '/accounting/corrections',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedAccountingArRoute =
   AuthenticatedAccountingArRouteImport.update({
     id: '/accounting/ar',
     path: '/accounting/ar',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedAccountingApprovalsRoute =
+  AuthenticatedAccountingApprovalsRouteImport.update({
+    id: '/accounting/approvals',
+    path: '/accounting/approvals',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedAccountingApRoute =
@@ -773,6 +817,18 @@ const AuthenticatedAdminEslPairRoute =
     path: '/pair',
     getParentRoute: () => AuthenticatedAdminEslRoute,
   } as any)
+const AuthenticatedAccountingExpensesNewRoute =
+  AuthenticatedAccountingExpensesNewRouteImport.update({
+    id: '/new',
+    path: '/new',
+    getParentRoute: () => AuthenticatedAccountingExpensesRoute,
+  } as any)
+const AuthenticatedAccountingExpensesExpenseIdRoute =
+  AuthenticatedAccountingExpensesExpenseIdRouteImport.update({
+    id: '/$expenseId',
+    path: '/$expenseId',
+    getParentRoute: () => AuthenticatedAccountingExpensesRoute,
+  } as any)
 const AuthenticatedHrmPayrollRunsNewRoute =
   AuthenticatedHrmPayrollRunsNewRouteImport.update({
     id: '/new',
@@ -826,7 +882,12 @@ export interface FileRoutesByFullPath {
   '/book/': typeof BookIndexRoute
   '/accounting/accounts': typeof AuthenticatedAccountingAccountsRoute
   '/accounting/ap': typeof AuthenticatedAccountingApRoute
+  '/accounting/approvals': typeof AuthenticatedAccountingApprovalsRoute
   '/accounting/ar': typeof AuthenticatedAccountingArRoute
+  '/accounting/corrections': typeof AuthenticatedAccountingCorrectionsRoute
+  '/accounting/cost-centres': typeof AuthenticatedAccountingCostCentresRoute
+  '/accounting/expense-categories': typeof AuthenticatedAccountingExpenseCategoriesRoute
+  '/accounting/expenses': typeof AuthenticatedAccountingExpensesRouteWithChildren
   '/accounting/fx': typeof AuthenticatedAccountingFxRoute
   '/accounting/journal': typeof AuthenticatedAccountingJournalRoute
   '/accounting/night-audit': typeof AuthenticatedAccountingNightAuditRoute
@@ -834,6 +895,7 @@ export interface FileRoutesByFullPath {
   '/accounting/posting-rules': typeof AuthenticatedAccountingPostingRulesRoute
   '/accounting/reports': typeof AuthenticatedAccountingReportsRoute
   '/accounting/sync': typeof AuthenticatedAccountingSyncRoute
+  '/accounting/vendors': typeof AuthenticatedAccountingVendorsRoute
   '/admin/audit': typeof AuthenticatedAdminAuditRoute
   '/admin/backup': typeof AuthenticatedAdminBackupRoute
   '/admin/esl': typeof AuthenticatedAdminEslRouteWithChildren
@@ -884,6 +946,8 @@ export interface FileRoutesByFullPath {
   '/pos/': typeof AuthenticatedPosIndexRoute
   '/reservations/': typeof AuthenticatedReservationsIndexRoute
   '/rooms/': typeof AuthenticatedRoomsIndexRoute
+  '/accounting/expenses/$expenseId': typeof AuthenticatedAccountingExpensesExpenseIdRoute
+  '/accounting/expenses/new': typeof AuthenticatedAccountingExpensesNewRoute
   '/admin/esl/pair': typeof AuthenticatedAdminEslPairRoute
   '/admin/security/passkeys': typeof AuthenticatedAdminSecurityPasskeysRoute
   '/hrm/employees/$employeeId': typeof AuthenticatedHrmEmployeesEmployeeIdRoute
@@ -946,7 +1010,12 @@ export interface FileRoutesByTo {
   '/book': typeof BookIndexRoute
   '/accounting/accounts': typeof AuthenticatedAccountingAccountsRoute
   '/accounting/ap': typeof AuthenticatedAccountingApRoute
+  '/accounting/approvals': typeof AuthenticatedAccountingApprovalsRoute
   '/accounting/ar': typeof AuthenticatedAccountingArRoute
+  '/accounting/corrections': typeof AuthenticatedAccountingCorrectionsRoute
+  '/accounting/cost-centres': typeof AuthenticatedAccountingCostCentresRoute
+  '/accounting/expense-categories': typeof AuthenticatedAccountingExpenseCategoriesRoute
+  '/accounting/expenses': typeof AuthenticatedAccountingExpensesRouteWithChildren
   '/accounting/fx': typeof AuthenticatedAccountingFxRoute
   '/accounting/journal': typeof AuthenticatedAccountingJournalRoute
   '/accounting/night-audit': typeof AuthenticatedAccountingNightAuditRoute
@@ -954,6 +1023,7 @@ export interface FileRoutesByTo {
   '/accounting/posting-rules': typeof AuthenticatedAccountingPostingRulesRoute
   '/accounting/reports': typeof AuthenticatedAccountingReportsRoute
   '/accounting/sync': typeof AuthenticatedAccountingSyncRoute
+  '/accounting/vendors': typeof AuthenticatedAccountingVendorsRoute
   '/admin/audit': typeof AuthenticatedAdminAuditRoute
   '/admin/backup': typeof AuthenticatedAdminBackupRoute
   '/admin/esl': typeof AuthenticatedAdminEslRouteWithChildren
@@ -1004,6 +1074,8 @@ export interface FileRoutesByTo {
   '/pos': typeof AuthenticatedPosIndexRoute
   '/reservations': typeof AuthenticatedReservationsIndexRoute
   '/rooms': typeof AuthenticatedRoomsIndexRoute
+  '/accounting/expenses/$expenseId': typeof AuthenticatedAccountingExpensesExpenseIdRoute
+  '/accounting/expenses/new': typeof AuthenticatedAccountingExpensesNewRoute
   '/admin/esl/pair': typeof AuthenticatedAdminEslPairRoute
   '/admin/security/passkeys': typeof AuthenticatedAdminSecurityPasskeysRoute
   '/hrm/employees/$employeeId': typeof AuthenticatedHrmEmployeesEmployeeIdRoute
@@ -1068,7 +1140,12 @@ export interface FileRoutesById {
   '/book/': typeof BookIndexRoute
   '/_authenticated/accounting/accounts': typeof AuthenticatedAccountingAccountsRoute
   '/_authenticated/accounting/ap': typeof AuthenticatedAccountingApRoute
+  '/_authenticated/accounting/approvals': typeof AuthenticatedAccountingApprovalsRoute
   '/_authenticated/accounting/ar': typeof AuthenticatedAccountingArRoute
+  '/_authenticated/accounting/corrections': typeof AuthenticatedAccountingCorrectionsRoute
+  '/_authenticated/accounting/cost-centres': typeof AuthenticatedAccountingCostCentresRoute
+  '/_authenticated/accounting/expense-categories': typeof AuthenticatedAccountingExpenseCategoriesRoute
+  '/_authenticated/accounting/expenses': typeof AuthenticatedAccountingExpensesRouteWithChildren
   '/_authenticated/accounting/fx': typeof AuthenticatedAccountingFxRoute
   '/_authenticated/accounting/journal': typeof AuthenticatedAccountingJournalRoute
   '/_authenticated/accounting/night-audit': typeof AuthenticatedAccountingNightAuditRoute
@@ -1076,6 +1153,7 @@ export interface FileRoutesById {
   '/_authenticated/accounting/posting-rules': typeof AuthenticatedAccountingPostingRulesRoute
   '/_authenticated/accounting/reports': typeof AuthenticatedAccountingReportsRoute
   '/_authenticated/accounting/sync': typeof AuthenticatedAccountingSyncRoute
+  '/_authenticated/accounting/vendors': typeof AuthenticatedAccountingVendorsRoute
   '/_authenticated/admin_/audit': typeof AuthenticatedAdminAuditRoute
   '/_authenticated/admin_/backup': typeof AuthenticatedAdminBackupRoute
   '/_authenticated/admin_/esl': typeof AuthenticatedAdminEslRouteWithChildren
@@ -1126,6 +1204,8 @@ export interface FileRoutesById {
   '/_authenticated/pos/': typeof AuthenticatedPosIndexRoute
   '/_authenticated/reservations/': typeof AuthenticatedReservationsIndexRoute
   '/_authenticated/rooms/': typeof AuthenticatedRoomsIndexRoute
+  '/_authenticated/accounting/expenses/$expenseId': typeof AuthenticatedAccountingExpensesExpenseIdRoute
+  '/_authenticated/accounting/expenses/new': typeof AuthenticatedAccountingExpensesNewRoute
   '/_authenticated/admin_/esl/pair': typeof AuthenticatedAdminEslPairRoute
   '/_authenticated/admin_/security/passkeys': typeof AuthenticatedAdminSecurityPasskeysRoute
   '/_authenticated/hrm/employees/$employeeId': typeof AuthenticatedHrmEmployeesEmployeeIdRoute
@@ -1190,7 +1270,12 @@ export interface FileRouteTypes {
     | '/book/'
     | '/accounting/accounts'
     | '/accounting/ap'
+    | '/accounting/approvals'
     | '/accounting/ar'
+    | '/accounting/corrections'
+    | '/accounting/cost-centres'
+    | '/accounting/expense-categories'
+    | '/accounting/expenses'
     | '/accounting/fx'
     | '/accounting/journal'
     | '/accounting/night-audit'
@@ -1198,6 +1283,7 @@ export interface FileRouteTypes {
     | '/accounting/posting-rules'
     | '/accounting/reports'
     | '/accounting/sync'
+    | '/accounting/vendors'
     | '/admin/audit'
     | '/admin/backup'
     | '/admin/esl'
@@ -1248,6 +1334,8 @@ export interface FileRouteTypes {
     | '/pos/'
     | '/reservations/'
     | '/rooms/'
+    | '/accounting/expenses/$expenseId'
+    | '/accounting/expenses/new'
     | '/admin/esl/pair'
     | '/admin/security/passkeys'
     | '/hrm/employees/$employeeId'
@@ -1310,7 +1398,12 @@ export interface FileRouteTypes {
     | '/book'
     | '/accounting/accounts'
     | '/accounting/ap'
+    | '/accounting/approvals'
     | '/accounting/ar'
+    | '/accounting/corrections'
+    | '/accounting/cost-centres'
+    | '/accounting/expense-categories'
+    | '/accounting/expenses'
     | '/accounting/fx'
     | '/accounting/journal'
     | '/accounting/night-audit'
@@ -1318,6 +1411,7 @@ export interface FileRouteTypes {
     | '/accounting/posting-rules'
     | '/accounting/reports'
     | '/accounting/sync'
+    | '/accounting/vendors'
     | '/admin/audit'
     | '/admin/backup'
     | '/admin/esl'
@@ -1368,6 +1462,8 @@ export interface FileRouteTypes {
     | '/pos'
     | '/reservations'
     | '/rooms'
+    | '/accounting/expenses/$expenseId'
+    | '/accounting/expenses/new'
     | '/admin/esl/pair'
     | '/admin/security/passkeys'
     | '/hrm/employees/$employeeId'
@@ -1431,7 +1527,12 @@ export interface FileRouteTypes {
     | '/book/'
     | '/_authenticated/accounting/accounts'
     | '/_authenticated/accounting/ap'
+    | '/_authenticated/accounting/approvals'
     | '/_authenticated/accounting/ar'
+    | '/_authenticated/accounting/corrections'
+    | '/_authenticated/accounting/cost-centres'
+    | '/_authenticated/accounting/expense-categories'
+    | '/_authenticated/accounting/expenses'
     | '/_authenticated/accounting/fx'
     | '/_authenticated/accounting/journal'
     | '/_authenticated/accounting/night-audit'
@@ -1439,6 +1540,7 @@ export interface FileRouteTypes {
     | '/_authenticated/accounting/posting-rules'
     | '/_authenticated/accounting/reports'
     | '/_authenticated/accounting/sync'
+    | '/_authenticated/accounting/vendors'
     | '/_authenticated/admin_/audit'
     | '/_authenticated/admin_/backup'
     | '/_authenticated/admin_/esl'
@@ -1489,6 +1591,8 @@ export interface FileRouteTypes {
     | '/_authenticated/pos/'
     | '/_authenticated/reservations/'
     | '/_authenticated/rooms/'
+    | '/_authenticated/accounting/expenses/$expenseId'
+    | '/_authenticated/accounting/expenses/new'
     | '/_authenticated/admin_/esl/pair'
     | '/_authenticated/admin_/security/passkeys'
     | '/_authenticated/hrm/employees/$employeeId'
@@ -2044,6 +2148,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminAuditRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/accounting/vendors': {
+      id: '/_authenticated/accounting/vendors'
+      path: '/accounting/vendors'
+      fullPath: '/accounting/vendors'
+      preLoaderRoute: typeof AuthenticatedAccountingVendorsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/accounting/sync': {
       id: '/_authenticated/accounting/sync'
       path: '/accounting/sync'
@@ -2093,11 +2204,46 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAccountingFxRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/accounting/expenses': {
+      id: '/_authenticated/accounting/expenses'
+      path: '/accounting/expenses'
+      fullPath: '/accounting/expenses'
+      preLoaderRoute: typeof AuthenticatedAccountingExpensesRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/accounting/expense-categories': {
+      id: '/_authenticated/accounting/expense-categories'
+      path: '/accounting/expense-categories'
+      fullPath: '/accounting/expense-categories'
+      preLoaderRoute: typeof AuthenticatedAccountingExpenseCategoriesRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/accounting/cost-centres': {
+      id: '/_authenticated/accounting/cost-centres'
+      path: '/accounting/cost-centres'
+      fullPath: '/accounting/cost-centres'
+      preLoaderRoute: typeof AuthenticatedAccountingCostCentresRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/accounting/corrections': {
+      id: '/_authenticated/accounting/corrections'
+      path: '/accounting/corrections'
+      fullPath: '/accounting/corrections'
+      preLoaderRoute: typeof AuthenticatedAccountingCorrectionsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/accounting/ar': {
       id: '/_authenticated/accounting/ar'
       path: '/accounting/ar'
       fullPath: '/accounting/ar'
       preLoaderRoute: typeof AuthenticatedAccountingArRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/accounting/approvals': {
+      id: '/_authenticated/accounting/approvals'
+      path: '/accounting/approvals'
+      fullPath: '/accounting/approvals'
+      preLoaderRoute: typeof AuthenticatedAccountingApprovalsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/accounting/ap': {
@@ -2352,6 +2498,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminEslPairRouteImport
       parentRoute: typeof AuthenticatedAdminEslRoute
     }
+    '/_authenticated/accounting/expenses/new': {
+      id: '/_authenticated/accounting/expenses/new'
+      path: '/new'
+      fullPath: '/accounting/expenses/new'
+      preLoaderRoute: typeof AuthenticatedAccountingExpensesNewRouteImport
+      parentRoute: typeof AuthenticatedAccountingExpensesRoute
+    }
+    '/_authenticated/accounting/expenses/$expenseId': {
+      id: '/_authenticated/accounting/expenses/$expenseId'
+      path: '/$expenseId'
+      fullPath: '/accounting/expenses/$expenseId'
+      preLoaderRoute: typeof AuthenticatedAccountingExpensesExpenseIdRouteImport
+      parentRoute: typeof AuthenticatedAccountingExpensesRoute
+    }
     '/_authenticated/hrm/payroll/runs/new': {
       id: '/_authenticated/hrm/payroll/runs/new'
       path: '/new'
@@ -2389,6 +2549,24 @@ declare module '@tanstack/react-router' {
     }
   }
 }
+
+interface AuthenticatedAccountingExpensesRouteChildren {
+  AuthenticatedAccountingExpensesExpenseIdRoute: typeof AuthenticatedAccountingExpensesExpenseIdRoute
+  AuthenticatedAccountingExpensesNewRoute: typeof AuthenticatedAccountingExpensesNewRoute
+}
+
+const AuthenticatedAccountingExpensesRouteChildren: AuthenticatedAccountingExpensesRouteChildren =
+  {
+    AuthenticatedAccountingExpensesExpenseIdRoute:
+      AuthenticatedAccountingExpensesExpenseIdRoute,
+    AuthenticatedAccountingExpensesNewRoute:
+      AuthenticatedAccountingExpensesNewRoute,
+  }
+
+const AuthenticatedAccountingExpensesRouteWithChildren =
+  AuthenticatedAccountingExpensesRoute._addFileChildren(
+    AuthenticatedAccountingExpensesRouteChildren,
+  )
 
 interface AuthenticatedAdminEslRouteChildren {
   AuthenticatedAdminEslPairRoute: typeof AuthenticatedAdminEslPairRoute
@@ -2562,7 +2740,12 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedUsersRoute: typeof AuthenticatedUsersRoute
   AuthenticatedAccountingAccountsRoute: typeof AuthenticatedAccountingAccountsRoute
   AuthenticatedAccountingApRoute: typeof AuthenticatedAccountingApRoute
+  AuthenticatedAccountingApprovalsRoute: typeof AuthenticatedAccountingApprovalsRoute
   AuthenticatedAccountingArRoute: typeof AuthenticatedAccountingArRoute
+  AuthenticatedAccountingCorrectionsRoute: typeof AuthenticatedAccountingCorrectionsRoute
+  AuthenticatedAccountingCostCentresRoute: typeof AuthenticatedAccountingCostCentresRoute
+  AuthenticatedAccountingExpenseCategoriesRoute: typeof AuthenticatedAccountingExpenseCategoriesRoute
+  AuthenticatedAccountingExpensesRoute: typeof AuthenticatedAccountingExpensesRouteWithChildren
   AuthenticatedAccountingFxRoute: typeof AuthenticatedAccountingFxRoute
   AuthenticatedAccountingJournalRoute: typeof AuthenticatedAccountingJournalRoute
   AuthenticatedAccountingNightAuditRoute: typeof AuthenticatedAccountingNightAuditRoute
@@ -2570,6 +2753,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedAccountingPostingRulesRoute: typeof AuthenticatedAccountingPostingRulesRoute
   AuthenticatedAccountingReportsRoute: typeof AuthenticatedAccountingReportsRoute
   AuthenticatedAccountingSyncRoute: typeof AuthenticatedAccountingSyncRoute
+  AuthenticatedAccountingVendorsRoute: typeof AuthenticatedAccountingVendorsRoute
   AuthenticatedAdminAuditRoute: typeof AuthenticatedAdminAuditRoute
   AuthenticatedAdminBackupRoute: typeof AuthenticatedAdminBackupRoute
   AuthenticatedAdminEslRoute: typeof AuthenticatedAdminEslRouteWithChildren
@@ -2637,7 +2821,16 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedUsersRoute: AuthenticatedUsersRoute,
   AuthenticatedAccountingAccountsRoute: AuthenticatedAccountingAccountsRoute,
   AuthenticatedAccountingApRoute: AuthenticatedAccountingApRoute,
+  AuthenticatedAccountingApprovalsRoute: AuthenticatedAccountingApprovalsRoute,
   AuthenticatedAccountingArRoute: AuthenticatedAccountingArRoute,
+  AuthenticatedAccountingCorrectionsRoute:
+    AuthenticatedAccountingCorrectionsRoute,
+  AuthenticatedAccountingCostCentresRoute:
+    AuthenticatedAccountingCostCentresRoute,
+  AuthenticatedAccountingExpenseCategoriesRoute:
+    AuthenticatedAccountingExpenseCategoriesRoute,
+  AuthenticatedAccountingExpensesRoute:
+    AuthenticatedAccountingExpensesRouteWithChildren,
   AuthenticatedAccountingFxRoute: AuthenticatedAccountingFxRoute,
   AuthenticatedAccountingJournalRoute: AuthenticatedAccountingJournalRoute,
   AuthenticatedAccountingNightAuditRoute:
@@ -2647,6 +2840,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
     AuthenticatedAccountingPostingRulesRoute,
   AuthenticatedAccountingReportsRoute: AuthenticatedAccountingReportsRoute,
   AuthenticatedAccountingSyncRoute: AuthenticatedAccountingSyncRoute,
+  AuthenticatedAccountingVendorsRoute: AuthenticatedAccountingVendorsRoute,
   AuthenticatedAdminAuditRoute: AuthenticatedAdminAuditRoute,
   AuthenticatedAdminBackupRoute: AuthenticatedAdminBackupRoute,
   AuthenticatedAdminEslRoute: AuthenticatedAdminEslRouteWithChildren,

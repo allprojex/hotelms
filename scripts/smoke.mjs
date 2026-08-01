@@ -70,6 +70,13 @@ const AUTH_ROUTES = [
   "/accounting/reports",
   "/accounting/night-audit",
   "/accounting/sync",
+  "/accounting/expense-categories",
+  "/accounting/vendors",
+  "/accounting/cost-centres",
+  "/accounting/expenses",
+  "/accounting/expenses/new",
+  "/accounting/approvals",
+  "/accounting/corrections",
   "/security/passkeys",
   "/admin/security/passkeys",
 ];
