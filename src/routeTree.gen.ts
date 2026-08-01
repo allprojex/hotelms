@@ -43,6 +43,7 @@ import { Route as ApiPublicHealthRouteImport } from './routes/api/public/health'
 import { Route as AuthenticatedSettingsRolesMatrixRouteImport } from './routes/_authenticated/settings_.roles-matrix'
 import { Route as AuthenticatedSettingsRolesRouteImport } from './routes/_authenticated/settings_.roles'
 import { Route as AuthenticatedSettingsGuestIdTypesRouteImport } from './routes/_authenticated/settings_.guest-id-types'
+import { Route as AuthenticatedSecurityPasskeysRouteImport } from './routes/_authenticated/security.passkeys'
 import { Route as AuthenticatedRoomsTypesRouteImport } from './routes/_authenticated/rooms.types'
 import { Route as AuthenticatedReservationsNewRouteImport } from './routes/_authenticated/reservations.new'
 import { Route as AuthenticatedReservationsIdRouteImport } from './routes/_authenticated/reservations.$id'
@@ -120,6 +121,7 @@ import { Route as AuthenticatedHrmLeaveTypesRouteImport } from './routes/_authen
 import { Route as AuthenticatedHrmLeaveCalendarRouteImport } from './routes/_authenticated/hrm.leave.calendar'
 import { Route as AuthenticatedHrmLeaveBalancesRouteImport } from './routes/_authenticated/hrm.leave.balances'
 import { Route as AuthenticatedHrmEmployeesEmployeeIdRouteImport } from './routes/_authenticated/hrm.employees.$employeeId'
+import { Route as AuthenticatedAdminSecurityPasskeysRouteImport } from './routes/_authenticated/admin_.security.passkeys'
 import { Route as AuthenticatedAdminEslPairRouteImport } from './routes/_authenticated/admin_.esl.pair'
 import { Route as AuthenticatedHrmPayrollRunsNewRouteImport } from './routes/_authenticated/hrm.payroll.runs.new'
 import { Route as AuthenticatedHrmPayrollRunsRunIdRouteImport } from './routes/_authenticated/hrm.payroll.runs.$runId'
@@ -304,6 +306,12 @@ const AuthenticatedSettingsGuestIdTypesRoute =
   AuthenticatedSettingsGuestIdTypesRouteImport.update({
     id: '/settings_/guest-id-types',
     path: '/settings/guest-id-types',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedSecurityPasskeysRoute =
+  AuthenticatedSecurityPasskeysRouteImport.update({
+    id: '/security/passkeys',
+    path: '/security/passkeys',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedRoomsTypesRoute = AuthenticatedRoomsTypesRouteImport.update({
@@ -753,6 +761,12 @@ const AuthenticatedHrmEmployeesEmployeeIdRoute =
     path: '/hrm/employees/$employeeId',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedAdminSecurityPasskeysRoute =
+  AuthenticatedAdminSecurityPasskeysRouteImport.update({
+    id: '/passkeys',
+    path: '/passkeys',
+    getParentRoute: () => AuthenticatedAdminSecurityRoute,
+  } as any)
 const AuthenticatedAdminEslPairRoute =
   AuthenticatedAdminEslPairRouteImport.update({
     id: '/pair',
@@ -829,7 +843,7 @@ export interface FileRoutesByFullPath {
   '/admin/printers': typeof AuthenticatedAdminPrintersRoute
   '/admin/rbac-preview': typeof AuthenticatedAdminRbacPreviewRoute
   '/admin/recycle-bin': typeof AuthenticatedAdminRecycleBinRoute
-  '/admin/security': typeof AuthenticatedAdminSecurityRoute
+  '/admin/security': typeof AuthenticatedAdminSecurityRouteWithChildren
   '/admin/system-updates': typeof AuthenticatedAdminSystemUpdatesRoute
   '/admin/uploads': typeof AuthenticatedAdminUploadsRoute
   '/channels/$id': typeof AuthenticatedChannelsIdRoute
@@ -855,6 +869,7 @@ export interface FileRoutesByFullPath {
   '/reservations/$id': typeof AuthenticatedReservationsIdRoute
   '/reservations/new': typeof AuthenticatedReservationsNewRoute
   '/rooms/types': typeof AuthenticatedRoomsTypesRoute
+  '/security/passkeys': typeof AuthenticatedSecurityPasskeysRoute
   '/settings/guest-id-types': typeof AuthenticatedSettingsGuestIdTypesRoute
   '/settings/roles': typeof AuthenticatedSettingsRolesRoute
   '/settings/roles-matrix': typeof AuthenticatedSettingsRolesMatrixRoute
@@ -870,6 +885,7 @@ export interface FileRoutesByFullPath {
   '/reservations/': typeof AuthenticatedReservationsIndexRoute
   '/rooms/': typeof AuthenticatedRoomsIndexRoute
   '/admin/esl/pair': typeof AuthenticatedAdminEslPairRoute
+  '/admin/security/passkeys': typeof AuthenticatedAdminSecurityPasskeysRoute
   '/hrm/employees/$employeeId': typeof AuthenticatedHrmEmployeesEmployeeIdRoute
   '/hrm/leave/balances': typeof AuthenticatedHrmLeaveBalancesRoute
   '/hrm/leave/calendar': typeof AuthenticatedHrmLeaveCalendarRoute
@@ -947,7 +963,7 @@ export interface FileRoutesByTo {
   '/admin/printers': typeof AuthenticatedAdminPrintersRoute
   '/admin/rbac-preview': typeof AuthenticatedAdminRbacPreviewRoute
   '/admin/recycle-bin': typeof AuthenticatedAdminRecycleBinRoute
-  '/admin/security': typeof AuthenticatedAdminSecurityRoute
+  '/admin/security': typeof AuthenticatedAdminSecurityRouteWithChildren
   '/admin/system-updates': typeof AuthenticatedAdminSystemUpdatesRoute
   '/admin/uploads': typeof AuthenticatedAdminUploadsRoute
   '/channels/$id': typeof AuthenticatedChannelsIdRoute
@@ -973,6 +989,7 @@ export interface FileRoutesByTo {
   '/reservations/$id': typeof AuthenticatedReservationsIdRoute
   '/reservations/new': typeof AuthenticatedReservationsNewRoute
   '/rooms/types': typeof AuthenticatedRoomsTypesRoute
+  '/security/passkeys': typeof AuthenticatedSecurityPasskeysRoute
   '/settings/guest-id-types': typeof AuthenticatedSettingsGuestIdTypesRoute
   '/settings/roles': typeof AuthenticatedSettingsRolesRoute
   '/settings/roles-matrix': typeof AuthenticatedSettingsRolesMatrixRoute
@@ -988,6 +1005,7 @@ export interface FileRoutesByTo {
   '/reservations': typeof AuthenticatedReservationsIndexRoute
   '/rooms': typeof AuthenticatedRoomsIndexRoute
   '/admin/esl/pair': typeof AuthenticatedAdminEslPairRoute
+  '/admin/security/passkeys': typeof AuthenticatedAdminSecurityPasskeysRoute
   '/hrm/employees/$employeeId': typeof AuthenticatedHrmEmployeesEmployeeIdRoute
   '/hrm/leave/balances': typeof AuthenticatedHrmLeaveBalancesRoute
   '/hrm/leave/calendar': typeof AuthenticatedHrmLeaveCalendarRoute
@@ -1067,7 +1085,7 @@ export interface FileRoutesById {
   '/_authenticated/admin_/printers': typeof AuthenticatedAdminPrintersRoute
   '/_authenticated/admin_/rbac-preview': typeof AuthenticatedAdminRbacPreviewRoute
   '/_authenticated/admin_/recycle-bin': typeof AuthenticatedAdminRecycleBinRoute
-  '/_authenticated/admin_/security': typeof AuthenticatedAdminSecurityRoute
+  '/_authenticated/admin_/security': typeof AuthenticatedAdminSecurityRouteWithChildren
   '/_authenticated/admin_/system-updates': typeof AuthenticatedAdminSystemUpdatesRoute
   '/_authenticated/admin_/uploads': typeof AuthenticatedAdminUploadsRoute
   '/_authenticated/channels/$id': typeof AuthenticatedChannelsIdRoute
@@ -1093,6 +1111,7 @@ export interface FileRoutesById {
   '/_authenticated/reservations/$id': typeof AuthenticatedReservationsIdRoute
   '/_authenticated/reservations/new': typeof AuthenticatedReservationsNewRoute
   '/_authenticated/rooms/types': typeof AuthenticatedRoomsTypesRoute
+  '/_authenticated/security/passkeys': typeof AuthenticatedSecurityPasskeysRoute
   '/_authenticated/settings_/guest-id-types': typeof AuthenticatedSettingsGuestIdTypesRoute
   '/_authenticated/settings_/roles': typeof AuthenticatedSettingsRolesRoute
   '/_authenticated/settings_/roles-matrix': typeof AuthenticatedSettingsRolesMatrixRoute
@@ -1108,6 +1127,7 @@ export interface FileRoutesById {
   '/_authenticated/reservations/': typeof AuthenticatedReservationsIndexRoute
   '/_authenticated/rooms/': typeof AuthenticatedRoomsIndexRoute
   '/_authenticated/admin_/esl/pair': typeof AuthenticatedAdminEslPairRoute
+  '/_authenticated/admin_/security/passkeys': typeof AuthenticatedAdminSecurityPasskeysRoute
   '/_authenticated/hrm/employees/$employeeId': typeof AuthenticatedHrmEmployeesEmployeeIdRoute
   '/_authenticated/hrm/leave/balances': typeof AuthenticatedHrmLeaveBalancesRoute
   '/_authenticated/hrm/leave/calendar': typeof AuthenticatedHrmLeaveCalendarRoute
@@ -1213,6 +1233,7 @@ export interface FileRouteTypes {
     | '/reservations/$id'
     | '/reservations/new'
     | '/rooms/types'
+    | '/security/passkeys'
     | '/settings/guest-id-types'
     | '/settings/roles'
     | '/settings/roles-matrix'
@@ -1228,6 +1249,7 @@ export interface FileRouteTypes {
     | '/reservations/'
     | '/rooms/'
     | '/admin/esl/pair'
+    | '/admin/security/passkeys'
     | '/hrm/employees/$employeeId'
     | '/hrm/leave/balances'
     | '/hrm/leave/calendar'
@@ -1331,6 +1353,7 @@ export interface FileRouteTypes {
     | '/reservations/$id'
     | '/reservations/new'
     | '/rooms/types'
+    | '/security/passkeys'
     | '/settings/guest-id-types'
     | '/settings/roles'
     | '/settings/roles-matrix'
@@ -1346,6 +1369,7 @@ export interface FileRouteTypes {
     | '/reservations'
     | '/rooms'
     | '/admin/esl/pair'
+    | '/admin/security/passkeys'
     | '/hrm/employees/$employeeId'
     | '/hrm/leave/balances'
     | '/hrm/leave/calendar'
@@ -1450,6 +1474,7 @@ export interface FileRouteTypes {
     | '/_authenticated/reservations/$id'
     | '/_authenticated/reservations/new'
     | '/_authenticated/rooms/types'
+    | '/_authenticated/security/passkeys'
     | '/_authenticated/settings_/guest-id-types'
     | '/_authenticated/settings_/roles'
     | '/_authenticated/settings_/roles-matrix'
@@ -1465,6 +1490,7 @@ export interface FileRouteTypes {
     | '/_authenticated/reservations/'
     | '/_authenticated/rooms/'
     | '/_authenticated/admin_/esl/pair'
+    | '/_authenticated/admin_/security/passkeys'
     | '/_authenticated/hrm/employees/$employeeId'
     | '/_authenticated/hrm/leave/balances'
     | '/_authenticated/hrm/leave/calendar'
@@ -1764,6 +1790,13 @@ declare module '@tanstack/react-router' {
       path: '/settings/guest-id-types'
       fullPath: '/settings/guest-id-types'
       preLoaderRoute: typeof AuthenticatedSettingsGuestIdTypesRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/security/passkeys': {
+      id: '/_authenticated/security/passkeys'
+      path: '/security/passkeys'
+      fullPath: '/security/passkeys'
+      preLoaderRoute: typeof AuthenticatedSecurityPasskeysRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/rooms/types': {
@@ -2305,6 +2338,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedHrmEmployeesEmployeeIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/admin_/security/passkeys': {
+      id: '/_authenticated/admin_/security/passkeys'
+      path: '/passkeys'
+      fullPath: '/admin/security/passkeys'
+      preLoaderRoute: typeof AuthenticatedAdminSecurityPasskeysRouteImport
+      parentRoute: typeof AuthenticatedAdminSecurityRoute
+    }
     '/_authenticated/admin_/esl/pair': {
       id: '/_authenticated/admin_/esl/pair'
       path: '/pair'
@@ -2361,6 +2401,21 @@ const AuthenticatedAdminEslRouteChildren: AuthenticatedAdminEslRouteChildren = {
 const AuthenticatedAdminEslRouteWithChildren =
   AuthenticatedAdminEslRoute._addFileChildren(
     AuthenticatedAdminEslRouteChildren,
+  )
+
+interface AuthenticatedAdminSecurityRouteChildren {
+  AuthenticatedAdminSecurityPasskeysRoute: typeof AuthenticatedAdminSecurityPasskeysRoute
+}
+
+const AuthenticatedAdminSecurityRouteChildren: AuthenticatedAdminSecurityRouteChildren =
+  {
+    AuthenticatedAdminSecurityPasskeysRoute:
+      AuthenticatedAdminSecurityPasskeysRoute,
+  }
+
+const AuthenticatedAdminSecurityRouteWithChildren =
+  AuthenticatedAdminSecurityRoute._addFileChildren(
+    AuthenticatedAdminSecurityRouteChildren,
   )
 
 interface AuthenticatedHrmLeaveRouteChildren {
@@ -2524,7 +2579,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedAdminPrintersRoute: typeof AuthenticatedAdminPrintersRoute
   AuthenticatedAdminRbacPreviewRoute: typeof AuthenticatedAdminRbacPreviewRoute
   AuthenticatedAdminRecycleBinRoute: typeof AuthenticatedAdminRecycleBinRoute
-  AuthenticatedAdminSecurityRoute: typeof AuthenticatedAdminSecurityRoute
+  AuthenticatedAdminSecurityRoute: typeof AuthenticatedAdminSecurityRouteWithChildren
   AuthenticatedAdminSystemUpdatesRoute: typeof AuthenticatedAdminSystemUpdatesRoute
   AuthenticatedAdminUploadsRoute: typeof AuthenticatedAdminUploadsRoute
   AuthenticatedChannelsIdRoute: typeof AuthenticatedChannelsIdRoute
@@ -2550,6 +2605,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedReservationsIdRoute: typeof AuthenticatedReservationsIdRoute
   AuthenticatedReservationsNewRoute: typeof AuthenticatedReservationsNewRoute
   AuthenticatedRoomsTypesRoute: typeof AuthenticatedRoomsTypesRoute
+  AuthenticatedSecurityPasskeysRoute: typeof AuthenticatedSecurityPasskeysRoute
   AuthenticatedSettingsGuestIdTypesRoute: typeof AuthenticatedSettingsGuestIdTypesRoute
   AuthenticatedSettingsRolesRoute: typeof AuthenticatedSettingsRolesRoute
   AuthenticatedSettingsRolesMatrixRoute: typeof AuthenticatedSettingsRolesMatrixRoute
@@ -2600,7 +2656,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAdminPrintersRoute: AuthenticatedAdminPrintersRoute,
   AuthenticatedAdminRbacPreviewRoute: AuthenticatedAdminRbacPreviewRoute,
   AuthenticatedAdminRecycleBinRoute: AuthenticatedAdminRecycleBinRoute,
-  AuthenticatedAdminSecurityRoute: AuthenticatedAdminSecurityRoute,
+  AuthenticatedAdminSecurityRoute: AuthenticatedAdminSecurityRouteWithChildren,
   AuthenticatedAdminSystemUpdatesRoute: AuthenticatedAdminSystemUpdatesRoute,
   AuthenticatedAdminUploadsRoute: AuthenticatedAdminUploadsRoute,
   AuthenticatedChannelsIdRoute: AuthenticatedChannelsIdRoute,
@@ -2629,6 +2685,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedReservationsIdRoute: AuthenticatedReservationsIdRoute,
   AuthenticatedReservationsNewRoute: AuthenticatedReservationsNewRoute,
   AuthenticatedRoomsTypesRoute: AuthenticatedRoomsTypesRoute,
+  AuthenticatedSecurityPasskeysRoute: AuthenticatedSecurityPasskeysRoute,
   AuthenticatedSettingsGuestIdTypesRoute:
     AuthenticatedSettingsGuestIdTypesRoute,
   AuthenticatedSettingsRolesRoute: AuthenticatedSettingsRolesRoute,

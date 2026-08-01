@@ -70,6 +70,8 @@ const AUTH_ROUTES = [
   "/accounting/reports",
   "/accounting/night-audit",
   "/accounting/sync",
+  "/security/passkeys",
+  "/admin/security/passkeys",
 ];
 
 const IGNORE_PATTERNS = [
@@ -85,8 +87,12 @@ function isNoise(text) {
 
 async function run() {
   const routes = [...PUBLIC_ROUTES, ...(HAS_AUTH ? AUTH_ROUTES : [])];
-  console.log(`Smoke testing ${routes.length} routes against ${BASE}` +
-    (HAS_AUTH ? " (authenticated)" : " (public only — set LOVABLE_BROWSER_SUPABASE_* to include auth routes)"));
+  console.log(
+    `Smoke testing ${routes.length} routes against ${BASE}` +
+      (HAS_AUTH
+        ? " (authenticated)"
+        : " (public only — set LOVABLE_BROWSER_SUPABASE_* to include auth routes)"),
+  );
 
   const browser = await chromium.launch();
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
@@ -94,10 +100,7 @@ async function run() {
 
   if (HAS_AUTH) {
     await page.goto(BASE, { waitUntil: "domcontentloaded" });
-    await page.evaluate(
-      ([k, v]) => window.localStorage.setItem(k, v),
-      [STORAGE_KEY, SESSION_JSON],
-    );
+    await page.evaluate(([k, v]) => window.localStorage.setItem(k, v), [STORAGE_KEY, SESSION_JSON]);
   }
 
   const failures = [];
@@ -105,7 +108,8 @@ async function run() {
   for (const route of routes) {
     const errors = [];
     const onConsole = (msg) => {
-      if (msg.type() === "error" && !isNoise(msg.text())) errors.push(`console.error: ${msg.text()}`);
+      if (msg.type() === "error" && !isNoise(msg.text()))
+        errors.push(`console.error: ${msg.text()}`);
     };
     const onPageError = (err) => {
       if (!isNoise(err.message)) errors.push(`pageerror: ${err.message}`);

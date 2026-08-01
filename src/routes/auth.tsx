@@ -1,14 +1,19 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
+import { startAuthentication, browserSupportsWebAuthn } from "@simplewebauthn/browser";
 import { supabase } from "@/integrations/supabase/client";
 import { identifierSignIn } from "@/lib/auth.functions";
+import {
+  beginPasskeyAuthentication,
+  completePasskeyAuthentication,
+} from "@/lib/security/passkey-authentication.functions";
 import type { LoginAccountType } from "@/lib/auth-identity";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { BrandMark } from "@/components/brand-mark";
-import { Eye, EyeOff, Shield, Users } from "lucide-react";
+import { Eye, EyeOff, Fingerprint, Shield, Users } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
@@ -20,12 +25,22 @@ export const Route = createFileRoute("/auth")({
 function AuthPage() {
   const navigate = useNavigate();
   const signIn = useServerFn(identifierSignIn);
+  const beginPasskey = useServerFn(beginPasskeyAuthentication);
+  const completePasskey = useServerFn(completePasskeyAuthentication);
   const [accountType, setAccountType] = useState<LoginAccountType>("staff");
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [show, setShow] = useState(false);
   const [capsLock, setCapsLock] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [passkeyLoading, setPasskeyLoading] = useState(false);
+  const [passkeySupported, setPasskeySupported] = useState(false);
+  const [secureContext, setSecureContext] = useState(false);
+
+  useEffect(() => {
+    setPasskeySupported(browserSupportsWebAuthn());
+    setSecureContext(window.isSecureContext);
+  }, []);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -51,6 +66,38 @@ function AuthPage() {
       toast.error(error instanceof Error ? error.message : "Invalid ID or password");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function signInWithPasskey() {
+    if (!identifier.trim()) {
+      toast.error("Enter your username, Staff ID or Admin ID first.");
+      return;
+    }
+    setPasskeyLoading(true);
+    try {
+      const begin = await beginPasskey({ data: { identifier } });
+      const assertion = await startAuthentication({ optionsJSON: begin.options });
+      const result = await completePasskey({
+        data: { challengeId: begin.challengeId, response: assertion },
+      });
+      const session = await supabase.auth.setSession({
+        access_token: result.accessToken,
+        refresh_token: result.refreshToken,
+      });
+      if (session.error) throw session.error;
+      navigate({
+        to: result.mustChangePassword ? "/change-password" : "/dashboard",
+        replace: true,
+      });
+    } catch (error) {
+      if (error instanceof Error && error.name === "NotAllowedError") {
+        // User cancelled the device prompt — no need for an error toast.
+      } else {
+        toast.error("Passkey sign-in failed");
+      }
+    } finally {
+      setPasskeyLoading(false);
     }
   }
 
@@ -139,6 +186,37 @@ function AuthPage() {
               {loading ? "Signing in…" : accountType === "admin" ? "Admin Sign In" : "Sign In"}
             </Button>
           </form>
+
+          {secureContext && passkeySupported ? (
+            <>
+              <div className="my-4 flex items-center gap-3 text-xs text-muted-foreground">
+                <div className="h-px flex-1 bg-border" />
+                or
+                <div className="h-px flex-1 bg-border" />
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full gap-2"
+                disabled={passkeyLoading}
+                onClick={signInWithPasskey}
+              >
+                <Fingerprint className="h-4 w-4" />
+                {passkeyLoading ? "Follow your device's prompt…" : "Sign in with a passkey"}
+              </Button>
+              <p className="mt-2 text-center text-xs text-muted-foreground">
+                Supported devices can use fingerprint, face recognition, Windows Hello, Touch ID or
+                your device PIN — handled by your operating system, not this app.
+              </p>
+            </>
+          ) : (
+            <p className="mt-4 text-center text-xs text-muted-foreground">
+              {secureContext
+                ? "Passkey sign-in isn't supported in this browser. Use your password instead."
+                : "Passkey sign-in requires a secure (HTTPS) connection."}
+            </p>
+          )}
+
           <p className="mt-5 text-center text-xs text-muted-foreground">
             Contact your system administrator to reset your password.
           </p>
