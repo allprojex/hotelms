@@ -66,6 +66,9 @@ import {
   CalendarHeart,
   SlidersHorizontal,
   RotateCcw,
+  Receipt,
+  Tags,
+  Undo2,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useUserRoles, EXEC_ROLES, SYNC_ROLES, type AppRole } from "@/hooks/use-user-roles";
@@ -73,6 +76,7 @@ import { useActiveProperty } from "@/hooks/use-active-property";
 import { ADMIN_ROLES } from "@/lib/admin/permissions";
 import { usePermission } from "@/hooks/use-permission";
 import { HRM_ADMIN_ROLES, PAYROLL_SENSITIVE_ROLES } from "@/lib/hrm/permissions";
+import { ACCOUNTING_ADMIN_ROLES, EXPENSE_PERMISSIONS } from "@/lib/accounting/permissions";
 
 type NavItem = {
   title: string;
@@ -117,6 +121,15 @@ type NavItem = {
     | "statutoryLiabilities"
     | "journalDrafts"
     | "payrollCorrections";
+  accountingPermission?:
+    | "expenses"
+    | "expenseApprovals"
+    | "expenseCategories"
+    | "vendors"
+    | "costCentres"
+    | "financialPeriods"
+    | "expenseCorrections"
+    | "expenseReports";
 };
 
 // One accent hue per nav group; the token itself is defined in src/styles.css
@@ -589,10 +602,11 @@ const opsGroups: { label: string; items: NavItem[] }[] = [
         description: "Foreign exchange rate log.",
       },
       {
-        title: "Periods",
+        title: "Financial Periods",
         to: "/accounting/periods",
         icon: CalendarDays,
-        description: "Open, close, and lock accounting periods.",
+        description: "Open, close, and reopen financial periods.",
+        accountingPermission: "financialPeriods",
       },
       {
         title: "External Sync",
@@ -600,6 +614,55 @@ const opsGroups: { label: string; items: NavItem[] }[] = [
         icon: Share2,
         description: "Push nightly summaries via HMAC webhooks.",
         requireRoles: SYNC_ROLES,
+      },
+      {
+        title: "Expenses",
+        to: "/accounting/expenses",
+        icon: Receipt,
+        description: "Draft, submit and track expenses.",
+        accountingPermission: "expenses",
+      },
+      {
+        title: "Expense Approvals",
+        to: "/accounting/approvals",
+        icon: ShieldCheck,
+        description: "Review expenses awaiting approval.",
+        accountingPermission: "expenseApprovals",
+      },
+      {
+        title: "Expense Categories",
+        to: "/accounting/expense-categories",
+        icon: Tags,
+        description: "Classify expenses and set receipt rules.",
+        accountingPermission: "expenseCategories",
+      },
+      {
+        title: "Vendors",
+        to: "/accounting/vendors",
+        icon: Truck,
+        description: "Suppliers and service providers for expenses.",
+        accountingPermission: "vendors",
+      },
+      {
+        title: "Cost Centres",
+        to: "/accounting/cost-centres",
+        icon: Building2,
+        description: "Organize spend by department or unit.",
+        accountingPermission: "costCentres",
+      },
+      {
+        title: "Expense Corrections",
+        to: "/accounting/corrections",
+        icon: Undo2,
+        description: "Correction requests and reversal evidence.",
+        accountingPermission: "expenseCorrections",
+      },
+      {
+        title: "Expense Reports",
+        to: "/accounting/reports",
+        icon: BarChart3,
+        description: "Expense register, category and vendor breakdowns.",
+        accountingPermission: "expenseReports",
       },
     ],
   },
@@ -986,6 +1049,56 @@ export function AppSidebar() {
     capability: "create",
     defaultRoles: PAYROLL_SENSITIVE_ROLES,
   });
+  const accountingExpenses = usePermission({
+    propertyId,
+    ...EXPENSE_PERMISSIONS.expensesView,
+    defaultRoles: ACCOUNTING_ADMIN_ROLES,
+  });
+  const accountingExpenseApprovals = usePermission({
+    propertyId,
+    ...EXPENSE_PERMISSIONS.expensesApprove,
+    defaultRoles: ACCOUNTING_ADMIN_ROLES,
+  });
+  const accountingExpenseCategories = usePermission({
+    propertyId,
+    ...EXPENSE_PERMISSIONS.categoriesView,
+    defaultRoles: ACCOUNTING_ADMIN_ROLES,
+  });
+  const accountingVendors = usePermission({
+    propertyId,
+    ...EXPENSE_PERMISSIONS.vendorsView,
+    defaultRoles: ACCOUNTING_ADMIN_ROLES,
+  });
+  const accountingCostCentres = usePermission({
+    propertyId,
+    ...EXPENSE_PERMISSIONS.costCentresView,
+    defaultRoles: ACCOUNTING_ADMIN_ROLES,
+  });
+  const accountingFinancialPeriods = usePermission({
+    propertyId,
+    ...EXPENSE_PERMISSIONS.periodsView,
+    defaultRoles: ACCOUNTING_ADMIN_ROLES,
+  });
+  const accountingExpenseCorrections = usePermission({
+    propertyId,
+    ...EXPENSE_PERMISSIONS.correctionsView,
+    defaultRoles: ACCOUNTING_ADMIN_ROLES,
+  });
+  const accountingExpenseReports = usePermission({
+    propertyId,
+    ...EXPENSE_PERMISSIONS.reportsView,
+    defaultRoles: ACCOUNTING_ADMIN_ROLES,
+  });
+  const accountingVisibility = {
+    expenses: accountingExpenses.allowed,
+    expenseApprovals: accountingExpenseApprovals.allowed,
+    expenseCategories: accountingExpenseCategories.allowed,
+    vendors: accountingVendors.allowed,
+    costCentres: accountingCostCentres.allowed,
+    financialPeriods: accountingFinancialPeriods.allowed,
+    expenseCorrections: accountingExpenseCorrections.allowed,
+    expenseReports: accountingExpenseReports.allowed,
+  };
   const hrmVisibility = {
     dashboard: hrmDashboard.allowed,
     employees: hrmEmployees.allowed,
@@ -1041,6 +1154,7 @@ export function AppSidebar() {
         items: g.items
           .filter((it) => canSee(it.requireRoles))
           .filter((it) => !it.hrmPermission || hrmVisibility[it.hrmPermission])
+          .filter((it) => !it.accountingPermission || accountingVisibility[it.accountingPermission])
           .filter(
             (it) =>
               !q || it.title.toLowerCase().includes(q) || it.description.toLowerCase().includes(q),
@@ -1081,6 +1195,14 @@ export function AppSidebar() {
     hrmVisibility.openingBalances,
     hrmVisibility.payrollRuns,
     hrmVisibility.payrollManualInputs,
+    accountingVisibility.expenses,
+    accountingVisibility.expenseApprovals,
+    accountingVisibility.expenseCategories,
+    accountingVisibility.vendors,
+    accountingVisibility.costCentres,
+    accountingVisibility.financialPeriods,
+    accountingVisibility.expenseCorrections,
+    accountingVisibility.expenseReports,
   ]);
 
   function handleNavigate() {

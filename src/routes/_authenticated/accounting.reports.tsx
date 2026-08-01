@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useActiveProperty } from "@/hooks/use-active-property";
+import { ExpenseReportsTab } from "@/components/accounting/expense-reports-tab";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -92,6 +93,7 @@ function ReportsPage() {
           <TabsTrigger value="pl">Profit & Loss</TabsTrigger>
           <TabsTrigger value="bs">Balance Sheet</TabsTrigger>
           <TabsTrigger value="tb">Trial Balance</TabsTrigger>
+          <TabsTrigger value="expenses">Expenses</TabsTrigger>
         </TabsList>
 
         <TabsContent value="pl">
@@ -167,6 +169,10 @@ function ReportsPage() {
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="expenses">
+          <ExpenseReportsTab propertyId={propertyId} from={from} to={to} />
         </TabsContent>
       </Tabs>
     </div>
