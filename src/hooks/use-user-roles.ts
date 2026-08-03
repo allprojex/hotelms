@@ -1,19 +1,34 @@
-import { useQuery } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
 
 export type AppRole = Database["public"]["Enums"]["app_role"];
 
+const CURRENT_USER_ID_QUERY_KEY = ["auth-user-id"] as const;
+
+/**
+ * Shares one cached auth.getUser() result across every call site via React
+ * Query. Previously this was a plain useState/useEffect, so each of the
+ * dozens of usePermission()/useUserRoles() call sites in the sidebar fired
+ * its own independent getUser() network request on mount - up to 30-40 per
+ * page load, saturating the browser's per-host connection limit and
+ * starving out the actual data queries behind them.
+ */
 export function useCurrentUserId(): string | null {
-  const [uid, setUid] = useState<string | null>(null);
+  const qc = useQueryClient();
+  const q = useQuery({
+    queryKey: CURRENT_USER_ID_QUERY_KEY,
+    queryFn: async () => (await supabase.auth.getUser()).data.user?.id ?? null,
+    staleTime: Infinity,
+  });
   useEffect(() => {
-    let mounted = true;
-    supabase.auth.getUser().then(({ data }) => mounted && setUid(data.user?.id ?? null));
-    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => setUid(s?.user?.id ?? null));
-    return () => { mounted = false; sub.subscription.unsubscribe(); };
-  }, []);
-  return uid;
+    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => {
+      qc.setQueryData(CURRENT_USER_ID_QUERY_KEY, s?.user?.id ?? null);
+    });
+    return () => sub.subscription.unsubscribe();
+  }, [qc]);
+  return q.data ?? null;
 }
 
 /** Fetches the current user's role rows (global + property-scoped). */

@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useState } from "react";
@@ -72,6 +72,9 @@ function SettingsPage() {
           <p>· Passwords are checked against known-breached databases (HIBP).</p>
           <p>· You're automatically signed out after 30 minutes of inactivity.</p>
           <p>· All role changes and folio actions are recorded to the audit log.</p>
+          <Button variant="outline" size="sm" asChild className="mt-1">
+            <Link to="/security/passkeys">Manage passkeys</Link>
+          </Button>
         </CardContent>
       </Card>
     </div>
