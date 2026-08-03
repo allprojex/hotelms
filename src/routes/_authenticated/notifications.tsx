@@ -44,7 +44,7 @@ import {
   invalidateNotificationQueries,
   prepareNotificationFeed,
   type NotificationRow,
-} from "@/lib/notifications.client";
+} from "@/lib/notifications-shared";
 import { format } from "date-fns";
 import { toast } from "sonner";
 

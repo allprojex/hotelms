@@ -15,7 +15,7 @@ import {
   prepareNotificationFeed,
   countUnread,
   type NotificationRow,
-} from "@/lib/notifications.client";
+} from "@/lib/notifications-shared";
 import { formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
 

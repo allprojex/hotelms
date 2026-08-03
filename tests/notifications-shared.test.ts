@@ -8,7 +8,7 @@ import {
   prepareNotificationFeed,
   sortNotificationsUnreadFirst,
   type NotificationRow,
-} from "@/lib/notifications.client";
+} from "@/lib/notifications-shared";
 
 function row(overrides: Partial<NotificationRow> = {}): NotificationRow {
   return {
