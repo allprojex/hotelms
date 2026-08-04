@@ -128,8 +128,7 @@ type NavItem = {
     | "vendors"
     | "costCentres"
     | "financialPeriods"
-    | "expenseCorrections"
-    | "expenseReports";
+    | "expenseCorrections";
 };
 
 // One accent hue per nav group; the token itself is defined in src/styles.css
@@ -657,13 +656,6 @@ const opsGroups: { label: string; items: NavItem[] }[] = [
         description: "Correction requests and reversal evidence.",
         accountingPermission: "expenseCorrections",
       },
-      {
-        title: "Expense Reports",
-        to: "/accounting/reports",
-        icon: BarChart3,
-        description: "Expense register, category and vendor breakdowns.",
-        accountingPermission: "expenseReports",
-      },
     ],
   },
   // 8. Insights — read-only reporting, low frequency
@@ -1084,11 +1076,6 @@ export function AppSidebar() {
     ...EXPENSE_PERMISSIONS.correctionsView,
     defaultRoles: ACCOUNTING_ADMIN_ROLES,
   });
-  const accountingExpenseReports = usePermission({
-    propertyId,
-    ...EXPENSE_PERMISSIONS.reportsView,
-    defaultRoles: ACCOUNTING_ADMIN_ROLES,
-  });
   const accountingVisibility = {
     expenses: accountingExpenses.allowed,
     expenseApprovals: accountingExpenseApprovals.allowed,
@@ -1097,7 +1084,6 @@ export function AppSidebar() {
     costCentres: accountingCostCentres.allowed,
     financialPeriods: accountingFinancialPeriods.allowed,
     expenseCorrections: accountingExpenseCorrections.allowed,
-    expenseReports: accountingExpenseReports.allowed,
   };
   const hrmVisibility = {
     dashboard: hrmDashboard.allowed,
@@ -1202,7 +1188,6 @@ export function AppSidebar() {
     accountingVisibility.costCentres,
     accountingVisibility.financialPeriods,
     accountingVisibility.expenseCorrections,
-    accountingVisibility.expenseReports,
   ]);
 
   function handleNavigate() {

@@ -105,7 +105,7 @@ export const getHrmDashboard = createServerFn({ method: "POST" })
     let employeesQuery = db
       .from("hr_employees")
       .select(
-        "id,first_name,last_name,employee_number,employment_status,hire_date,department_id,designation_id,work_email,profile_photo_path,hr_departments(name),hr_designations(title)",
+        "id,first_name,last_name,employee_number,employment_status,hire_date,department_id,designation_id,work_email,profile_photo_path,department:department_id(name),designation:designation_id(title)",
       )
       .eq("property_id", data.propertyId)
       .order("hire_date", { ascending: false });
@@ -167,8 +167,8 @@ export const getHrmDashboard = createServerFn({ method: "POST" })
     return {
       activeCount: active.length,
       inactiveCount: employees.length - active.length,
-      byDepartment: group("hr_departments", "name"),
-      byDesignation: group("hr_designations", "title"),
+      byDepartment: group("department", "name"),
+      byDesignation: group("designation", "title"),
       recentEmployees: employees.slice(0, 8),
       incompleteEmployees: employees
         .filter((row: any) => row.profileCompleteness < 80)

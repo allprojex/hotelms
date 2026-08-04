@@ -170,7 +170,7 @@ export const listAttendance = createServerFn({ method: "POST" })
     let query = db
       .from("hr_attendance_summaries")
       .select(
-        "*,employee:employee_id(id,employee_number,first_name,last_name,department:department_id(name),designation:designation_id(name)),roster:roster_id(id,shift:shift_id(name))",
+        "*,employee:employee_id(id,employee_number,first_name,last_name,department:department_id(name),designation:designation_id(name:title)),roster:roster_id(id,shift:shift_id(name))",
         { count: "exact" },
       )
       .eq("property_id", data.propertyId)
