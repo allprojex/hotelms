@@ -56,7 +56,20 @@ function ReservationDetail() {
     },
   });
 
-  if (res.isLoading || !res.data) return <div className="p-6">Loading…</div>;
+  if (res.isLoading) return <div className="p-6">Loading…</div>;
+  if (res.isError || !res.data) {
+    return (
+      <div className="p-6 space-y-3">
+        <p className="text-destructive">
+          Couldn't load this reservation
+          {res.error ? `: ${(res.error as Error).message}` : " — it may have been deleted."}
+        </p>
+        <Button variant="outline" onClick={() => navigate({ to: "/reservations" })}>
+          Back to reservations
+        </Button>
+      </div>
+    );
+  }
   const r = res.data as any;
 
   const totalCharges = (charges.data ?? []).reduce((s: number, c: any) => s + Number(c.amount), 0);
