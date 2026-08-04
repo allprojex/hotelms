@@ -37,7 +37,12 @@ for key in SUPABASE_URL SUPABASE_PUBLISHABLE_KEY VITE_SUPABASE_URL VITE_SUPABASE
 done
 
 log "installing dependencies"
-npm ci
+# --include=dev: vite.config.ts imports @lovable.dev/vite-tanstack-config, a
+# devDependency needed to run the build itself. Without this flag, sourcing
+# .env.production's NODE_ENV=production above causes npm to omit
+# devDependencies, so the package is silently missing and `vite build` fails
+# with "Cannot find package '@lovable.dev/vite-tanstack-config'".
+npm ci --include=dev
 
 log "building production bundle"
 npm run build
