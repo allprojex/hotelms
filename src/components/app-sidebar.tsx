@@ -30,7 +30,6 @@ import {
   UserCog,
   Settings,
   ClipboardList,
-  Lock,
   ShoppingCart,
   Radio,
   Package,
@@ -61,8 +60,6 @@ import {
   LifeBuoy,
   Activity,
   BriefcaseBusiness,
-  SlidersHorizontal,
-  RotateCcw,
   Receipt,
   Tags,
   Undo2,
@@ -73,7 +70,7 @@ import { useActiveProperty } from "@/hooks/use-active-property";
 import { ADMIN_ROLES } from "@/lib/admin/permissions";
 import { usePermission } from "@/hooks/use-permission";
 import { useHrmVisibility } from "@/hooks/use-hrm-visibility";
-import { HRM_ADMIN_ROLES, PAYROLL_SENSITIVE_ROLES } from "@/lib/hrm/permissions";
+import { usePayrollVisibility } from "@/hooks/use-payroll-visibility";
 import { ACCOUNTING_ADMIN_ROLES, EXPENSE_PERMISSIONS } from "@/lib/accounting/permissions";
 
 type NavItem = {
@@ -85,26 +82,6 @@ type NavItem = {
   // True when the item stands in for the whole HRM group: visible if the
   // user has any single HRM permission (see useHrmVisibility), not just one.
   hrmAnyAccess?: true;
-  hrmPermission?:
-    | "payrollOverview"
-    | "payrollSettings"
-    | "payCalendars"
-    | "salaryStructures"
-    | "payComponents"
-    | "employeeCompensation"
-    | "paymentDetails"
-    | "statutoryRules"
-    | "openingBalances"
-    | "payrollRuns"
-    | "payrollManualInputs"
-    | "payrollApprovals"
-    | "finalizedPayroll"
-    | "payslips"
-    | "paymentBatches"
-    | "paymentTemplates"
-    | "statutoryLiabilities"
-    | "journalDrafts"
-    | "payrollCorrections";
   accountingPermission?:
     | "expenses"
     | "expenseApprovals"
@@ -125,7 +102,6 @@ const GROUP_ACCENT: Record<string, string> = {
   Inventory: "var(--nav-inventory)",
   Distribution: "var(--nav-distribution)",
   "Human Resources": "var(--nav-hrm)",
-  "HRM Payroll": "var(--nav-hrm)",
   Accounting: "var(--nav-accounting)",
   Insights: "var(--nav-insights)",
   Administration: "var(--nav-administration)",
@@ -272,150 +248,12 @@ const opsGroups: { label: string; items: NavItem[] }[] = [
         to: "/hrm",
         icon: BriefcaseBusiness,
         description:
-          "Employees, attendance, leave, scheduling, documents, and announcements — grouped in one workspace.",
+          "Employees, attendance, leave, scheduling, documents, announcements, and payroll — grouped in one workspace.",
         hrmAnyAccess: true,
       },
     ],
   },
-  {
-    label: "HRM Payroll",
-    items: [
-      {
-        title: "Payroll Overview",
-        to: "/hrm/payroll",
-        icon: Wallet,
-        description: "Payroll configuration readiness and Phase 4A status.",
-        hrmPermission: "payrollOverview",
-      },
-      {
-        title: "Payroll Settings",
-        to: "/hrm/payroll/settings",
-        icon: Settings2,
-        description: "Effective-dated payroll controls.",
-        hrmPermission: "payrollSettings",
-      },
-      {
-        title: "Pay Calendars",
-        to: "/hrm/payroll/calendars",
-        icon: CalendarDays,
-        description: "Pay frequencies and planned periods.",
-        hrmPermission: "payCalendars",
-      },
-      {
-        title: "Salary Structures",
-        to: "/hrm/payroll/salary-structures",
-        icon: SlidersHorizontal,
-        description: "Effective salary structures and grades.",
-        hrmPermission: "salaryStructures",
-      },
-      {
-        title: "Pay Components",
-        to: "/hrm/payroll/pay-components",
-        icon: Boxes,
-        description: "Reusable earning and deduction definitions.",
-        hrmPermission: "payComponents",
-      },
-      {
-        title: "Employee Compensation",
-        to: "/hrm/payroll/compensation",
-        icon: BriefcaseBusiness,
-        description: "Restricted effective-dated compensation.",
-        hrmPermission: "employeeCompensation",
-      },
-      {
-        title: "Payment Details",
-        to: "/hrm/payroll/payment-details",
-        icon: ShieldCheck,
-        description: "Encrypted and masked employee payment destinations.",
-        hrmPermission: "paymentDetails",
-      },
-      {
-        title: "Statutory Rules",
-        to: "/hrm/payroll/statutory-rules",
-        icon: ScrollText,
-        description: "Versioned jurisdiction rule configuration.",
-        hrmPermission: "statutoryRules",
-      },
-      {
-        title: "Opening Balances",
-        to: "/hrm/payroll/opening-balances",
-        icon: Upload,
-        description: "Source-backed payroll migration staging.",
-        hrmPermission: "openingBalances",
-      },
-      {
-        title: "Draft Payroll Runs",
-        to: "/hrm/payroll/runs",
-        icon: ClipboardList,
-        description: "Calculate and review versioned draft payroll.",
-        hrmPermission: "payrollRuns",
-      },
-      {
-        title: "Manual Payroll Inputs",
-        to: "/hrm/payroll/manual-inputs",
-        icon: FileText,
-        description: "Source-backed one-time draft payroll inputs.",
-        hrmPermission: "payrollManualInputs",
-      },
-      {
-        title: "Payroll Approvals",
-        to: "/hrm/payroll/approvals",
-        icon: ShieldCheck,
-        description: "Submit, approve, reject and return payroll runs.",
-        hrmPermission: "payrollApprovals",
-      },
-      {
-        title: "Finalized Payroll",
-        to: "/hrm/payroll/finalized",
-        icon: Lock,
-        description: "Immutable finalized payroll snapshots.",
-        hrmPermission: "finalizedPayroll",
-      },
-      {
-        title: "Payslips",
-        to: "/hrm/payroll/payslips",
-        icon: FileText,
-        description: "Generated payslip versions and publication.",
-        hrmPermission: "payslips",
-      },
-      {
-        title: "Payment Preparation",
-        to: "/hrm/payroll/payment-batches",
-        icon: Wallet,
-        description: "Prepared payment batches and export status.",
-        hrmPermission: "paymentBatches",
-      },
-      {
-        title: "Payment Export Templates",
-        to: "/hrm/payroll/payment-templates",
-        icon: Settings2,
-        description: "Safe bank and mobile-money file templates.",
-        hrmPermission: "paymentTemplates",
-      },
-      {
-        title: "Statutory Liabilities",
-        to: "/hrm/payroll/statutory-liabilities",
-        icon: ScrollText,
-        description: "Finalized liability summaries, not submissions.",
-        hrmPermission: "statutoryLiabilities",
-      },
-      {
-        title: "Journal Drafts",
-        to: "/hrm/payroll/journals",
-        icon: ClipboardList,
-        description: "Accounting journal drafts, not posted entries.",
-        hrmPermission: "journalDrafts",
-      },
-      {
-        title: "Payroll Corrections",
-        to: "/hrm/payroll/corrections",
-        icon: RotateCcw,
-        description: "Correction, supplemental and reversal foundations.",
-        hrmPermission: "payrollCorrections",
-      },
-    ],
-  },
-  // 7. Accounting — back office
+  // 6. Accounting — back office
   {
     label: "Accounting",
     items: [
@@ -699,121 +537,9 @@ export function AppSidebar() {
   const roleRows = rolesQ.data ?? [];
   const isSuper = roleRows.some((r) => r.role === "super_admin");
   const { visibility: hrmSectionVisibility } = useHrmVisibility();
-  const hasAnyHrmAccess = Object.values(hrmSectionVisibility).some(Boolean);
-  const payrollOverview = usePermission({
-    propertyId,
-    module: "payroll_overview",
-    capability: "view",
-    defaultRoles: HRM_ADMIN_ROLES,
-  });
-  const payrollSettings = usePermission({
-    propertyId,
-    module: "payroll_settings",
-    capability: "view",
-    defaultRoles: HRM_ADMIN_ROLES,
-  });
-  const payCalendars = usePermission({
-    propertyId,
-    module: "pay_calendars",
-    capability: "view",
-    defaultRoles: HRM_ADMIN_ROLES,
-  });
-  const salaryStructures = usePermission({
-    propertyId,
-    module: "salary_structures",
-    capability: "view",
-    defaultRoles: HRM_ADMIN_ROLES,
-  });
-  const payComponents = usePermission({
-    propertyId,
-    module: "pay_components",
-    capability: "view",
-    defaultRoles: HRM_ADMIN_ROLES,
-  });
-  const employeeCompensation = usePermission({
-    propertyId,
-    module: "employee_compensation_sensitive",
-    capability: "view",
-    defaultRoles: PAYROLL_SENSITIVE_ROLES,
-  });
-  const paymentDetails = usePermission({
-    propertyId,
-    module: "payment_details",
-    capability: "view",
-    defaultRoles: PAYROLL_SENSITIVE_ROLES,
-  });
-  const statutoryRules = usePermission({
-    propertyId,
-    module: "statutory_rules",
-    capability: "view",
-    defaultRoles: HRM_ADMIN_ROLES,
-  });
-  const openingBalances = usePermission({
-    propertyId,
-    module: "opening_balances",
-    capability: "view",
-    defaultRoles: PAYROLL_SENSITIVE_ROLES,
-  });
-  const payrollRuns = usePermission({
-    propertyId,
-    module: "payroll_runs",
-    capability: "view",
-    defaultRoles: PAYROLL_SENSITIVE_ROLES,
-  });
-  const payrollManualInputs = usePermission({
-    propertyId,
-    module: "payroll_manual_inputs",
-    capability: "view",
-    defaultRoles: PAYROLL_SENSITIVE_ROLES,
-  });
-  const payrollApprovals = usePermission({
-    propertyId,
-    module: "payroll_approvals",
-    capability: "view",
-    defaultRoles: PAYROLL_SENSITIVE_ROLES,
-  });
-  const finalizedPayroll = usePermission({
-    propertyId,
-    module: "finalized_payroll",
-    capability: "view",
-    defaultRoles: PAYROLL_SENSITIVE_ROLES,
-  });
-  const payslips = usePermission({
-    propertyId,
-    module: "payslips",
-    capability: "view",
-    defaultRoles: PAYROLL_SENSITIVE_ROLES,
-  });
-  const paymentBatches = usePermission({
-    propertyId,
-    module: "payroll_payment_batches",
-    capability: "view",
-    defaultRoles: PAYROLL_SENSITIVE_ROLES,
-  });
-  const paymentTemplates = usePermission({
-    propertyId,
-    module: "payroll_payment_templates",
-    capability: "view",
-    defaultRoles: PAYROLL_SENSITIVE_ROLES,
-  });
-  const statutoryLiabilities = usePermission({
-    propertyId,
-    module: "payroll_statutory_liabilities",
-    capability: "view",
-    defaultRoles: PAYROLL_SENSITIVE_ROLES,
-  });
-  const journalDrafts = usePermission({
-    propertyId,
-    module: "payroll_journal_drafts",
-    capability: "view",
-    defaultRoles: PAYROLL_SENSITIVE_ROLES,
-  });
-  const payrollCorrections = usePermission({
-    propertyId,
-    module: "payroll_corrections",
-    capability: "create",
-    defaultRoles: PAYROLL_SENSITIVE_ROLES,
-  });
+  const { visibility: payrollSectionVisibility } = usePayrollVisibility();
+  const hasAnyPayrollAccess = Object.values(payrollSectionVisibility).some(Boolean);
+  const hasAnyHrmAccess = Object.values(hrmSectionVisibility).some(Boolean) || hasAnyPayrollAccess;
   const accountingExpenses = usePermission({
     propertyId,
     ...EXPENSE_PERMISSIONS.expensesView,
@@ -858,27 +584,6 @@ export function AppSidebar() {
     financialPeriods: accountingFinancialPeriods.allowed,
     expenseCorrections: accountingExpenseCorrections.allowed,
   };
-  const hrmVisibility = {
-    payrollOverview: payrollOverview.allowed,
-    payrollSettings: payrollSettings.allowed,
-    payCalendars: payCalendars.allowed,
-    salaryStructures: salaryStructures.allowed,
-    payComponents: payComponents.allowed,
-    employeeCompensation: employeeCompensation.allowed,
-    paymentDetails: paymentDetails.allowed,
-    statutoryRules: statutoryRules.allowed,
-    openingBalances: openingBalances.allowed,
-    payrollRuns: payrollRuns.allowed,
-    payrollManualInputs: payrollManualInputs.allowed,
-    payrollApprovals: payrollApprovals.allowed,
-    finalizedPayroll: finalizedPayroll.allowed,
-    payslips: payslips.allowed,
-    paymentBatches: paymentBatches.allowed,
-    paymentTemplates: paymentTemplates.allowed,
-    statutoryLiabilities: statutoryLiabilities.allowed,
-    journalDrafts: journalDrafts.allowed,
-    payrollCorrections: payrollCorrections.allowed,
-  };
   const canSee = (required?: AppRole[]) => {
     if (!required) return true;
     if (isSuper) return true;
@@ -896,7 +601,6 @@ export function AppSidebar() {
         items: g.items
           .filter((it) => canSee(it.requireRoles))
           .filter((it) => !it.hrmAnyAccess || hasAnyHrmAccess)
-          .filter((it) => !it.hrmPermission || hrmVisibility[it.hrmPermission])
           .filter((it) => !it.accountingPermission || accountingVisibility[it.accountingPermission])
           .filter(
             (it) =>
@@ -911,17 +615,6 @@ export function AppSidebar() {
     roleRows,
     propertyId,
     hasAnyHrmAccess,
-    hrmVisibility.payrollOverview,
-    hrmVisibility.payrollSettings,
-    hrmVisibility.payCalendars,
-    hrmVisibility.salaryStructures,
-    hrmVisibility.payComponents,
-    hrmVisibility.employeeCompensation,
-    hrmVisibility.paymentDetails,
-    hrmVisibility.statutoryRules,
-    hrmVisibility.openingBalances,
-    hrmVisibility.payrollRuns,
-    hrmVisibility.payrollManualInputs,
     accountingVisibility.expenses,
     accountingVisibility.expenseApprovals,
     accountingVisibility.expenseCategories,

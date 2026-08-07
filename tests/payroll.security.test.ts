@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import { PAYROLL_NAV_ITEMS } from "../src/lib/hrm/nav-config";
 
 const root = resolve(__dirname, "..");
 const migration = readFileSync(
@@ -10,7 +11,6 @@ const migration = readFileSync(
 const server = readFileSync(resolve(root, "src/lib/hrm/payroll.functions.ts"), "utf8");
 const crypto = readFileSync(resolve(root, "src/lib/hrm/payroll-crypto.server.ts"), "utf8");
 const permissions = readFileSync(resolve(root, "src/lib/hrm/permissions.ts"), "utf8");
-const sidebar = readFileSync(resolve(root, "src/components/app-sidebar.tsx"), "utf8");
 
 describe("Phase 4A payroll security and integration", () => {
   it("creates only configuration, compensation, payment, rule, and opening-balance tables", () => {
@@ -93,6 +93,7 @@ describe("Phase 4A payroll security and integration", () => {
   });
 
   it("adds exactly the completed payroll routes and no processing links", () => {
+    const links = PAYROLL_NAV_ITEMS.map((item) => item.to);
     for (const path of [
       "/hrm/payroll",
       "/hrm/payroll/settings",
@@ -106,7 +107,7 @@ describe("Phase 4A payroll security and integration", () => {
       "/hrm/payroll/runs",
       "/hrm/payroll/manual-inputs",
     ])
-      expect(sidebar).toContain(`to: "${path}"`);
+      expect(links).toContain(path);
   });
 
   it("defines all Phase 4A permission boundaries", () => {

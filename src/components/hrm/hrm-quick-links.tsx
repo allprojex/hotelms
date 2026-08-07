@@ -1,7 +1,8 @@
 import { Link } from "@tanstack/react-router";
 import { Card } from "@/components/ui/card";
-import { HRM_NAV_GROUPS } from "@/lib/hrm/nav-config";
+import { HRM_NAV_GROUPS, type HrmNavKey } from "@/lib/hrm/nav-config";
 import { useHrmVisibility } from "@/hooks/use-hrm-visibility";
+import { usePayrollVisibility } from "@/hooks/use-payroll-visibility";
 
 /**
  * Entry-point grid for the HRM workspace landing page. Grouped and
@@ -10,7 +11,12 @@ import { useHrmVisibility } from "@/hooks/use-hrm-visibility";
  * with what a user is actually allowed to open.
  */
 export function HrmQuickLinks() {
-  const { visibility } = useHrmVisibility();
+  const { visibility: hrmVisibility } = useHrmVisibility();
+  const { visibility: payrollVisibility } = usePayrollVisibility();
+  const visibility: Record<HrmNavKey, boolean> = {
+    ...hrmVisibility,
+    payroll: Object.values(payrollVisibility).some(Boolean),
+  };
 
   const groups = HRM_NAV_GROUPS.filter((g) => g.label !== "Overview")
     .map((group) => ({
