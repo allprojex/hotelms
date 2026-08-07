@@ -1,13 +1,13 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import { HRM_NAV_ITEMS } from "../src/lib/hrm/nav-config";
 
 const migration = readFileSync(
   resolve(__dirname, "../supabase/migrations/20260729172000_workforce_scheduling.sql"),
   "utf8",
 );
 const server = readFileSync(resolve(__dirname, "../src/lib/hrm/workforce.functions.ts"), "utf8");
-const sidebar = readFileSync(resolve(__dirname, "../src/components/app-sidebar.tsx"), "utf8");
 
 describe("Phase 3A database and authorization", () => {
   it("creates only property-scoped Phase 3A structures with RLS", () => {
@@ -61,8 +61,9 @@ describe("Phase 3A database and authorization", () => {
   });
 
   it("exposes exactly the completed Phase 3A navigation additions", () => {
+    const links = HRM_NAV_ITEMS.map((item) => item.to);
     for (const path of ["/hrm/shifts", "/hrm/roster", "/hrm/holidays", "/hrm/workforce-settings"]) {
-      expect(sidebar).toContain(`to: "${path}"`);
+      expect(links).toContain(path);
     }
   });
 });

@@ -1,13 +1,13 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import { HRM_NAV_ITEMS } from "../src/lib/hrm/nav-config";
 
 const migration = readFileSync(
   resolve(__dirname, "../supabase/migrations/20260729190000_attendance_management.sql"),
   "utf8",
 );
 const server = readFileSync(resolve(__dirname, "../src/lib/hrm/attendance.functions.ts"), "utf8");
-const sidebar = readFileSync(resolve(__dirname, "../src/components/app-sidebar.tsx"), "utf8");
 const routePermissions = readFileSync(
   resolve(__dirname, "../src/lib/admin/route-permissions.ts"),
   "utf8",
@@ -60,8 +60,9 @@ describe("Phase 3B integrity and authorization", () => {
   });
 
   it("adds only Attendance and Time Clock navigation for Phase 3B", () => {
-    expect(sidebar).toContain('to: "/hrm/attendance"');
-    expect(sidebar).toContain('to: "/hrm/time-clock"');
+    const links = HRM_NAV_ITEMS.map((item) => item.to);
+    expect(links).toContain("/hrm/attendance");
+    expect(links).toContain("/hrm/time-clock");
     expect(routePermissions).toContain('{ prefix: "/hrm/time-clock", roles: STAFF }');
   });
 

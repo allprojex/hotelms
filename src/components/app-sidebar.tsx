@@ -61,9 +61,6 @@ import {
   LifeBuoy,
   Activity,
   BriefcaseBusiness,
-  Megaphone,
-  CalendarClock,
-  CalendarHeart,
   SlidersHorizontal,
   RotateCcw,
   Receipt,
@@ -75,6 +72,7 @@ import { useUserRoles, EXEC_ROLES, SYNC_ROLES, type AppRole } from "@/hooks/use-
 import { useActiveProperty } from "@/hooks/use-active-property";
 import { ADMIN_ROLES } from "@/lib/admin/permissions";
 import { usePermission } from "@/hooks/use-permission";
+import { useHrmVisibility } from "@/hooks/use-hrm-visibility";
 import { HRM_ADMIN_ROLES, PAYROLL_SENSITIVE_ROLES } from "@/lib/hrm/permissions";
 import { ACCOUNTING_ADMIN_ROLES, EXPENSE_PERMISSIONS } from "@/lib/accounting/permissions";
 
@@ -84,24 +82,10 @@ type NavItem = {
   icon: LucideIcon;
   description: string;
   requireRoles?: AppRole[];
+  // True when the item stands in for the whole HRM group: visible if the
+  // user has any single HRM permission (see useHrmVisibility), not just one.
+  hrmAnyAccess?: true;
   hrmPermission?:
-    | "dashboard"
-    | "employees"
-    | "departments"
-    | "designations"
-    | "documents"
-    | "announcements"
-    | "shifts"
-    | "roster"
-    | "holidays"
-    | "workforceSettings"
-    | "attendance"
-    | "timeClock"
-    | "leave"
-    | "leaveCalendar"
-    | "leaveTypes"
-    | "leaveBalances"
-    | "biometricDevices"
     | "payrollOverview"
     | "payrollSettings"
     | "payCalendars"
@@ -284,123 +268,12 @@ const opsGroups: { label: string; items: NavItem[] }[] = [
     label: "Human Resources",
     items: [
       {
-        title: "HRM Dashboard",
+        title: "Human Resource Management",
         to: "/hrm",
         icon: BriefcaseBusiness,
-        description: "Employee and HR operations overview.",
-        hrmPermission: "dashboard",
-      },
-      {
-        title: "Employees",
-        to: "/hrm/employees",
-        icon: Users,
-        description: "Employee records and professional profiles.",
-        hrmPermission: "employees",
-      },
-      {
-        title: "Departments",
-        to: "/hrm/departments",
-        icon: Building2,
-        description: "Property department structure.",
-        hrmPermission: "departments",
-      },
-      {
-        title: "Designations",
-        to: "/hrm/designations",
-        icon: IdCard,
-        description: "Job titles, levels, and department alignment.",
-        hrmPermission: "designations",
-      },
-      {
-        title: "Employee Documents",
-        to: "/hrm/documents",
-        icon: FileText,
-        description: "Private employee document records.",
-        hrmPermission: "documents",
-      },
-      {
-        title: "Staff Announcements",
-        to: "/hrm/announcements",
-        icon: Megaphone,
-        description: "Internal property staff notices.",
-        hrmPermission: "announcements",
-      },
-      {
-        title: "Shift Scheduling",
-        to: "/hrm/shifts",
-        icon: CalendarClock,
-        description: "Reusable shift templates and working hours.",
-        hrmPermission: "shifts",
-      },
-      {
-        title: "Duty Roster",
-        to: "/hrm/roster",
-        icon: ClipboardList,
-        description: "Assign and publish employee duty schedules.",
-        hrmPermission: "roster",
-      },
-      {
-        title: "Holiday Calendar",
-        to: "/hrm/holidays",
-        icon: CalendarHeart,
-        description: "Property and department holiday dates.",
-        hrmPermission: "holidays",
-      },
-      {
-        title: "Workforce Settings",
-        to: "/hrm/workforce-settings",
-        icon: SlidersHorizontal,
-        description: "Timezone and workforce time rules.",
-        hrmPermission: "workforceSettings",
-      },
-      {
-        title: "Attendance",
-        to: "/hrm/attendance",
-        icon: Activity,
-        description: "Attendance review, adjustments, approvals, and reports.",
-        hrmPermission: "attendance",
-      },
-      {
-        title: "Time Clock",
-        to: "/hrm/time-clock",
-        icon: CalendarClock,
-        description: "Record your own work and break events.",
-        hrmPermission: "timeClock",
-      },
-      {
-        title: "Leave Management",
-        to: "/hrm/leave",
-        icon: CalendarDays,
-        description: "Request, review, and approve employee leave.",
-        hrmPermission: "leave",
-      },
-      {
-        title: "Leave Calendar",
-        to: "/hrm/leave/calendar",
-        icon: CalendarHeart,
-        description: "Approved property leave calendar.",
-        hrmPermission: "leaveCalendar",
-      },
-      {
-        title: "Leave Types",
-        to: "/hrm/leave/types",
-        icon: Settings2,
-        description: "Configure property leave policies.",
-        hrmPermission: "leaveTypes",
-      },
-      {
-        title: "Leave Balances",
-        to: "/hrm/leave/balances",
-        icon: BarChart3,
-        description: "Employee leave entitlement balances.",
-        hrmPermission: "leaveBalances",
-      },
-      {
-        title: "Biometric Devices",
-        to: "/hrm/biometric-devices",
-        icon: ShieldCheck,
-        description: "Vendor-neutral device integration architecture.",
-        hrmPermission: "biometricDevices",
+        description:
+          "Employees, attendance, leave, scheduling, documents, and announcements — grouped in one workspace.",
+        hrmAnyAccess: true,
       },
     ],
   },
@@ -825,108 +698,8 @@ export function AppSidebar() {
   const rolesQ = useUserRoles();
   const roleRows = rolesQ.data ?? [];
   const isSuper = roleRows.some((r) => r.role === "super_admin");
-  const hrmDashboard = usePermission({
-    propertyId,
-    module: "hrm_dashboard",
-    capability: "view",
-    defaultRoles: HRM_ADMIN_ROLES,
-  });
-  const hrmEmployees = usePermission({
-    propertyId,
-    module: "employees",
-    capability: "view",
-    defaultRoles: HRM_ADMIN_ROLES,
-  });
-  const hrmDepartments = usePermission({
-    propertyId,
-    module: "departments",
-    capability: "view",
-    defaultRoles: HRM_ADMIN_ROLES,
-  });
-  const hrmDesignations = usePermission({
-    propertyId,
-    module: "designations",
-    capability: "view",
-    defaultRoles: HRM_ADMIN_ROLES,
-  });
-  const hrmDocuments = usePermission({
-    propertyId,
-    module: "employee_documents",
-    capability: "view",
-    defaultRoles: HRM_ADMIN_ROLES,
-  });
-  const hrmAnnouncements = usePermission({
-    propertyId,
-    module: "staff_announcements",
-    capability: "view",
-    defaultRoles: HRM_ADMIN_ROLES,
-  });
-  const hrmShifts = usePermission({
-    propertyId,
-    module: "shift_templates",
-    capability: "view",
-    defaultRoles: HRM_ADMIN_ROLES,
-  });
-  const hrmRoster = usePermission({
-    propertyId,
-    module: "duty_roster",
-    capability: "view",
-    defaultRoles: HRM_ADMIN_ROLES,
-  });
-  const hrmHolidays = usePermission({
-    propertyId,
-    module: "holidays",
-    capability: "view",
-    defaultRoles: HRM_ADMIN_ROLES,
-  });
-  const hrmWorkforceSettings = usePermission({
-    propertyId,
-    module: "workforce_settings",
-    capability: "view",
-    defaultRoles: HRM_ADMIN_ROLES,
-  });
-  const hrmAttendance = usePermission({
-    propertyId,
-    module: "attendance",
-    capability: "view",
-    defaultRoles: HRM_ADMIN_ROLES,
-  });
-  const hrmTimeClock = usePermission({
-    propertyId,
-    module: "time_clock",
-    capability: "view",
-    defaultRoles: HRM_ADMIN_ROLES,
-  });
-  const hrmLeave = usePermission({
-    propertyId,
-    module: "leave_own",
-    capability: "view",
-    defaultRoles: HRM_ADMIN_ROLES,
-  });
-  const hrmLeaveCalendar = usePermission({
-    propertyId,
-    module: "leave_calendar",
-    capability: "view",
-    defaultRoles: HRM_ADMIN_ROLES,
-  });
-  const hrmLeaveTypes = usePermission({
-    propertyId,
-    module: "leave_settings",
-    capability: "view",
-    defaultRoles: HRM_ADMIN_ROLES,
-  });
-  const hrmLeaveBalances = usePermission({
-    propertyId,
-    module: "leave_balances",
-    capability: "view",
-    defaultRoles: HRM_ADMIN_ROLES,
-  });
-  const hrmBiometricDevices = usePermission({
-    propertyId,
-    module: "biometric_devices",
-    capability: "view",
-    defaultRoles: HRM_ADMIN_ROLES,
-  });
+  const { visibility: hrmSectionVisibility } = useHrmVisibility();
+  const hasAnyHrmAccess = Object.values(hrmSectionVisibility).some(Boolean);
   const payrollOverview = usePermission({
     propertyId,
     module: "payroll_overview",
@@ -1086,23 +859,6 @@ export function AppSidebar() {
     expenseCorrections: accountingExpenseCorrections.allowed,
   };
   const hrmVisibility = {
-    dashboard: hrmDashboard.allowed,
-    employees: hrmEmployees.allowed,
-    departments: hrmDepartments.allowed,
-    designations: hrmDesignations.allowed,
-    documents: hrmDocuments.allowed,
-    announcements: hrmAnnouncements.allowed,
-    shifts: hrmShifts.allowed,
-    roster: hrmRoster.allowed,
-    holidays: hrmHolidays.allowed,
-    workforceSettings: hrmWorkforceSettings.allowed,
-    attendance: hrmAttendance.allowed,
-    timeClock: hrmTimeClock.allowed,
-    leave: hrmLeave.allowed,
-    leaveCalendar: hrmLeaveCalendar.allowed,
-    leaveTypes: hrmLeaveTypes.allowed,
-    leaveBalances: hrmLeaveBalances.allowed,
-    biometricDevices: hrmBiometricDevices.allowed,
     payrollOverview: payrollOverview.allowed,
     payrollSettings: payrollSettings.allowed,
     payCalendars: payCalendars.allowed,
@@ -1139,6 +895,7 @@ export function AppSidebar() {
         ...g,
         items: g.items
           .filter((it) => canSee(it.requireRoles))
+          .filter((it) => !it.hrmAnyAccess || hasAnyHrmAccess)
           .filter((it) => !it.hrmPermission || hrmVisibility[it.hrmPermission])
           .filter((it) => !it.accountingPermission || accountingVisibility[it.accountingPermission])
           .filter(
@@ -1153,23 +910,7 @@ export function AppSidebar() {
     q,
     roleRows,
     propertyId,
-    hrmVisibility.dashboard,
-    hrmVisibility.employees,
-    hrmVisibility.departments,
-    hrmVisibility.designations,
-    hrmVisibility.documents,
-    hrmVisibility.announcements,
-    hrmVisibility.shifts,
-    hrmVisibility.roster,
-    hrmVisibility.holidays,
-    hrmVisibility.workforceSettings,
-    hrmVisibility.attendance,
-    hrmVisibility.timeClock,
-    hrmVisibility.leave,
-    hrmVisibility.leaveCalendar,
-    hrmVisibility.leaveTypes,
-    hrmVisibility.leaveBalances,
-    hrmVisibility.biometricDevices,
+    hasAnyHrmAccess,
     hrmVisibility.payrollOverview,
     hrmVisibility.payrollSettings,
     hrmVisibility.payCalendars,

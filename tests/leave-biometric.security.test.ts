@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import { HRM_NAV_ITEMS } from "../src/lib/hrm/nav-config";
 const migration = readFileSync(
   resolve(__dirname, "../supabase/migrations/20260729203000_leave_and_biometric_foundation.sql"),
   "utf8",
@@ -8,7 +9,6 @@ const migration = readFileSync(
 const leave = readFileSync(resolve(__dirname, "../src/lib/hrm/leave.functions.ts"), "utf8");
 const biometric = readFileSync(resolve(__dirname, "../src/lib/hrm/biometric.functions.ts"), "utf8");
 const adapter = readFileSync(resolve(__dirname, "../src/lib/hrm/biometric-adapter.ts"), "utf8");
-const sidebar = readFileSync(resolve(__dirname, "../src/components/app-sidebar.tsx"), "utf8");
 describe("Phase 3C security and integration", () => {
   it("scopes leave codes and authoritative balances per property", () => {
     expect(migration).toContain("UNIQUE(property_id,code)");
@@ -92,6 +92,7 @@ describe("Phase 3C security and integration", () => {
     expect(biometric).not.toMatch(/console\.(log|debug)/);
   });
   it("keeps Phase 3C navigation and excludes unfinished payroll processing links", () => {
+    const links = HRM_NAV_ITEMS.map((item) => item.to);
     for (const path of [
       "/hrm/leave",
       "/hrm/leave/calendar",
@@ -99,6 +100,6 @@ describe("Phase 3C security and integration", () => {
       "/hrm/leave/balances",
       "/hrm/biometric-devices",
     ])
-      expect(sidebar).toContain(`to: "${path}"`);
+      expect(links).toContain(path);
   });
 });
