@@ -74,10 +74,11 @@ function PhaseNotice({ children }: { children?: React.ReactNode }) {
   return (
     <Alert>
       <ShieldAlert className="h-4 w-4" />
-      <AlertTitle>Phase 4A configuration foundation</AlertTitle>
+      <AlertTitle>Payroll configuration</AlertTitle>
       <AlertDescription>
-        Payroll calculations, payroll runs, payslips, payment files, statutory submissions, and
-        accounting journals are not available. {children}
+        This page defines payroll configuration. Calculations, payroll runs, payslips, payment
+        files, statutory submissions, and accounting journals are handled in the Payroll Processing
+        and Payments &amp; Reporting sections. {children}
       </AlertDescription>
     </Alert>
   );
@@ -97,14 +98,14 @@ export function PayrollOverviewPage() {
     <div className="space-y-4">
       <HrmPageHeader
         title="Payroll Overview"
-        description="Configuration readiness for future payroll processing."
+        description="Payroll configuration status and readiness."
       />
       <PhaseNotice>No payroll totals or financial results are generated on this page.</PhaseNotice>
       <DataQueryState loading={query.isLoading} error={query.error} empty={!query.data}>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <Summary
             title="Payroll status"
-            value={query.data?.settings?.payroll_enabled ? "Enabled for configuration" : "Disabled"}
+            value={query.data?.settings?.payroll_enabled ? "Enabled" : "Disabled"}
           />
           <Summary title="Currency" value={query.data?.property?.base_currency ?? "—"} />
           <Summary title="Pay frequencies" value={query.data?.frequencies.length ?? 0} />
