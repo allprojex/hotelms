@@ -14,10 +14,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Plus, Trash2, ClipboardList } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import { AccountingWorkspaceShell } from "@/components/accounting/accounting-workspace-nav";
 
 export const Route = createFileRoute("/_authenticated/accounting/journal")({
   head: () => ({ meta: [{ title: "Journal · Accounting" }] }),
-  component: JournalPage,
+  component: () => (
+    <AccountingWorkspaceShell>
+      <JournalPage />
+    </AccountingWorkspaceShell>
+  ),
 });
 
 type Line = { account_id: string; debit: string; credit: string; memo: string };

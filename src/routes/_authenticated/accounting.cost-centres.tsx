@@ -53,10 +53,15 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Building2, Plus, Archive, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
+import { AccountingWorkspaceShell } from "@/components/accounting/accounting-workspace-nav";
 
 export const Route = createFileRoute("/_authenticated/accounting/cost-centres")({
   head: () => ({ meta: [{ title: "Cost Centres · Accounting" }] }),
-  component: CostCentresPage,
+  component: () => (
+    <AccountingWorkspaceShell>
+      <CostCentresPage />
+    </AccountingWorkspaceShell>
+  ),
 });
 
 const empty = {

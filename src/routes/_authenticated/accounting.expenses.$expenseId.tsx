@@ -57,10 +57,15 @@ import {
 import { Receipt, Upload, Download, History } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import { AccountingWorkspaceShell } from "@/components/accounting/accounting-workspace-nav";
 
 export const Route = createFileRoute("/_authenticated/accounting/expenses/$expenseId")({
   head: () => ({ meta: [{ title: "Expense · Accounting" }] }),
-  component: ExpenseDetailPage,
+  component: () => (
+    <AccountingWorkspaceShell>
+      <ExpenseDetailPage />
+    </AccountingWorkspaceShell>
+  ),
 });
 
 function statusVariant(status: string): any {

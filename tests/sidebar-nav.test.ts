@@ -15,8 +15,12 @@ const src = readFileSync(resolve(__dirname, "../src/components/app-sidebar.tsx")
 describe("app-sidebar nav items", () => {
   it("has no two items pointing to the same route", () => {
     const paths = [...src.matchAll(/\bto:\s*"([^"]+)"/g)].map((m) => m[1]);
-    // Sanity check the extraction itself still finds a realistic number of items.
-    expect(paths.length).toBeGreaterThan(50);
+    // Sanity check the extraction itself still finds a realistic number of
+    // items. Lowered from 50 after the HRM/Payroll and Accounting workspace
+    // consolidations collapsed dozens of flat sidebar entries into single
+    // group entries — the true regression guard below (no duplicate `to`)
+    // is unaffected by that count.
+    expect(paths.length).toBeGreaterThan(30);
 
     const seen = new Map<string, number>();
     for (const p of paths) seen.set(p, (seen.get(p) ?? 0) + 1);

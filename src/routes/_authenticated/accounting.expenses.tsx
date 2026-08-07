@@ -31,10 +31,15 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Receipt, Plus, AlertCircle } from "lucide-react";
+import { AccountingWorkspaceShell } from "@/components/accounting/accounting-workspace-nav";
 
 export const Route = createFileRoute("/_authenticated/accounting/expenses")({
   head: () => ({ meta: [{ title: "Expenses · Accounting" }] }),
-  component: ExpensesPage,
+  component: () => (
+    <AccountingWorkspaceShell>
+      <ExpensesPage />
+    </AccountingWorkspaceShell>
+  ),
 });
 
 function statusVariant(status: string): any {

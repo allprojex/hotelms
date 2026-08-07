@@ -41,10 +41,15 @@ import {
 import { Undo2 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import { AccountingWorkspaceShell } from "@/components/accounting/accounting-workspace-nav";
 
 export const Route = createFileRoute("/_authenticated/accounting/corrections")({
   head: () => ({ meta: [{ title: "Expense Corrections · Accounting" }] }),
-  component: CorrectionsPage,
+  component: () => (
+    <AccountingWorkspaceShell>
+      <CorrectionsPage />
+    </AccountingWorkspaceShell>
+  ),
 });
 
 function ReasonDialog({

@@ -11,10 +11,15 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Download, BarChart3 } from "lucide-react";
 import { format, startOfMonth, endOfMonth } from "date-fns";
+import { AccountingWorkspaceShell } from "@/components/accounting/accounting-workspace-nav";
 
 export const Route = createFileRoute("/_authenticated/accounting/reports")({
   head: () => ({ meta: [{ title: "Financial Reports · Accounting" }] }),
-  component: ReportsPage,
+  component: () => (
+    <AccountingWorkspaceShell>
+      <ReportsPage />
+    </AccountingWorkspaceShell>
+  ),
 });
 
 function toCSV(rows: string[][]) {
