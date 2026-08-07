@@ -170,8 +170,8 @@ describe("Payroll permission model preserved exactly", () => {
   });
 
   it("keeps payrollCorrections gated by the create capability, not view", () => {
-    expect(payrollVisibilityHook).toContain(
-      'module: "payroll_corrections",\n    capability: "create"',
+    expect(payrollVisibilityHook).toMatch(
+      /module:\s*"payroll_corrections",\s*capability:\s*"create"/,
     );
   });
 

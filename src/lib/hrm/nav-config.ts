@@ -249,6 +249,16 @@ export function resolveActiveHrmKey(pathname: string): HrmNavKey | null {
 }
 
 /**
+ * Which HRM_NAV_GROUPS group a given active key belongs to. Drives the
+ * workspace shell's secondary row: a group is expanded into its own child
+ * links only while one of its items is active.
+ */
+export function findHrmGroupForKey(key: HrmNavKey | null): HrmNavGroup | null {
+  if (!key) return null;
+  return HRM_NAV_GROUPS.find((group) => group.items.some((item) => item.key === key)) ?? null;
+}
+
+/**
  * Second-level workspace nested inside the HRM workspace's "Payroll" tab.
  * Kept as its own key/group/resolver set (mirroring HrmNavKey above) rather
  * than folded into HRM_NAV_GROUPS, so Payroll's 19 routes never spill into
@@ -464,4 +474,10 @@ export function resolveActivePayrollKey(pathname: string): PayrollNavKey | null 
   });
   if (matches.length === 0) return null;
   return matches.sort((a, b) => b.to.length - a.to.length)[0].key;
+}
+
+/** Which PAYROLL_NAV_GROUPS group a given active payroll key belongs to. */
+export function findPayrollGroupForKey(key: PayrollNavKey | null): PayrollNavGroup | null {
+  if (!key) return null;
+  return PAYROLL_NAV_GROUPS.find((group) => group.items.some((item) => item.key === key)) ?? null;
 }
