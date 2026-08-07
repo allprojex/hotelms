@@ -3,7 +3,9 @@ import { useActiveProperty } from "@/hooks/use-active-property";
 import { HRM_ADMIN_ROLES } from "@/lib/hrm/permissions";
 import type { HrmNavKey } from "@/lib/hrm/nav-config";
 
-export type HrmVisibility = Record<HrmNavKey, boolean>;
+// Excludes "payroll": that tab's visibility is derived from usePayrollVisibility
+// (its own 19-key hook), not a single usePermission check like the rest here.
+export type HrmVisibility = Record<Exclude<HrmNavKey, "payroll">, boolean>;
 
 /**
  * Single source of truth for which HRM sections the signed-in user may see.

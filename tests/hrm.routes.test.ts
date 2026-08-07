@@ -34,9 +34,9 @@ describe("HRM routes and navigation", () => {
     expect(roles).not.toContain("front_desk");
   });
 
-  it("supplements route roles with Phase 1 permission visibility", () => {
+  it("supplements route roles with fine-grained permission visibility", () => {
     expect(sidebar).toContain("usePermission");
-    expect(sidebar).toContain("hrmPermission");
-    expect(sidebar).toContain("HRM_ADMIN_ROLES");
+    expect(sidebar).toContain("useHrmVisibility");
+    expect(sidebar).toContain("usePayrollVisibility");
   });
 });

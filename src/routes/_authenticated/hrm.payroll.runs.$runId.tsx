@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { PayrollRunDetailPage } from "@/components/hrm/payroll-run-pages";
+import { HrmWorkspaceShell } from "@/components/hrm/hrm-workspace-nav";
 
 export const Route = createFileRoute("/_authenticated/hrm/payroll/runs/$runId")({
   head: () => ({ meta: [{ title: "Draft Payroll Review · ThesKwoff Hotel" }] }),
@@ -8,5 +9,9 @@ export const Route = createFileRoute("/_authenticated/hrm/payroll/runs/$runId")(
 
 function RouteComponent() {
   const { runId } = Route.useParams();
-  return <PayrollRunDetailPage runId={runId} />;
+  return (
+    <HrmWorkspaceShell>
+      <PayrollRunDetailPage runId={runId} />
+    </HrmWorkspaceShell>
+  );
 }

@@ -32,6 +32,7 @@ const ROUTE_FILES: Record<string, string> = {
   "/hrm/holidays": "hrm.holidays.tsx",
   "/hrm/workforce-settings": "hrm.workforce-settings.tsx",
   "/hrm/announcements": "hrm.announcements.tsx",
+  "/hrm/payroll": "hrm.payroll.tsx",
 };
 
 describe("HRM sidebar collapse", () => {
@@ -88,7 +89,7 @@ describe("HRM workspace nav config", () => {
     }
   });
 
-  it("groups routes as specified (Overview, People, Time and Attendance, Leave, Workforce, Communication)", () => {
+  it("groups routes as specified (Overview, People, Time and Attendance, Leave, Workforce, Communication, Payroll)", () => {
     const labels = HRM_NAV_GROUPS.map((g) => g.label);
     expect(labels).toEqual([
       "Overview",
@@ -97,6 +98,7 @@ describe("HRM workspace nav config", () => {
       "Leave",
       "Workforce",
       "Communication",
+      "Payroll",
     ]);
   });
 
@@ -128,7 +130,13 @@ describe("HRM active-section resolution", () => {
 
   it("returns null for routes outside the HRM workspace", () => {
     expect(resolveActiveHrmKey("/dashboard")).toBeNull();
-    expect(resolveActiveHrmKey("/hrm/payroll")).toBeNull();
+    expect(resolveActiveHrmKey("/accounting")).toBeNull();
+  });
+
+  it("activates the Payroll tab for every route under /hrm/payroll", () => {
+    expect(resolveActiveHrmKey("/hrm/payroll")).toBe("payroll");
+    expect(resolveActiveHrmKey("/hrm/payroll/runs")).toBe("payroll");
+    expect(resolveActiveHrmKey("/hrm/payroll/runs/abc-123")).toBe("payroll");
   });
 });
 
@@ -138,10 +146,13 @@ describe("HRM workspace visibility", () => {
   });
 
   it("permission hook covers every non-payroll HRM nav key exactly once", () => {
-    const keys = HRM_NAV_ITEMS.map((i) => i.key);
+    // "payroll" is deliberately absent: its visibility is derived from
+    // usePayrollVisibility (19 checks), not a single usePermission call.
+    const keys = HRM_NAV_ITEMS.map((i) => i.key).filter((key) => key !== "payroll");
     for (const key of keys) {
       const occurrences = visibilityHook.split(`${key}: ${key}.allowed`).length - 1;
       expect(occurrences, `${key} should be returned exactly once`).toBe(1);
     }
+    expect(visibilityHook).not.toContain("payroll:");
   });
 });

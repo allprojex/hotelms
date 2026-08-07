@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
+import { PAYROLL_NAV_ITEMS } from "../src/lib/hrm/nav-config";
 
 const root = process.cwd();
 const routeDir = path.join(root, "src/routes/_authenticated");
-const sidebar = fs.readFileSync(path.join(root, "src/components/app-sidebar.tsx"), "utf8");
 
 describe("Phase 4C payroll routes and navigation", () => {
   const routes = [
@@ -27,6 +27,7 @@ describe("Phase 4C payroll routes and navigation", () => {
   });
 
   it("adds only preparation/finalization navigation labels", () => {
+    const titles = PAYROLL_NAV_ITEMS.map((item) => item.title);
     for (const label of [
       "Payroll Approvals",
       "Finalized Payroll",
@@ -37,10 +38,10 @@ describe("Phase 4C payroll routes and navigation", () => {
       "Journal Drafts",
       "Payroll Corrections",
     ]) {
-      expect(sidebar).toContain(label);
+      expect(titles).toContain(label);
     }
-    expect(sidebar).not.toContain("Payment Execution");
-    expect(sidebar).not.toContain("Tax Submission");
-    expect(sidebar).not.toContain("Journal Posting");
+    expect(titles).not.toContain("Payment Execution");
+    expect(titles).not.toContain("Tax Submission");
+    expect(titles).not.toContain("Journal Posting");
   });
 });
