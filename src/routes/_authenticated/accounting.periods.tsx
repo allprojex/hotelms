@@ -39,10 +39,15 @@ import {
 import { Lock, Unlock, CalendarDays } from "lucide-react";
 import { toast } from "sonner";
 import { format, startOfMonth, endOfMonth } from "date-fns";
+import { AccountingWorkspaceShell } from "@/components/accounting/accounting-workspace-nav";
 
 export const Route = createFileRoute("/_authenticated/accounting/periods")({
   head: () => ({ meta: [{ title: "Financial Periods · Accounting" }] }),
-  component: PeriodsPage,
+  component: () => (
+    <AccountingWorkspaceShell>
+      <PeriodsPage />
+    </AccountingWorkspaceShell>
+  ),
 });
 
 function statusBadge(status: string) {

@@ -25,10 +25,15 @@ import {
 import { Receipt } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import { AccountingWorkspaceShell } from "@/components/accounting/accounting-workspace-nav";
 
 export const Route = createFileRoute("/_authenticated/accounting/expenses/new")({
   head: () => ({ meta: [{ title: "New Expense · Accounting" }] }),
-  component: NewExpensePage,
+  component: () => (
+    <AccountingWorkspaceShell>
+      <NewExpensePage />
+    </AccountingWorkspaceShell>
+  ),
 });
 
 function NewExpensePage() {

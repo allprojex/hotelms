@@ -13,10 +13,15 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogT
 import { Plus, Trash2, FileText, Send, DollarSign } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import { AccountingWorkspaceShell } from "@/components/accounting/accounting-workspace-nav";
 
 export const Route = createFileRoute("/_authenticated/accounting/ar")({
   head: () => ({ meta: [{ title: "Accounts Receivable · Accounting" }] }),
-  component: ARPage,
+  component: () => (
+    <AccountingWorkspaceShell>
+      <ARPage />
+    </AccountingWorkspaceShell>
+  ),
 });
 
 type Line = { description: string; quantity: string; unit_price: string; tax_rate: string };

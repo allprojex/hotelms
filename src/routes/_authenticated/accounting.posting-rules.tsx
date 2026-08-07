@@ -6,10 +6,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Settings2 } from "lucide-react";
 import { toast } from "sonner";
+import { AccountingWorkspaceShell } from "@/components/accounting/accounting-workspace-nav";
 
 export const Route = createFileRoute("/_authenticated/accounting/posting-rules")({
   head: () => ({ meta: [{ title: "Posting Rules · Accounting" }] }),
-  component: PostingRulesPage,
+  component: () => (
+    <AccountingWorkspaceShell>
+      <PostingRulesPage />
+    </AccountingWorkspaceShell>
+  ),
 });
 
 const RULES: { key: string; label: string; group: string; fallback: string }[] = [

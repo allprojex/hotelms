@@ -33,10 +33,15 @@ import {
 } from "@/components/ui/dialog";
 import { ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
+import { AccountingWorkspaceShell } from "@/components/accounting/accounting-workspace-nav";
 
 export const Route = createFileRoute("/_authenticated/accounting/approvals")({
   head: () => ({ meta: [{ title: "Expense Approvals · Accounting" }] }),
-  component: ApprovalsPage,
+  component: () => (
+    <AccountingWorkspaceShell>
+      <ApprovalsPage />
+    </AccountingWorkspaceShell>
+  ),
 });
 
 function ReasonDialog({

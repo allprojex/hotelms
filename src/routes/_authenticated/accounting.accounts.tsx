@@ -12,10 +12,15 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogT
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus, Boxes } from "lucide-react";
 import { toast } from "sonner";
+import { AccountingWorkspaceShell } from "@/components/accounting/accounting-workspace-nav";
 
 export const Route = createFileRoute("/_authenticated/accounting/accounts")({
   head: () => ({ meta: [{ title: "Chart of Accounts · Accounting" }] }),
-  component: AccountsPage,
+  component: () => (
+    <AccountingWorkspaceShell>
+      <AccountsPage />
+    </AccountingWorkspaceShell>
+  ),
 });
 
 const TYPES = ["asset", "liability", "equity", "revenue", "expense"] as const;

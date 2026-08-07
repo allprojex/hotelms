@@ -12,10 +12,15 @@ import { Switch } from "@/components/ui/switch";
 import { Moon, AlertTriangle, CheckCircle2, XCircle, Lock, PlayCircle } from "lucide-react";
 import { toast } from "sonner";
 import { format, subDays } from "date-fns";
+import { AccountingWorkspaceShell } from "@/components/accounting/accounting-workspace-nav";
 
 export const Route = createFileRoute("/_authenticated/accounting/night-audit")({
   head: () => ({ meta: [{ title: "Night Audit · Accounting" }] }),
-  component: NightAuditPage,
+  component: () => (
+    <AccountingWorkspaceShell>
+      <NightAuditPage />
+    </AccountingWorkspaceShell>
+  ),
 });
 
 function fmt(n: number, c = "GHS") { return new Intl.NumberFormat(undefined, { style: "currency", currency: c }).format(n); }

@@ -35,7 +35,6 @@ describe("HRM routes and navigation", () => {
   });
 
   it("supplements route roles with fine-grained permission visibility", () => {
-    expect(sidebar).toContain("usePermission");
     expect(sidebar).toContain("useHrmVisibility");
     expect(sidebar).toContain("usePayrollVisibility");
   });

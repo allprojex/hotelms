@@ -19,10 +19,15 @@ import { runAccountingSync, retryFailedSync, getSyncRunCsv, testSyncWebhook } fr
 
 import { useHasAnyRole, SYNC_ROLES } from "@/hooks/use-user-roles";
 import { AccessDenied } from "@/components/access-denied";
+import { AccountingWorkspaceShell } from "@/components/accounting/accounting-workspace-nav";
 
 export const Route = createFileRoute("/_authenticated/accounting/sync")({
   head: () => ({ meta: [{ title: "Accounting Sync" }] }),
-  component: SyncPage,
+  component: () => (
+    <AccountingWorkspaceShell>
+      <SyncPage />
+    </AccountingWorkspaceShell>
+  ),
 });
 
 

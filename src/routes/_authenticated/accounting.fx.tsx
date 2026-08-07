@@ -12,10 +12,15 @@ import { Badge } from "@/components/ui/badge";
 import { TrendingUp } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import { AccountingWorkspaceShell } from "@/components/accounting/accounting-workspace-nav";
 
 export const Route = createFileRoute("/_authenticated/accounting/fx")({
   head: () => ({ meta: [{ title: "FX & Currencies · Accounting" }] }),
-  component: FxPage,
+  component: () => (
+    <AccountingWorkspaceShell>
+      <FxPage />
+    </AccountingWorkspaceShell>
+  ),
 });
 
 function FxPage() {

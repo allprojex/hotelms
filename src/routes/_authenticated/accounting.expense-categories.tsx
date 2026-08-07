@@ -54,10 +54,15 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Tags, Plus, Archive, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
+import { AccountingWorkspaceShell } from "@/components/accounting/accounting-workspace-nav";
 
 export const Route = createFileRoute("/_authenticated/accounting/expense-categories")({
   head: () => ({ meta: [{ title: "Expense Categories · Accounting" }] }),
-  component: ExpenseCategoriesPage,
+  component: () => (
+    <AccountingWorkspaceShell>
+      <ExpenseCategoriesPage />
+    </AccountingWorkspaceShell>
+  ),
 });
 
 const empty = {

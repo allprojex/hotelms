@@ -40,10 +40,6 @@ import {
   ArrowLeftRight,
   Boxes,
   AlertTriangle,
-  FileText,
-  Moon,
-  Settings2,
-  Share2,
   ShieldCheck,
   Search,
   Bell,
@@ -60,18 +56,13 @@ import {
   LifeBuoy,
   Activity,
   BriefcaseBusiness,
-  Receipt,
-  Tags,
-  Undo2,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { useUserRoles, EXEC_ROLES, SYNC_ROLES, type AppRole } from "@/hooks/use-user-roles";
+import { useUserRoles, EXEC_ROLES, type AppRole } from "@/hooks/use-user-roles";
 import { useActiveProperty } from "@/hooks/use-active-property";
 import { ADMIN_ROLES } from "@/lib/admin/permissions";
-import { usePermission } from "@/hooks/use-permission";
 import { useHrmVisibility } from "@/hooks/use-hrm-visibility";
 import { usePayrollVisibility } from "@/hooks/use-payroll-visibility";
-import { ACCOUNTING_ADMIN_ROLES, EXPENSE_PERMISSIONS } from "@/lib/accounting/permissions";
 
 type NavItem = {
   title: string;
@@ -82,14 +73,6 @@ type NavItem = {
   // True when the item stands in for the whole HRM group: visible if the
   // user has any single HRM permission (see useHrmVisibility), not just one.
   hrmAnyAccess?: true;
-  accountingPermission?:
-    | "expenses"
-    | "expenseApprovals"
-    | "expenseCategories"
-    | "vendors"
-    | "costCentres"
-    | "financialPeriods"
-    | "expenseCorrections";
 };
 
 // One accent hue per nav group; the token itself is defined in src/styles.css
@@ -258,114 +241,11 @@ const opsGroups: { label: string; items: NavItem[] }[] = [
     label: "Accounting",
     items: [
       {
-        title: "Overview",
+        title: "Accounting",
         to: "/accounting",
         icon: Wallet,
-        description: "Ledger, receivables, payables at a glance.",
-      },
-      {
-        title: "Chart of Accounts",
-        to: "/accounting/accounts",
-        icon: Boxes,
-        description: "Ledger accounts and hierarchy.",
-      },
-      {
-        title: "Journal",
-        to: "/accounting/journal",
-        icon: ClipboardList,
-        description: "Manual and posted entries.",
-      },
-      {
-        title: "Accounts Receivable",
-        to: "/accounting/ar",
-        icon: FileText,
-        description: "Customer invoices and receipts.",
-      },
-      {
-        title: "Accounts Payable",
-        to: "/accounting/ap",
-        icon: Truck,
-        description: "Supplier bills and payments.",
-      },
-      {
-        title: "Night Audit",
-        to: "/accounting/night-audit",
-        icon: Moon,
-        description: "Day-close postings and reconciliation.",
-      },
-      {
-        title: "Posting Rules",
-        to: "/accounting/posting-rules",
-        icon: Settings2,
-        description: "Automatic mapping from operations to GL.",
-      },
-      {
-        title: "Reports",
-        to: "/accounting/reports",
-        icon: BarChart3,
-        description: "Trial balance, P&L, balance sheet.",
-      },
-      {
-        title: "FX & Currencies",
-        to: "/accounting/fx",
-        icon: TrendingUp,
-        description: "Foreign exchange rate log.",
-      },
-      {
-        title: "Financial Periods",
-        to: "/accounting/periods",
-        icon: CalendarDays,
-        description: "Open, close, and reopen financial periods.",
-        accountingPermission: "financialPeriods",
-      },
-      {
-        title: "External Sync",
-        to: "/accounting/sync",
-        icon: Share2,
-        description: "Push nightly summaries via HMAC webhooks.",
-        requireRoles: SYNC_ROLES,
-      },
-      {
-        title: "Expenses",
-        to: "/accounting/expenses",
-        icon: Receipt,
-        description: "Draft, submit and track expenses.",
-        accountingPermission: "expenses",
-      },
-      {
-        title: "Expense Approvals",
-        to: "/accounting/approvals",
-        icon: ShieldCheck,
-        description: "Review expenses awaiting approval.",
-        accountingPermission: "expenseApprovals",
-      },
-      {
-        title: "Expense Categories",
-        to: "/accounting/expense-categories",
-        icon: Tags,
-        description: "Classify expenses and set receipt rules.",
-        accountingPermission: "expenseCategories",
-      },
-      {
-        title: "Vendors",
-        to: "/accounting/vendors",
-        icon: Truck,
-        description: "Suppliers and service providers for expenses.",
-        accountingPermission: "vendors",
-      },
-      {
-        title: "Cost Centres",
-        to: "/accounting/cost-centres",
-        icon: Building2,
-        description: "Organize spend by department or unit.",
-        accountingPermission: "costCentres",
-      },
-      {
-        title: "Expense Corrections",
-        to: "/accounting/corrections",
-        icon: Undo2,
-        description: "Correction requests and reversal evidence.",
-        accountingPermission: "expenseCorrections",
+        description:
+          "Expenses, receivables, payables, general ledger, periods, and reports — grouped in one workspace.",
       },
     ],
   },
@@ -540,50 +420,6 @@ export function AppSidebar() {
   const { visibility: payrollSectionVisibility } = usePayrollVisibility();
   const hasAnyPayrollAccess = Object.values(payrollSectionVisibility).some(Boolean);
   const hasAnyHrmAccess = Object.values(hrmSectionVisibility).some(Boolean) || hasAnyPayrollAccess;
-  const accountingExpenses = usePermission({
-    propertyId,
-    ...EXPENSE_PERMISSIONS.expensesView,
-    defaultRoles: ACCOUNTING_ADMIN_ROLES,
-  });
-  const accountingExpenseApprovals = usePermission({
-    propertyId,
-    ...EXPENSE_PERMISSIONS.expensesApprove,
-    defaultRoles: ACCOUNTING_ADMIN_ROLES,
-  });
-  const accountingExpenseCategories = usePermission({
-    propertyId,
-    ...EXPENSE_PERMISSIONS.categoriesView,
-    defaultRoles: ACCOUNTING_ADMIN_ROLES,
-  });
-  const accountingVendors = usePermission({
-    propertyId,
-    ...EXPENSE_PERMISSIONS.vendorsView,
-    defaultRoles: ACCOUNTING_ADMIN_ROLES,
-  });
-  const accountingCostCentres = usePermission({
-    propertyId,
-    ...EXPENSE_PERMISSIONS.costCentresView,
-    defaultRoles: ACCOUNTING_ADMIN_ROLES,
-  });
-  const accountingFinancialPeriods = usePermission({
-    propertyId,
-    ...EXPENSE_PERMISSIONS.periodsView,
-    defaultRoles: ACCOUNTING_ADMIN_ROLES,
-  });
-  const accountingExpenseCorrections = usePermission({
-    propertyId,
-    ...EXPENSE_PERMISSIONS.correctionsView,
-    defaultRoles: ACCOUNTING_ADMIN_ROLES,
-  });
-  const accountingVisibility = {
-    expenses: accountingExpenses.allowed,
-    expenseApprovals: accountingExpenseApprovals.allowed,
-    expenseCategories: accountingExpenseCategories.allowed,
-    vendors: accountingVendors.allowed,
-    costCentres: accountingCostCentres.allowed,
-    financialPeriods: accountingFinancialPeriods.allowed,
-    expenseCorrections: accountingExpenseCorrections.allowed,
-  };
   const canSee = (required?: AppRole[]) => {
     if (!required) return true;
     if (isSuper) return true;
@@ -601,7 +437,6 @@ export function AppSidebar() {
         items: g.items
           .filter((it) => canSee(it.requireRoles))
           .filter((it) => !it.hrmAnyAccess || hasAnyHrmAccess)
-          .filter((it) => !it.accountingPermission || accountingVisibility[it.accountingPermission])
           .filter(
             (it) =>
               !q || it.title.toLowerCase().includes(q) || it.description.toLowerCase().includes(q),
@@ -610,19 +445,7 @@ export function AppSidebar() {
       }))
       .filter((g) => g.items.length > 0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    q,
-    roleRows,
-    propertyId,
-    hasAnyHrmAccess,
-    accountingVisibility.expenses,
-    accountingVisibility.expenseApprovals,
-    accountingVisibility.expenseCategories,
-    accountingVisibility.vendors,
-    accountingVisibility.costCentres,
-    accountingVisibility.financialPeriods,
-    accountingVisibility.expenseCorrections,
-  ]);
+  }, [q, roleRows, propertyId, hasAnyHrmAccess]);
 
   function handleNavigate() {
     // SRS §2.1: collapse after selecting a menu item to maximize workspace.

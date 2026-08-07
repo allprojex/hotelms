@@ -20,10 +20,15 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import { format, startOfMonth, endOfMonth } from "date-fns";
+import { AccountingWorkspaceShell } from "@/components/accounting/accounting-workspace-nav";
 
 export const Route = createFileRoute("/_authenticated/accounting/")({
   head: () => ({ meta: [{ title: "Accounting · ThesKwoff Hotel" }] }),
-  component: AccountingOverview,
+  component: () => (
+    <AccountingWorkspaceShell>
+      <AccountingOverview />
+    </AccountingWorkspaceShell>
+  ),
 });
 
 function fmt(n: number, cur = "GHS") {
@@ -194,13 +199,18 @@ function AccountingOverview() {
           <CardTitle className="text-sm flex items-center gap-2">
             <Lock className="h-4 w-4" /> Close of Day
           </CardTitle>
-          <Button asChild variant="outline" size="sm">
-            <Link to="/accounting/periods">Manage periods</Link>
-          </Button>
+          <div className="flex gap-2">
+            <Button asChild variant="outline" size="sm">
+              <Link to="/accounting/night-audit">Night audit</Link>
+            </Button>
+            <Button asChild variant="outline" size="sm">
+              <Link to="/accounting/periods">Manage periods</Link>
+            </Button>
+          </div>
         </CardHeader>
         <CardContent className="text-sm text-muted-foreground">
-          Lock accounting periods to prevent further posting. Coming in Phase 2: automated
-          night-audit run with cash drawer reconciliation.
+          Lock accounting periods to prevent further posting. Run the night audit to post pending
+          transactions and reconcile occupancy and revenue for the business day.
         </CardContent>
       </Card>
 
