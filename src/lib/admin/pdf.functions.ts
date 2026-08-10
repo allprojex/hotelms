@@ -142,9 +142,9 @@ export const renderAdminPdf = createServerFn({ method: "POST" })
         title: "Invoice",
         code: anyI.code,
         fromBlock: [anyP?.name, anyP?.address, anyP?.phone, anyP?.email].filter(Boolean),
-        toBlock: [anyI.customer_name ?? "Customer", anyI.customer_email].filter(Boolean),
+        toBlock: [anyI.bill_to_name ?? "Customer", anyI.bill_to_email].filter(Boolean),
         meta: [
-          { label: "Invoice date", value: anyI.invoice_date },
+          { label: "Invoice date", value: anyI.issue_date },
           { label: "Due", value: anyI.due_date ?? "—" },
           { label: "Status", value: anyI.status },
         ],

@@ -233,15 +233,15 @@ async function printInvoice(invId: string, propertyId: string) {
 function ArInvoicesSection({ propertyId }: { propertyId: string }) {
   const { list, remove } = useEntityCrud<any>({
     table: "ar_invoices", queryKey: ["admin", "ar_invoices", propertyId],
-    filter: (q) => q.eq("property_id", propertyId), order: { column: "invoice_date", ascending: false }, label: "Invoice",
+    filter: (q) => q.eq("property_id", propertyId), order: { column: "issue_date", ascending: false }, label: "Invoice",
   });
   return (
     <CrudTable title="AR Invoices" icon={<FileText className="h-4 w-4" />}
       rows={list.data} loading={list.isLoading} rowKey={(r) => r.id}
       columns={[
         { label: "Code", cell: (r) => <span className="font-mono text-xs">{r.code}</span>, searchValue: (r) => r.code, printValue: (r) => r.code },
-        { label: "Customer", cell: (r) => r.customer_name ?? "—", searchValue: (r) => r.customer_name, printValue: (r) => r.customer_name },
-        { label: "Date", cell: (r) => r.invoice_date, printValue: (r) => r.invoice_date },
+        { label: "Customer", cell: (r) => r.bill_to_name ?? "—", searchValue: (r) => r.bill_to_name, printValue: (r) => r.bill_to_name },
+        { label: "Date", cell: (r) => r.issue_date, printValue: (r) => r.issue_date },
         { label: "Total", cell: (r) => Number(r.total ?? 0).toFixed(2), num: true, printValue: (r) => Number(r.total ?? 0).toFixed(2) },
         { label: "Status", cell: (r) => <Badge variant="outline">{r.status}</Badge>, printValue: (r) => r.status },
       ]}

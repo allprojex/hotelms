@@ -1,7 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
+import { createArReceipt } from "@/lib/accounting/ar-receipts.functions";
 import { useActiveProperty } from "@/hooks/use-active-property";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -9,6 +11,8 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Plus, Trash2, FileText, Send, DollarSign } from "lucide-react";
 import { toast } from "sonner";
@@ -31,7 +35,14 @@ function fmt(n: number, c = "GHS") { return new Intl.NumberFormat(undefined, { s
 function ARPage() {
   const propertyId = useActiveProperty();
   const qc = useQueryClient();
+  const createReceiptFn = useServerFn(createArReceipt);
   const [open, setOpen] = useState(false);
+  const [payOpen, setPayOpen] = useState(false);
+  const [payMethod, setPayMethod] = useState<"cash" | "card" | "bank_transfer">("bank_transfer");
+  const [payReference, setPayReference] = useState("");
+  const [payDate, setPayDate] = useState(format(new Date(), "yyyy-MM-dd"));
+  const [payAllocations, setPayAllocations] = useState<Record<string, string>>({});
+  const [payIdempotencyKey, setPayIdempotencyKey] = useState("");
   const [form, setForm] = useState({
     bill_to_name: "", bill_to_email: "", bill_to_address: "",
     issue_date: format(new Date(), "yyyy-MM-dd"),
@@ -102,6 +113,65 @@ function ARPage() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const eligibleInvoices = (invoices.data ?? []).filter(
+    (i: any) => i.status === "sent" && Number(i.total) - Number(i.amount_paid) > 0,
+  );
+
+  function openReceivePayment() {
+    setPayAllocations({});
+    setPayReference("");
+    setPayDate(format(new Date(), "yyyy-MM-dd"));
+    setPayIdempotencyKey(crypto.randomUUID());
+    setPayOpen(true);
+  }
+
+  function toggleInvoice(inv: any, checked: boolean) {
+    setPayAllocations((prev) => {
+      const next = { ...prev };
+      if (checked) {
+        const remaining = Number(inv.total) - Number(inv.amount_paid);
+        next[inv.id] = remaining.toFixed(2);
+      } else {
+        delete next[inv.id];
+      }
+      return next;
+    });
+  }
+
+  const receiveTotal = Object.values(payAllocations).reduce((s, v) => s + (parseFloat(v) || 0), 0);
+  const receiveOverAllocated = eligibleInvoices.some((inv: any) => {
+    const amt = parseFloat(payAllocations[inv.id] ?? "");
+    if (!(amt > 0)) return false;
+    return amt > Number(inv.total) - Number(inv.amount_paid) + 0.0001;
+  });
+
+  const receive = useMutation({
+    mutationFn: async () => {
+      const allocations = Object.entries(payAllocations)
+        .filter(([, amt]) => parseFloat(amt) > 0)
+        .map(([invoiceId, amt]) => ({ invoiceId, amount: parseFloat(amt) }));
+      if (allocations.length === 0) throw new Error("Select at least one invoice and enter an amount");
+      return createReceiptFn({
+        data: {
+          propertyId: propertyId!,
+          receiptDate: payDate,
+          method: payMethod,
+          reference: payReference,
+          idempotencyKey: payIdempotencyKey,
+          allocations,
+        },
+      });
+    },
+    onSuccess: (receipt: any) => {
+      toast.success(`Receipt ${receipt.code} posted for ${fmt(Number(receipt.amount), receipt.currency)}`);
+      setPayOpen(false);
+      setPayAllocations({});
+      qc.invalidateQueries({ queryKey: ["ar-invoices", propertyId] });
+      qc.invalidateQueries({ queryKey: ["ar-aging", propertyId] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   const buckets = ["current", "1-30", "31-60", "61-90", "90+"] as const;
   const bucketTotals = buckets.map((b) => ({
     bucket: b,
@@ -115,6 +185,10 @@ function ARPage() {
     <div className="p-4 md:p-6 space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-display font-semibold flex items-center gap-2"><FileText className="h-6 w-6" /> Accounts Receivable</h1>
+        <div className="flex items-center gap-2">
+          <Button size="sm" variant="outline" disabled={eligibleInvoices.length === 0} onClick={openReceivePayment}>
+            <DollarSign className="h-4 w-4 mr-1" /> Receive payment
+          </Button>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild><Button size="sm"><Plus className="h-4 w-4 mr-1" /> New invoice</Button></DialogTrigger>
           <DialogContent className="max-w-3xl">
@@ -150,6 +224,7 @@ function ARPage() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
@@ -183,6 +258,72 @@ function ARPage() {
           {(invoices.data ?? []).length === 0 && <div className="p-6 text-center text-sm text-muted-foreground">No invoices yet.</div>}
         </CardContent>
       </Card>
+
+      <Dialog open={payOpen} onOpenChange={setPayOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader><DialogTitle>Receive payment</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <div className="grid grid-cols-3 gap-2">
+              <div><Label>Receipt date</Label><Input type="date" value={payDate} onChange={(e) => setPayDate(e.target.value)} /></div>
+              <div>
+                <Label>Method</Label>
+                <Select value={payMethod} onValueChange={(v) => setPayMethod(v as any)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="cash">Cash</SelectItem>
+                    <SelectItem value="card">Card</SelectItem>
+                    <SelectItem value="bank_transfer">Bank transfer</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div><Label>Reference</Label><Input value={payReference} onChange={(e) => setPayReference(e.target.value)} /></div>
+            </div>
+
+            <div className="border rounded-md max-h-72 overflow-y-auto">
+              <div className="grid grid-cols-[24px_1fr_90px_110px] gap-2 p-2 text-xs font-medium bg-muted/50 border-b sticky top-0">
+                <div></div><div>Invoice</div><div>Balance</div><div>Apply</div>
+              </div>
+              {eligibleInvoices.map((inv: any) => {
+                const remaining = Number(inv.total) - Number(inv.amount_paid);
+                const checked = inv.id in payAllocations;
+                return (
+                  <div key={inv.id} className="grid grid-cols-[24px_1fr_90px_110px] gap-2 p-2 border-b last:border-0 items-center">
+                    <Checkbox checked={checked} onCheckedChange={(c) => toggleInvoice(inv, !!c)} />
+                    <div className="min-w-0 truncate text-xs">
+                      <span className="font-mono text-muted-foreground mr-1">{inv.code}</span>{inv.bill_to_name}
+                    </div>
+                    <div className="text-xs font-mono">{fmt(remaining, inv.currency)}</div>
+                    <Input
+                      className="h-8"
+                      type="number"
+                      disabled={!checked}
+                      value={payAllocations[inv.id] ?? ""}
+                      onChange={(e) => setPayAllocations((prev) => ({ ...prev, [inv.id]: e.target.value }))}
+                    />
+                  </div>
+                );
+              })}
+              {eligibleInvoices.length === 0 && (
+                <div className="p-4 text-center text-sm text-muted-foreground">No invoices are eligible for payment.</div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">Receipt total</span>
+              <span className="font-mono font-semibold">{fmt(receiveTotal)}</span>
+            </div>
+            {receiveOverAllocated && (
+              <div className="text-xs text-destructive">One or more amounts exceed the invoice's remaining balance.</div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPayOpen(false)}>Cancel</Button>
+            <Button disabled={receive.isPending || receiveTotal <= 0 || receiveOverAllocated} onClick={() => receive.mutate()}>
+              <DollarSign className="h-4 w-4 mr-1" /> Post receipt
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
