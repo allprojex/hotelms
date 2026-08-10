@@ -1,7 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
+import { recordApPayment } from "@/lib/accounting/ap-payments.functions";
 import { useActiveProperty } from "@/hooks/use-active-property";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -31,6 +33,7 @@ function fmt(n: number, c = "GHS") { return new Intl.NumberFormat(undefined, { s
 function APPage() {
   const propertyId = useActiveProperty();
   const qc = useQueryClient();
+  const recordPaymentFn = useServerFn(recordApPayment);
   const [open, setOpen] = useState(false);
   const [payFor, setPayFor] = useState<any | null>(null);
   const [payAmount, setPayAmount] = useState("");
@@ -116,11 +119,12 @@ function APPage() {
   const pay = useMutation({
     mutationFn: async () => {
       if (!payFor) return;
-      const { error } = await supabase.from("ap_payments").insert({
-        property_id: propertyId!, bill_id: payFor.id,
-        amount: parseFloat(payAmount), method: payMethod,
-      } as any);
-      if (error) throw error;
+      await recordPaymentFn({
+        data: {
+          propertyId: propertyId!, billId: payFor.id,
+          amount: parseFloat(payAmount), method: payMethod,
+        },
+      });
     },
     onSuccess: () => {
       toast.success("Payment recorded");
