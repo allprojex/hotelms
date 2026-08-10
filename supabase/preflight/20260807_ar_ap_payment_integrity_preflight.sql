@@ -92,13 +92,15 @@ FROM public.ar_invoices
 WHERE amount_paid <> 0;
 
 -- AR: do the new ar_receipts / ar_receipt_allocations tables already
--- exist with data (e.g. from a partially-applied prior attempt at this
--- migration)? Should return "relation does not exist" (i.e. this
--- query should fail / be skipped) on a database that has never had
--- this migration applied. If it succeeds and returns rows, do not
--- reapply the migration blindly.
--- SELECT count(*) FROM public.ar_receipts;
--- SELECT count(*) FROM public.ar_receipt_allocations;
+-- exist (e.g. from a partially-applied prior attempt at this
+-- migration)? Queries information_schema rather than the tables
+-- themselves so this is safe to run unconditionally — it returns zero
+-- rows (not an error) on a database that has never had this migration
+-- applied. If either name is present, do not reapply the migration
+-- blindly; inspect the existing table's definition and contents first.
+SELECT table_name
+FROM information_schema.tables
+WHERE table_schema = 'public' AND table_name IN ('ar_receipts', 'ar_receipt_allocations');
 
 -- ------------------------------------------------------------
 -- Composite-FK / constraint-name collisions: would ADD CONSTRAINT

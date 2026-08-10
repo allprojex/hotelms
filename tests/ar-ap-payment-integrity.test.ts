@@ -54,6 +54,18 @@ describe("Phase AR/AP-1: baseline bug confirmation", () => {
   });
 });
 
+describe("Phase AR/AP-1: SECURITY DEFINER search_path pinning", () => {
+  it("pins post_ap_payment()'s search_path so it cannot be hijacked via a caller-controlled search_path", () => {
+    const post = fn(migration, "post_ap_payment");
+    expect(post).toContain("LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$");
+  });
+
+  it("pins post_ar_receipt()'s search_path so it cannot be hijacked via a caller-controlled search_path", () => {
+    const post = fn(migration, "post_ar_receipt");
+    expect(post).toContain("LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$");
+  });
+});
+
 describe("Phase AR/AP-1: AP payment safety", () => {
   it("rejects zero or negative payment amounts", () => {
     const post = fn(migration, "post_ap_payment");
