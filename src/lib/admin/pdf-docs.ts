@@ -22,17 +22,26 @@ export async function downloadServerPdf(
   id: string,
   propertyId: string,
 ) {
-  const res = await renderPdf({ data: { kind, id, propertyId } });
-  const bin = atob(res.base64);
-  const bytes = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-  const blob = new Blob([bytes], { type: res.mime });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = res.filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 5000);
+  // Reserve the browser target while the click still has user activation.
+  // A synthetic download started after the server round-trip may be blocked
+  // silently by the browser because transient activation has expired.
+  const pdfWindow = window.open("", "_blank");
+  if (!pdfWindow) throw new Error("PDF window was blocked. Allow pop-ups and try again.");
+  pdfWindow.opener = null;
+  pdfWindow.document.title = "Preparing PDF…";
+
+  try {
+    const res = await renderPdf({ data: { kind, id, propertyId } });
+    const bin = atob(res.base64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    const blob = new Blob([bytes], { type: res.mime });
+    const url = URL.createObjectURL(blob);
+    pdfWindow.document.title = res.filename;
+    pdfWindow.location.href = url;
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  } catch (error) {
+    pdfWindow.close();
+    throw error;
+  }
 }
