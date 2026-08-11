@@ -152,6 +152,7 @@ CREATE TABLE public.ar_receipts (
   created_by UUID REFERENCES auth.users(id),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT ar_receipts_property_id_uniq UNIQUE (property_id, id),
   UNIQUE (property_id, code),
   UNIQUE (property_id, idempotency_key)
 );
