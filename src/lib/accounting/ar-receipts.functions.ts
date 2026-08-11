@@ -2,7 +2,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { captureAuditEvent } from "@/lib/audit.server";
-import { uuid } from "@/lib/accounting/domain";
+import { requireValidCurrencyCode, uuid } from "@/lib/accounting/domain";
 
 type AllocationInput = { invoiceId: string; amount: number };
 
@@ -44,6 +44,16 @@ export const createArReceipt = createServerFn({ method: "POST" })
   .inputValidator(createInput)
   .handler(async ({ data, context }) => {
     const supabase = context.supabase as any;
+    const invoiceIds = data.allocations.map((allocation) => allocation.invoice_id);
+    const { data: invoices, error: invoiceError } = await supabase
+      .from("ar_invoices")
+      .select("id,currency")
+      .eq("property_id", data.propertyId)
+      .in("id", invoiceIds);
+    if (invoiceError) throw new Error(invoiceError.message);
+    if ((invoices ?? []).length !== invoiceIds.length) throw new Error("One or more invoices were not found");
+    for (const invoice of invoices ?? []) requireValidCurrencyCode(invoice.currency);
+
     const { error: rpcError } = await supabase.rpc("post_ar_receipt", {
       _property_id: data.propertyId,
       _receipt_date: data.receiptDate,
