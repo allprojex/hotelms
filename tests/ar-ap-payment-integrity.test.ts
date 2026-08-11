@@ -351,6 +351,11 @@ describe("Phase AR/AP-1: audit logging", () => {
 });
 
 describe("Phase AR/AP-1: AR invoice PDF regression", () => {
+  it("invokes the PDF server function through TanStack's client binding", () => {
+    expect(accountingModule).toContain("useServerFn(renderAdminPdf)");
+    expect(accountingModule).toContain('downloadServerPdf(renderPdf, "invoice"');
+  });
+
   it("uses the real ar_invoices schema fields instead of the stale customer_name/customer_email/invoice_date", () => {
     expect(pdfFns).toContain("anyI.bill_to_name");
     expect(pdfFns).toContain("anyI.bill_to_email");
@@ -362,6 +367,12 @@ describe("Phase AR/AP-1: AR invoice PDF regression", () => {
     expect(accountingModule).toContain('order: { column: "issue_date"');
     expect(accountingModule).toContain("r.bill_to_name");
     expect(accountingModule).not.toMatch(/invoice_date|customer_name/);
+  });
+
+  it("logs the print only after PDF generation succeeds", () => {
+    expect(pdfFns.indexOf("await buildDocPdf(doc)")).toBeLessThan(
+      pdfFns.indexOf("await logPrint(context"),
+    );
   });
 });
 

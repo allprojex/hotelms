@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useServerFn } from "@tanstack/react-start";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Pencil, CalendarDays, Users, Printer, Receipt } from "lucide-react";
@@ -7,6 +8,7 @@ import { DeleteConfirm } from "@/components/admin/delete-confirm";
 import { FieldForm } from "@/components/admin/field-form";
 import { useEntityCrud } from "@/lib/admin/use-entity-crud";
 import { downloadServerPdf } from "@/lib/admin/pdf-docs";
+import { renderAdminPdf } from "@/lib/admin/pdf.functions";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
@@ -23,15 +25,8 @@ export function ReservationsModule({ propertyId }: Props) {
   );
 }
 
-async function printFolio(reservationId: string, propertyId: string) {
-  try {
-    await downloadServerPdf("folio", reservationId, propertyId);
-  } catch (e: any) {
-    toast.error(e?.message ?? "Failed to render folio");
-  }
-}
-
 function ReservationsSection({ propertyId }: { propertyId: string }) {
+  const renderPdf = useServerFn(renderAdminPdf);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<any | null>(null);
   const { list, update, remove } = useEntityCrud<any>({
@@ -64,7 +59,13 @@ function ReservationsSection({ propertyId }: { propertyId: string }) {
           { label: "Total", cell: (r) => Number(r.rate_total ?? 0).toFixed(2), num: true, printValue: (r) => Number(r.rate_total ?? 0).toFixed(2) },
         ]}
         rowActions={(r) => <>
-          <Button size="sm" variant="ghost" title="Print folio" onClick={() => printFolio(r.id, propertyId)}><Receipt className="h-3.5 w-3.5" /></Button>
+          <Button size="sm" variant="ghost" title="Print folio" onClick={async () => {
+            try {
+              await downloadServerPdf(renderPdf, "folio", r.id, propertyId);
+            } catch (e: any) {
+              toast.error(e?.message ?? "Failed to render folio");
+            }
+          }}><Receipt className="h-3.5 w-3.5" /></Button>
           <Button size="sm" variant="ghost" onClick={() => { setEditing(r); setOpen(true); }}><Pencil className="h-3.5 w-3.5" /></Button>
           <DeleteConfirm title={`Delete reservation ${r.code}?`} onConfirm={() => remove.mutateAsync(r.id)} />
         </>}

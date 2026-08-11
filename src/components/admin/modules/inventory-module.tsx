@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useServerFn } from "@tanstack/react-start";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Pencil, Package, Tag, Truck, MapPin, Receipt } from "lucide-react";
@@ -7,6 +8,7 @@ import { DeleteConfirm } from "@/components/admin/delete-confirm";
 import { FieldForm } from "@/components/admin/field-form";
 import { useEntityCrud } from "@/lib/admin/use-entity-crud";
 import { downloadServerPdf } from "@/lib/admin/pdf-docs";
+import { renderAdminPdf } from "@/lib/admin/pdf.functions";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
@@ -186,15 +188,8 @@ function LocationsSection({ propertyId }: { propertyId: string }) {
   );
 }
 
-async function printPO(poId: string, propertyId: string) {
-  try {
-    await downloadServerPdf("po", poId, propertyId);
-  } catch (e: any) {
-    toast.error(e?.message ?? "Failed to render purchase order");
-  }
-}
-
 function PurchaseOrdersSection({ propertyId }: { propertyId: string }) {
+  const renderPdf = useServerFn(renderAdminPdf);
   const { list, remove } = useEntityCrud<any>({
     table: "purchase_orders", queryKey: ["admin", "purchase_orders", propertyId],
     filter: (q) => q.eq("property_id", propertyId), order: { column: "created_at", ascending: false }, label: "PO",
@@ -209,7 +204,13 @@ function PurchaseOrdersSection({ propertyId }: { propertyId: string }) {
         { label: "Status", cell: (r) => <Badge variant="outline">{r.status}</Badge>, printValue: (r) => r.status },
       ]}
       rowActions={(r) => <>
-        <Button size="sm" variant="ghost" title="Print PO" onClick={() => printPO(r.id, propertyId)}><Receipt className="h-3.5 w-3.5" /></Button>
+        <Button size="sm" variant="ghost" title="Print PO" onClick={async () => {
+          try {
+            await downloadServerPdf(renderPdf, "po", r.id, propertyId);
+          } catch (e: any) {
+            toast.error(e?.message ?? "Failed to render purchase order");
+          }
+        }}><Receipt className="h-3.5 w-3.5" /></Button>
         <DeleteConfirm title={`Delete PO ${r.code}?`} onConfirm={() => remove.mutateAsync(r.id)} />
       </>}
     />
