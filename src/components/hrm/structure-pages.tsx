@@ -436,7 +436,15 @@ function DepartmentDialog({
   async function submit() {
     setBusy(true);
     try {
-      await save({ data: { propertyId, id: row?.id, ...form } });
+      await save({
+        data: {
+          propertyId,
+          id: row?.id,
+          ...form,
+          parentDepartmentId: form.parentDepartmentId || null,
+          departmentHeadId: form.departmentHeadId || null,
+        },
+      });
       toast.success(row ? "Department updated" : "Department created");
       qc.invalidateQueries({ queryKey: ["hrm-departments"] });
       qc.invalidateQueries({ queryKey: ["hrm-options"] });

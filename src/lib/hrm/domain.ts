@@ -39,6 +39,19 @@ export function validateIsoDate(value: string | null | undefined, label: string)
   return value;
 }
 
+export function optionalUuid(value: unknown, label: string): string | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value !== "string") throw new Error(`${label} must be a valid UUID`);
+  const normalized = value.trim();
+  if (!normalized) return null;
+  if (
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(normalized)
+  ) {
+    throw new Error(`${label} must be a valid UUID`);
+  }
+  return normalized;
+}
+
 export function assertPropertyRecord(
   record: { property_id: string } | null | undefined,
   propertyId: string,
