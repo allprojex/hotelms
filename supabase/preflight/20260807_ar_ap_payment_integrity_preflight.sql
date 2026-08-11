@@ -113,6 +113,7 @@ WHERE conname IN (
   'ap_bills_property_id_uniq', 'ap_payments_property_bill_fkey',
   'ap_payments_amount_positive', 'ap_bills_amount_paid_bounds',
   'ar_invoices_property_id_uniq', 'ar_invoices_amount_paid_bounds',
+  'ar_receipts_property_id_uniq',
   'ar_receipt_allocations_receipt_fkey', 'ar_receipt_allocations_invoice_fkey'
 );
 SELECT indexname FROM pg_indexes

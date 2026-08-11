@@ -134,12 +134,40 @@ describe("Phase AR/AP-1: AR receipt schema", () => {
   it("creates ar_receipts and ar_receipt_allocations scoped by property-scoped composite foreign keys", () => {
     expect(migration).toContain("CREATE TABLE public.ar_receipts");
     expect(migration).toContain("CREATE TABLE public.ar_receipt_allocations");
+    expect(migration).toContain("CONSTRAINT ar_receipts_property_id_uniq UNIQUE (property_id, id)");
     expect(migration).toContain(
       "FOREIGN KEY (property_id, receipt_id) REFERENCES public.ar_receipts(property_id, id)",
     );
     expect(migration).toContain(
       "FOREIGN KEY (property_id, invoice_id) REFERENCES public.ar_invoices(property_id, id)",
     );
+  });
+
+  it("provides an exact unique key for every property-scoped composite foreign key before that foreign key is created", () => {
+    const compositeForeignKeys = [
+      {
+        unique: "ap_bills_property_id_uniq UNIQUE (property_id, id)",
+        foreignKey:
+          "FOREIGN KEY (property_id, bill_id) REFERENCES public.ap_bills(property_id, id)",
+      },
+      {
+        unique: "ar_receipts_property_id_uniq UNIQUE (property_id, id)",
+        foreignKey:
+          "FOREIGN KEY (property_id, receipt_id) REFERENCES public.ar_receipts(property_id, id)",
+      },
+      {
+        unique: "ar_invoices_property_id_uniq UNIQUE (property_id, id)",
+        foreignKey:
+          "FOREIGN KEY (property_id, invoice_id) REFERENCES public.ar_invoices(property_id, id)",
+      },
+    ];
+
+    for (const { unique, foreignKey } of compositeForeignKeys) {
+      const uniquePosition = migration.indexOf(unique);
+      const foreignKeyPosition = migration.indexOf(foreignKey);
+      expect(uniquePosition).toBeGreaterThanOrEqual(0);
+      expect(foreignKeyPosition).toBeGreaterThan(uniquePosition);
+    }
   });
 
   it("requires every write to route through post_ar_receipt — only SELECT is granted to authenticated", () => {
@@ -377,5 +405,29 @@ describe("Phase AR/AP-1: production preflight", () => {
 
   it("checks that every property has the accounts resolve_account() depends on, to avoid a NULL account_id at posting time", () => {
     expect(preflight).toContain("('cash'), ('bank'), ('ap'), ('ar')");
+  });
+
+  it("checks all nine named migration constraint names for collisions", () => {
+    const constraintCollisionCheck = preflight.match(
+      /SELECT conname FROM pg_constraint[\s\S]*?\);/,
+    )?.[0];
+    expect(constraintCollisionCheck).toBeDefined();
+
+    const expectedConstraints = [
+      "ap_bills_property_id_uniq",
+      "ap_payments_property_bill_fkey",
+      "ap_payments_amount_positive",
+      "ap_bills_amount_paid_bounds",
+      "ar_invoices_property_id_uniq",
+      "ar_invoices_amount_paid_bounds",
+      "ar_receipts_property_id_uniq",
+      "ar_receipt_allocations_receipt_fkey",
+      "ar_receipt_allocations_invoice_fkey",
+    ];
+
+    for (const name of expectedConstraints) {
+      expect(constraintCollisionCheck).toContain(`'${name}'`);
+    }
+    expect(constraintCollisionCheck?.match(/'[^']+'/g)).toHaveLength(9);
   });
 });
