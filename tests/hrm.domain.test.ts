@@ -7,6 +7,7 @@ import {
   employeeDocumentStoragePath,
   employeeProfileCompleteness,
   normalizeHrmCode,
+  optionalUuid,
   safeStorageSegment,
   validateEmployeeDates,
   validateEmployeeDocument,
@@ -21,6 +22,17 @@ const UUIDS = {
 describe("HRM validation", () => {
   it("normalizes property-scoped codes without imposing a global numbering format", () => {
     expect(normalizeHrmCode(" front office ")).toBe("FRONT-OFFICE");
+  });
+
+  it("normalizes optional department relationship UUIDs at the server boundary", () => {
+    expect(optionalUuid("", "Parent department")).toBeNull();
+    expect(optionalUuid("   ", "Department head")).toBeNull();
+    expect(optionalUuid(undefined, "Parent department")).toBeNull();
+    expect(optionalUuid(null, "Department head")).toBeNull();
+    expect(optionalUuid(UUIDS.employee, "Department head")).toBe(UUIDS.employee);
+    expect(() => optionalUuid("not-a-uuid", "Parent department")).toThrow(
+      /Parent department must be a valid UUID/,
+    );
   });
 
   it("rejects cross-property records", () => {

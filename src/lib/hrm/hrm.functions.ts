@@ -10,6 +10,7 @@ import {
   employeeDocumentStoragePath,
   employeeProfileCompleteness,
   normalizeHrmCode,
+  optionalUuid,
   safeStorageSegment,
   validateEmployeeDates,
   validateEmployeeDocument,
@@ -273,6 +274,8 @@ export const saveDepartment = createServerFn({ method: "POST" })
         ...data,
         name: validateRequiredText(data.name, "Department name", 120),
         code: normalizeHrmCode(validateRequiredText(data.code, "Department code", 40)),
+        parentDepartmentId: optionalUuid(data.parentDepartmentId, "Parent department"),
+        departmentHeadId: optionalUuid(data.departmentHeadId, "Department head"),
       };
     },
   )
