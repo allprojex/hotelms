@@ -407,6 +407,94 @@ describe("Phase AR/AP-1: AR receive-payment UI", () => {
   });
 });
 
+describe("AR receipt PDF/print", () => {
+  const receiptBranch = pdfFns.match(/data\.kind === "receipt"\) \{[\s\S]*?\n {4}\} else \{/)?.[0];
+
+  it("locates the receipt branch in renderAdminPdf", () => {
+    expect(receiptBranch).toBeDefined();
+  });
+
+  it("accepts 'receipt' as a valid PDF kind", () => {
+    expect(pdfFns).toContain('z.enum(["folio", "bill", "invoice", "po", "receipt"])');
+  });
+
+  it("loads the receipt from ar_receipts scoped to the property, not any receipt by id alone", () => {
+    expect(receiptBranch).toContain('.from("ar_receipts")');
+    expect(receiptBranch).toContain('.eq("id", data.id).eq("property_id", data.propertyId)');
+    expect(receiptBranch).toContain("Receipt not found for this property");
+  });
+
+  it("avoids the ar_receipt_allocations/ar_invoices PostgREST embed ambiguity by using flat queries and a client-side join", () => {
+    // ar_receipt_allocations has both a plain invoice_id FK and a composite
+    // (property_id, invoice_id) FK to ar_invoices — the same duplicate-FK
+    // shape already fixed for HRM in 20260803160000_hrm_fk_ambiguity_fix.sql
+    // ("Could not embed because more than one relationship was found").
+    // A bare embed like invoice:ar_invoices(...) would break at runtime.
+    expect(receiptBranch).toContain('.from("ar_receipt_allocations").select("invoice_id,amount")');
+    expect(receiptBranch).toContain('.from("ar_invoices")');
+    expect(pdfFns).not.toContain("ar_invoices(");
+  });
+
+  it("uses only real ar_receipts columns — code, receipt_date, amount, currency, method, reference, notes", () => {
+    const arReceiptsTable = migration.match(/CREATE TABLE public\.ar_receipts \([\s\S]*?\n\);/)?.[0] ?? "";
+    for (const field of ["code", "receipt_date", "amount", "currency", "method", "reference", "notes"]) {
+      expect(arReceiptsTable).toContain(field);
+      expect(receiptBranch).toContain(`anyRec.${field}`);
+    }
+  });
+
+  it("derives the PDF total from the receipt's own stored amount, not a client-side recomputation", () => {
+    expect(receiptBranch).toContain("total: Number(anyRec.amount)");
+  });
+
+  it("uses a receipt-{code}.pdf filename, matching the existing kind-code naming convention", () => {
+    expect(receiptBranch).toContain("filename: `receipt-${anyRec.code}.pdf`");
+  });
+
+  it("never writes to accounting tables while rendering — no insert/update/delete and no RPC in the receipt branch", () => {
+    expect(receiptBranch).not.toMatch(/\.insert\(|\.update\(|\.delete\(|\.rpc\(/);
+  });
+
+  it("logs the print under the ar_receipt entity type, matching post_ar_receipt's own audit convention, not the bare 'receipt' kind literal", () => {
+    expect(pdfFns).toContain('receipt: "ar_receipt"');
+    expect(pdfFns).toContain("ENTITY_TYPE_BY_KIND[data.kind]");
+  });
+
+  it("logs the print only after PDF generation succeeds, for the receipt kind same as every other kind", () => {
+    expect(pdfFns.indexOf("await buildDocPdf(doc)")).toBeLessThan(
+      pdfFns.indexOf("await logPrint(context"),
+    );
+  });
+
+  it("records the print through the authorized admin_log RPC and checks its result", () => {
+    expect(pdfFns).toContain('context.supabase.rpc("admin_log"');
+    expect(pdfFns).toContain("Failed to record print audit");
+    expect(pdfFns).not.toContain('from("admin_action_logs").insert');
+  });
+
+  it("wires the AR page's Print receipt action through the same server function and browser-activation-safe helper as the other kinds", () => {
+    expect(arPage).toContain('import { renderAdminPdf } from "@/lib/admin/pdf.functions"');
+    expect(arPage).toContain('import { downloadServerPdf } from "@/lib/admin/pdf-docs"');
+    expect(arPage).toContain("useServerFn(renderAdminPdf)");
+    expect(arPage).toContain('downloadServerPdf(renderPdf, "receipt"');
+  });
+
+  it("only offers printing for an existing, already-posted receipt — no create/repost/reallocate path in the print action", () => {
+    const printReceiptFn = arPage.match(/async function printReceipt\([\s\S]*?\n {2}\}/)?.[0];
+    expect(printReceiptFn).toBeDefined();
+    expect(printReceiptFn).not.toMatch(/createReceiptFn|post_ar_receipt|\.insert\(|\.update\(/);
+  });
+
+  it("lists existing receipts on the AR page so a historical receipt can actually be reached for printing", () => {
+    expect(arPage).toContain('queryKey: ["ar-receipts", propertyId]');
+    expect(arPage).toContain('.from("ar_receipts")');
+  });
+
+  it("refreshes the receipts list after a new receipt is posted", () => {
+    expect(arPage).toContain('qc.invalidateQueries({ queryKey: ["ar-receipts", propertyId] });');
+  });
+});
+
 describe("Phase AR/AP-1: production preflight", () => {
   it("is read-only — contains no INSERT/UPDATE/DELETE/DDL statements", () => {
     const withoutComments = preflight.replace(/--.*$/gm, "");

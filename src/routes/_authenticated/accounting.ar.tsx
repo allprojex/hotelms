@@ -4,6 +4,8 @@ import { useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
 import { createArReceipt } from "@/lib/accounting/ar-receipts.functions";
+import { renderAdminPdf } from "@/lib/admin/pdf.functions";
+import { downloadServerPdf } from "@/lib/admin/pdf-docs";
 import { useActiveProperty } from "@/hooks/use-active-property";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -14,7 +16,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Plus, Trash2, FileText, Send, DollarSign } from "lucide-react";
+import { Plus, Trash2, FileText, Send, DollarSign, Receipt as ReceiptIcon } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { AccountingWorkspaceShell } from "@/components/accounting/accounting-workspace-nav";
@@ -36,6 +38,7 @@ function ARPage() {
   const propertyId = useActiveProperty();
   const qc = useQueryClient();
   const createReceiptFn = useServerFn(createArReceipt);
+  const renderPdf = useServerFn(renderAdminPdf);
   const [open, setOpen] = useState(false);
   const [payOpen, setPayOpen] = useState(false);
   const [payMethod, setPayMethod] = useState<"cash" | "card" | "bank_transfer">("bank_transfer");
@@ -70,6 +73,25 @@ function ARPage() {
     },
     enabled: !!propertyId,
   });
+
+  const receipts = useQuery({
+    queryKey: ["ar-receipts", propertyId],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any).from("ar_receipts").select("*")
+        .eq("property_id", propertyId!).order("receipt_date", { ascending: false }).limit(200);
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: !!propertyId,
+  });
+
+  async function printReceipt(id: string) {
+    try {
+      await downloadServerPdf(renderPdf, "receipt", id, propertyId!);
+    } catch (e: any) {
+      toast.error(e?.message ?? "Failed to render receipt");
+    }
+  }
 
   const create = useMutation({
     mutationFn: async () => {
@@ -168,6 +190,7 @@ function ARPage() {
       setPayAllocations({});
       qc.invalidateQueries({ queryKey: ["ar-invoices", propertyId] });
       qc.invalidateQueries({ queryKey: ["ar-aging", propertyId] });
+      qc.invalidateQueries({ queryKey: ["ar-receipts", propertyId] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -256,6 +279,28 @@ function ARPage() {
             </div>
           ))}
           {(invoices.data ?? []).length === 0 && <div className="p-6 text-center text-sm text-muted-foreground">No invoices yet.</div>}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="py-3"><CardTitle className="text-sm">Receipts</CardTitle></CardHeader>
+        <CardContent className="p-0">
+          {(receipts.data ?? []).map((r: any) => (
+            <div key={r.id} className="flex items-center justify-between px-4 py-2 border-b last:border-0 hover:bg-muted/30">
+              <div className="flex items-center gap-3 min-w-0">
+                <span className="font-mono text-xs text-muted-foreground w-24">{r.code}</span>
+                <span className="text-xs text-muted-foreground">{r.receipt_date}</span>
+                <Badge variant="outline" className="text-[10px] uppercase">{r.method}</Badge>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="font-mono text-sm">{fmt(Number(r.amount), r.currency)}</span>
+                <Button size="sm" variant="ghost" className="h-7" title="Print receipt" onClick={() => printReceipt(r.id)}>
+                  <ReceiptIcon className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            </div>
+          ))}
+          {(receipts.data ?? []).length === 0 && <div className="p-6 text-center text-sm text-muted-foreground">No receipts yet.</div>}
         </CardContent>
       </Card>
 
