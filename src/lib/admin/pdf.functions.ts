@@ -14,15 +14,24 @@ async function assertAdmin(context: any, propertyId: string) {
   if (!data) throw new Error("Not authorized to print documents for this property");
 }
 
-async function logPrint(context: any, propertyId: string, entityType: string, entityId: string, code: string | null) {
-  await context.supabase.from("admin_action_logs").insert({
-    property_id: propertyId,
-    actor_id: context.userId,
-    entity_type: entityType,
-    entity_id: entityId,
-    action: "print",
-    after_snapshot: { code },
+async function logPrint(
+  context: any,
+  propertyId: string,
+  entityType: string,
+  entityId: string,
+  code: string | null,
+) {
+  const { data, error } = await context.supabase.rpc("admin_log", {
+    _property_id: propertyId,
+    _entity_type: entityType,
+    _entity_id: entityId,
+    _action: "print",
+    _before: null,
+    _after: { code },
+    _memo: null,
   });
+  if (error) throw new Error(`Failed to record print audit: ${error.message}`);
+  if (!data) throw new Error("Failed to record print audit");
 }
 
 const Input = z.object({

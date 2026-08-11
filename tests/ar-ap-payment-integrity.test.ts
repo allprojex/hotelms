@@ -374,6 +374,12 @@ describe("Phase AR/AP-1: AR invoice PDF regression", () => {
       pdfFns.indexOf("await logPrint(context"),
     );
   });
+
+  it("records the print through the authorized audit RPC and checks its result", () => {
+    expect(pdfFns).toContain('context.supabase.rpc("admin_log"');
+    expect(pdfFns).toContain("Failed to record print audit");
+    expect(pdfFns).not.toContain('from("admin_action_logs").insert');
+  });
 });
 
 describe("Phase AR/AP-1: AR receive-payment UI", () => {
