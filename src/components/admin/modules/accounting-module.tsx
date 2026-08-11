@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useServerFn } from "@tanstack/react-start";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Pencil, Boxes, Percent, Settings2, TrendingUp, FileText, Truck, Receipt } from "lucide-react";
@@ -7,6 +8,7 @@ import { DeleteConfirm } from "@/components/admin/delete-confirm";
 import { FieldForm } from "@/components/admin/field-form";
 import { useEntityCrud } from "@/lib/admin/use-entity-crud";
 import { downloadServerPdf } from "@/lib/admin/pdf-docs";
+import { renderAdminPdf } from "@/lib/admin/pdf.functions";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
@@ -192,15 +194,8 @@ function FxRatesSection({ propertyId }: { propertyId: string }) {
   );
 }
 
-async function printBill(billId: string, propertyId: string) {
-  try {
-    await downloadServerPdf("bill", billId, propertyId);
-  } catch (e: any) {
-    toast.error(e?.message ?? "Failed to render bill");
-  }
-}
-
 function ApBillsSection({ propertyId }: { propertyId: string }) {
+  const renderPdf = useServerFn(renderAdminPdf);
   const { list, remove } = useEntityCrud<any>({
     table: "ap_bills", queryKey: ["admin", "ap_bills", propertyId],
     filter: (q) => q.eq("property_id", propertyId), order: { column: "bill_date", ascending: false }, label: "Bill",
@@ -215,22 +210,21 @@ function ApBillsSection({ propertyId }: { propertyId: string }) {
         { label: "Status", cell: (r) => <Badge variant="outline">{r.status}</Badge>, printValue: (r) => r.status },
       ]}
       rowActions={(r) => <>
-        <Button size="sm" variant="ghost" title="Print bill" onClick={() => printBill(r.id, propertyId)}><Receipt className="h-3.5 w-3.5" /></Button>
+        <Button size="sm" variant="ghost" title="Print bill" onClick={async () => {
+          try {
+            await downloadServerPdf(renderPdf, "bill", r.id, propertyId);
+          } catch (e: any) {
+            toast.error(e?.message ?? "Failed to render bill");
+          }
+        }}><Receipt className="h-3.5 w-3.5" /></Button>
         <DeleteConfirm title={`Delete bill ${r.code}?`} description="Only allowed if not posted." onConfirm={() => remove.mutateAsync(r.id)} />
       </>}
     />
   );
 }
 
-async function printInvoice(invId: string, propertyId: string) {
-  try {
-    await downloadServerPdf("invoice", invId, propertyId);
-  } catch (e: any) {
-    toast.error(e?.message ?? "Failed to render invoice");
-  }
-}
-
 function ArInvoicesSection({ propertyId }: { propertyId: string }) {
+  const renderPdf = useServerFn(renderAdminPdf);
   const { list, remove } = useEntityCrud<any>({
     table: "ar_invoices", queryKey: ["admin", "ar_invoices", propertyId],
     filter: (q) => q.eq("property_id", propertyId), order: { column: "issue_date", ascending: false }, label: "Invoice",
@@ -246,7 +240,13 @@ function ArInvoicesSection({ propertyId }: { propertyId: string }) {
         { label: "Status", cell: (r) => <Badge variant="outline">{r.status}</Badge>, printValue: (r) => r.status },
       ]}
       rowActions={(r) => <>
-        <Button size="sm" variant="ghost" title="Print invoice" onClick={() => printInvoice(r.id, propertyId)}><Receipt className="h-3.5 w-3.5" /></Button>
+        <Button size="sm" variant="ghost" title="Print invoice" onClick={async () => {
+          try {
+            await downloadServerPdf(renderPdf, "invoice", r.id, propertyId);
+          } catch (e: any) {
+            toast.error(e?.message ?? "Failed to render invoice");
+          }
+        }}><Receipt className="h-3.5 w-3.5" /></Button>
         <DeleteConfirm onConfirm={() => remove.mutateAsync(r.id)} />
       </>}
     />
