@@ -34,13 +34,30 @@ async function logPrint(
   if (!data) throw new Error("Failed to record print audit");
 }
 
-const Input = z.object({
-  kind: z.enum(["folio", "bill", "invoice", "po"]),
+// Exported so tests can validate the accepted PDF kinds directly against
+// this schema rather than only asserting on source text.
+export const RenderAdminPdfInput = z.object({
+  kind: z.enum(["folio", "bill", "invoice", "po", "receipt"]),
   id: z.string().uuid(),
   propertyId: z.string().uuid(),
 });
+const Input = RenderAdminPdfInput;
 
-/** Render a folio, AP bill, AR invoice, or purchase order to PDF entirely on the server. */
+// The audit entity_type recorded for each PDF kind. Defaults to the kind
+// literal itself (matches every existing kind's own table/concept name);
+// "receipt" is the one exception, since "receipt" alone is already used
+// elsewhere in this codebase for expense receipts (uploaded images), so the
+// AR receipt print is logged under the same "ar_receipt" entity type
+// already established by post_ar_receipt's audit event.
+const ENTITY_TYPE_BY_KIND: Record<z.infer<typeof Input>["kind"], string> = {
+  folio: "folio",
+  bill: "bill",
+  invoice: "invoice",
+  po: "po",
+  receipt: "ar_receipt",
+};
+
+/** Render a folio, AP bill, AR invoice, AR receipt, or purchase order to PDF entirely on the server. */
 export const renderAdminPdf = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((d: unknown) => Input.parse(d))
@@ -168,6 +185,59 @@ export const renderAdminPdf = createServerFn({ method: "POST" })
         total: Number(anyI.total ?? 0),
         currency: anyI.currency ?? "GHS",
       };
+    } else if (data.kind === "receipt") {
+      // ar_receipt_allocations has both a plain invoice_id FK and a
+      // composite (property_id, invoice_id) FK to ar_invoices, so a bare
+      // PostgREST embed here would be ambiguous (the same class of issue
+      // fixed for HRM in 20260803160000_hrm_fk_ambiguity_fix.sql). Load
+      // allocations and their invoices as two flat queries instead and
+      // join client-side.
+      const [{ data: rec, error: recErr }, { data: p }, { data: allocs }] = await Promise.all([
+        (supabase as any).from("ar_receipts").select("*").eq("id", data.id).eq("property_id", data.propertyId).maybeSingle(),
+        supabase.from("properties").select("name,address,phone,email").eq("id", data.propertyId).maybeSingle(),
+        (supabase as any).from("ar_receipt_allocations").select("invoice_id,amount").eq("receipt_id", data.id).eq("property_id", data.propertyId),
+      ]);
+      if (recErr) throw new Error(recErr.message);
+      if (!rec) throw new Error("Receipt not found for this property");
+      const anyRec = rec as any;
+      const anyP = p as any;
+      const allocRows = (allocs as any[] ?? []);
+      const invoiceIds = [...new Set(allocRows.map((a) => a.invoice_id))];
+      let invoicesById = new Map<string, any>();
+      if (invoiceIds.length > 0) {
+        const { data: invs } = await supabase
+          .from("ar_invoices")
+          .select("id,code,bill_to_name,bill_to_email")
+          .in("id", invoiceIds)
+          .eq("property_id", data.propertyId);
+        invoicesById = new Map((invs as any[] ?? []).map((inv: any) => [inv.id, inv]));
+      }
+      const customerNames = [...new Set(
+        allocRows.map((a) => invoicesById.get(a.invoice_id)?.bill_to_name).filter(Boolean),
+      )];
+      const customerEmails = [...new Set(
+        allocRows.map((a) => invoicesById.get(a.invoice_id)?.bill_to_email).filter(Boolean),
+      )];
+      entityCode = anyRec.code;
+      doc = {
+        filename: `receipt-${anyRec.code}.pdf`,
+        title: "Receipt",
+        code: anyRec.code,
+        fromBlock: [anyP?.name, anyP?.address, anyP?.phone, anyP?.email].filter(Boolean),
+        toBlock: [customerNames.join(", ") || "Customer", ...customerEmails].filter(Boolean),
+        meta: [
+          { label: "Receipt date", value: anyRec.receipt_date },
+          { label: "Method", value: anyRec.method },
+          { label: "Reference", value: anyRec.reference ?? "—" },
+        ],
+        lines: allocRows.map((a) => ({
+          description: `Applied to invoice ${invoicesById.get(a.invoice_id)?.code ?? a.invoice_id}`,
+          amount: Number(a.amount),
+        })),
+        total: Number(anyRec.amount),
+        currency: anyRec.currency ?? "GHS",
+        notes: anyRec.notes ?? undefined,
+      };
     } else {
       // po
       const [{ data: po, error: pErr }, { data: p }, { data: lines }] = await Promise.all([
@@ -210,7 +280,7 @@ export const renderAdminPdf = createServerFn({ method: "POST" })
 
     const bytes = await buildDocPdf(doc);
     const base64 = toBase64(bytes);
-    await logPrint(context, data.propertyId, data.kind, data.id, entityCode);
+    await logPrint(context, data.propertyId, ENTITY_TYPE_BY_KIND[data.kind], data.id, entityCode);
 
     return {
       filename: doc.filename,

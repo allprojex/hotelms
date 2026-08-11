@@ -1,4 +1,4 @@
-export type AdminPdfKind = "folio" | "bill" | "invoice" | "po";
+export type AdminPdfKind = "folio" | "bill" | "invoice" | "po" | "receipt";
 
 export interface AdminPdfResult {
   filename: string;
