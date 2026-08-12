@@ -2055,6 +2055,9 @@ export type Database = {
           cost: number
           created_at: string
           id: string
+          image_path: string | null
+          image_source: string | null
+          image_updated_at: string | null
           name: string
           property_id: string
           reorder_level: number
@@ -2069,6 +2072,9 @@ export type Database = {
           cost?: number
           created_at?: string
           id?: string
+          image_path?: string | null
+          image_source?: string | null
+          image_updated_at?: string | null
           name: string
           property_id: string
           reorder_level?: number
@@ -2083,6 +2089,9 @@ export type Database = {
           cost?: number
           created_at?: string
           id?: string
+          image_path?: string | null
+          image_source?: string | null
+          image_updated_at?: string | null
           name?: string
           property_id?: string
           reorder_level?: number
