@@ -43,6 +43,21 @@ export function productImageStoragePath(input: {
   return `${input.propertyId}/inventory-items/${input.itemId}/${input.imageId}-${safeStorageSegment(input.fileName)}`;
 }
 
+const PRODUCT_IMAGE_PATH_RE =
+  /^([0-9a-f]{8}-[0-9a-f-]{27})\/inventory-items\/([0-9a-f]{8}-[0-9a-f-]{27})\/[^/]+$/i;
+
+/**
+ * Confirms a storage path is actually shaped like one this feature would
+ * have generated, under the given property — not just prefix-matching text.
+ * Used before every read/apply/delete of a client-supplied storage path.
+ */
+export function assertProductImageNamespace(storagePath: string, propertyId: string): void {
+  const match = PRODUCT_IMAGE_PATH_RE.exec(storagePath);
+  if (!match || match[1].toLowerCase() !== propertyId.toLowerCase()) {
+    throw new Error("Invalid image reference");
+  }
+}
+
 export const PRODUCT_IMAGE_BACKGROUNDS = ["studio", "transparent", "lifestyle"] as const;
 export type ProductImageBackground = (typeof PRODUCT_IMAGE_BACKGROUNDS)[number];
 

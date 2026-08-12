@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -6,7 +6,11 @@ import { Pencil, Package, Tag, Truck, MapPin, Receipt } from "lucide-react";
 import { CrudTable } from "@/components/admin/crud-table";
 import { DeleteConfirm } from "@/components/admin/delete-confirm";
 import { FieldForm } from "@/components/admin/field-form";
-import { ProductImageField, type ProductImageSelection } from "@/components/inventory/product-image-field";
+import {
+  ProductImageField,
+  type ProductImageFieldHandle,
+  type ProductImageSelection,
+} from "@/components/inventory/product-image-field";
 import { useEntityCrud } from "@/lib/admin/use-entity-crud";
 import { downloadServerPdf } from "@/lib/admin/pdf-docs";
 import { renderAdminPdf } from "@/lib/admin/pdf.functions";
@@ -66,6 +70,7 @@ function ItemCategoriesSection({ propertyId }: { propertyId: string }) {
 function ItemsSection({ propertyId }: { propertyId: string }) {
   const [open, setOpen] = useState(false); const [editing, setEditing] = useState<any | null>(null);
   const [imageSelection, setImageSelection] = useState<ProductImageSelection>(null);
+  const imageFieldRef = useRef<ProductImageFieldHandle>(null);
   const { list: cats } = useEntityCrud<any>({
     table: "item_categories", queryKey: ["admin", "item_categories", propertyId],
     filter: (q) => q.eq("property_id", propertyId), order: { column: "name" },
@@ -95,6 +100,9 @@ function ItemsSection({ propertyId }: { propertyId: string }) {
     }
     if (editing) await update.mutateAsync({ id: editing.id, values: payload });
     else await create.mutateAsync(payload);
+    // Save succeeded: retain the selected image, clean up only a dangling
+    // AI preview that was generated but never applied via Use Image.
+    imageFieldRef.current?.cleanupUnsaved(imageSelection?.path ?? editing?.image_path ?? null);
     setOpen(false); setEditing(null); setImageSelection(null);
   };
   return (
@@ -117,7 +125,15 @@ function ItemsSection({ propertyId }: { propertyId: string }) {
       />
       <FieldForm
         open={open}
-        onOpenChange={(v) => { setOpen(v); if (!v) setImageSelection(null); }}
+        onOpenChange={(v) => {
+          if (!v) {
+            // Dialog dismissed without saving (Cancel/Escape/overlay click):
+            // drop any unsaved temp image, but never the pre-existing saved one.
+            imageFieldRef.current?.cleanupUnsaved(editing?.image_path ?? null);
+            setImageSelection(null);
+          }
+          setOpen(v);
+        }}
         title={editing ? "Edit item" : "New item"}
         fields={fields}
         initial={editing ?? { is_active: true, unit: "ea" }}
@@ -125,6 +141,7 @@ function ItemsSection({ propertyId }: { propertyId: string }) {
         submitting={create.isPending || update.isPending}
         extra={
           <ProductImageField
+            ref={imageFieldRef}
             key={open ? (editing?.id ?? "new") : "closed"}
             propertyId={propertyId}
             itemId={editing?.id ?? null}

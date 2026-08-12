@@ -66,3 +66,16 @@ USING (
   bucket_id = 'product-images'
   AND public.has_permission(auth.uid(), ((storage.foldername(name))[1])::uuid, 'product_images', 'read')
 );
+
+-- Deleting a temporary (never-saved) generated/uploaded image requires the
+-- same permission as creating one — deletion here is just cleanup of your
+-- own draft work, not a distinct capability. The application layer (see
+-- deleteProductImage in product-images.functions.ts) additionally refuses to
+-- delete a path that is currently referenced by any inventory_items row, so
+-- this policy intentionally does not need to be narrower than INSERT.
+CREATE POLICY product_images_storage_delete ON storage.objects
+FOR DELETE TO authenticated
+USING (
+  bucket_id = 'product-images'
+  AND public.has_permission(auth.uid(), ((storage.foldername(name))[1])::uuid, 'product_images', 'create')
+);

@@ -112,13 +112,13 @@ describe("AI product image permission model", () => {
     );
   });
 
-  it("uses the same permission (product_images.create) for upload, generation, and applying the generated image", () => {
-    // All three call sites share one assertProductManagePermission() helper,
+  it("uses the same permission (product_images.create) for upload, generation, applying, and deleting a temporary image", () => {
+    // All four call sites share one assertProductManagePermission() helper,
     // which is itself defined in terms of PRODUCT_IMAGE_PERMISSIONS.imagesCreate —
-    // a single source of truth rather than three independent checks that could drift.
+    // a single source of truth rather than independent checks that could drift.
     expect(productImagesFns).toContain("...PRODUCT_IMAGE_PERMISSIONS.imagesCreate");
     const usages = productImagesFns.match(/await assertProductManagePermission\(context, data\.propertyId\)/g) ?? [];
-    expect(usages.length).toBeGreaterThanOrEqual(3);
+    expect(usages.length).toBeGreaterThanOrEqual(4);
   });
 });
 
@@ -131,6 +131,7 @@ describe("server-side permission enforcement (independent of UI)", () => {
       "generateProductImage",
       "applyProductImage",
       "getProductImageUrl",
+      "deleteProductImage",
     ]) {
       const start = productImagesFns.indexOf(`export const ${fnName}`);
       expect(start, `${fnName} not found`).toBeGreaterThanOrEqual(0);
@@ -151,7 +152,7 @@ describe("server-side permission enforcement (independent of UI)", () => {
     expect(permissionIdx).toBeLessThan(uploadIdx);
   });
 
-  it("16. rejects generation/upload against a product id that does not belong to the given property, instead of trusting the client", () => {
+  it("16. rejects generation/upload against a product id that does not belong to the given property, instead of trusting the client — with the correct not-found error still reachable for an authorized caller", () => {
     expect(productImagesFns).toContain("assertProductImageOwnership");
     expect(productImagesFns).toContain("Product not found");
     expect(productImagesFns).toContain("item.property_id !== propertyId");
@@ -159,7 +160,50 @@ describe("server-side permission enforcement (independent of UI)", () => {
 
   it("uses the request-scoped authenticated Supabase client (RLS as the caller), matching requireSupabaseAuth everywhere else", () => {
     expect(productImagesFns).toContain('import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware"');
-    expect((productImagesFns.match(/\.middleware\(\[requireSupabaseAuth\]\)/g) ?? []).length).toBe(4);
+    expect((productImagesFns.match(/\.middleware\(\[requireSupabaseAuth\]\)/g) ?? []).length).toBe(5);
+  });
+});
+
+// ============ AUTHORIZATION ORDER (generateProductImage) ============
+
+describe("authorization order in generateProductImage", () => {
+  const start = productImagesFns.indexOf("export const generateProductImage");
+  const body = productImagesFns.slice(start, productImagesFns.indexOf("export const applyProductImage"));
+
+  it("13. authentication happens first — requireSupabaseAuth middleware runs before the handler body at all", () => {
+    const middlewareIdx = body.indexOf(".middleware([requireSupabaseAuth])");
+    const handlerIdx = body.indexOf(".handler(");
+    expect(middlewareIdx).toBeGreaterThanOrEqual(0);
+    expect(middlewareIdx).toBeLessThan(handlerIdx);
+  });
+
+  it("14. permission assertion happens before the product ownership/existence lookup", () => {
+    const permissionIdx = body.indexOf("assertProductManagePermission");
+    const ownershipIdx = body.indexOf("assertProductImageOwnership");
+    expect(permissionIdx).toBeGreaterThanOrEqual(0);
+    expect(ownershipIdx).toBeGreaterThan(permissionIdx);
+  });
+
+  it("15. an unauthorized caller cannot learn product existence through differing errors — the ownership lookup (and its distinct 'Product not found' error) is only reachable after the permission check has already passed", () => {
+    const permissionIdx = body.indexOf("await assertProductManagePermission(context, data.propertyId);");
+    const ownershipCallIdx = body.indexOf("await assertProductImageOwnership(context, data.itemId, data.propertyId);");
+    expect(permissionIdx).toBeGreaterThanOrEqual(0);
+    expect(ownershipCallIdx).toBeGreaterThan(permissionIdx);
+  });
+
+  it("16b. an authorized caller still receives the correct not-found error for a bad/foreign item id — ownership validation was reordered, not removed", () => {
+    expect(body).toContain("if (data.itemId) {");
+    expect(body).toContain("assertProductImageOwnership(context, data.itemId, data.propertyId)");
+  });
+
+  it("17. OpenAI is never called before permission passes, and the rate limit check also runs pre-ownership-lookup", () => {
+    const permissionIdx = body.indexOf("assertProductManagePermission");
+    const rateLimitIdx = body.indexOf("checkGenerationRateLimit");
+    const ownershipIdx = body.indexOf("assertProductImageOwnership");
+    const openAiIdx = body.indexOf("generateProductImageBytes(");
+    expect(permissionIdx).toBeLessThan(rateLimitIdx);
+    expect(rateLimitIdx).toBeLessThan(ownershipIdx);
+    expect(ownershipIdx).toBeLessThan(openAiIdx);
   });
 });
 
@@ -314,6 +358,124 @@ describe("storage integration", () => {
   it("storage RLS is property-scoped via the first path segment and reuses has_permission, not a bespoke check", () => {
     expect(migration).toContain("((storage.foldername(name))[1])::uuid, 'product_images', 'create'");
     expect(migration).toContain("((storage.foldername(name))[1])::uuid, 'product_images', 'read'");
+  });
+});
+
+// ============ TEMPORARY IMAGE CLEANUP ============
+
+describe("temporary image cleanup", () => {
+  it("1. a DELETE storage policy exists for the product-images bucket", () => {
+    expect(migration).toContain("CREATE POLICY product_images_storage_delete ON storage.objects");
+    expect(migration).toMatch(/product_images_storage_delete[\s\S]*?FOR DELETE TO authenticated/);
+  });
+
+  it("2. anonymous delete is blocked — the DELETE policy is authenticated-only, same as insert/read", () => {
+    const deletePolicy = migration.match(/CREATE POLICY product_images_storage_delete[\s\S]*?;/)?.[0];
+    expect(deletePolicy).toBeDefined();
+    expect(deletePolicy).toContain("FOR DELETE TO authenticated");
+    expect(deletePolicy).not.toMatch(/\banon\b/);
+  });
+
+  it("3/4. unauthorized and cross-property delete are blocked the same way as insert — both gated by has_permission('product_images','create') scoped to the path's own property segment", () => {
+    const deletePolicy = migration.match(/CREATE POLICY product_images_storage_delete[\s\S]*?;/)?.[0]!;
+    const insertPolicy = migration.match(/CREATE POLICY product_images_storage_insert[\s\S]*?;/)?.[0]!;
+    const deletePermCall = deletePolicy.match(/has_permission\([^)]*\)/)?.[0];
+    const insertPermCall = insertPolicy.match(/has_permission\([^)]*\)/)?.[0];
+    expect(deletePermCall).toBe(insertPermCall);
+    expect(deletePolicy).toContain("((storage.foldername(name))[1])::uuid");
+  });
+
+  it("does not grant a broad bucket-wide delete — the policy still requires bucket_id = 'product-images' AND a permission check, not a bare USING (true)", () => {
+    const deletePolicy = migration.match(/CREATE POLICY product_images_storage_delete[\s\S]*?;/)?.[0]!;
+    expect(deletePolicy).toContain("bucket_id = 'product-images'");
+    expect(deletePolicy).not.toMatch(/USING\s*\(\s*true\s*\)/);
+  });
+
+  it("5. the server-side deleteProductImage function checks permission, validates the path is actually in the product-images namespace for that property, and refuses to remove a path currently referenced by a product", () => {
+    const start = productImagesFns.indexOf("export const deleteProductImage");
+    expect(start).toBeGreaterThanOrEqual(0);
+    const body = productImagesFns.slice(start);
+    expect(body).toContain("assertProductManagePermission(context, data.propertyId)");
+    expect(body).toContain("assertProductImageNamespace(data.storagePath, data.propertyId)");
+    expect(body).toContain('.eq("image_path", data.storagePath)');
+    expect(body).toContain("currently in use by a product");
+    expect(body).toContain(".storage\n      .from(PRODUCT_IMAGES_BUCKET)\n      .remove(");
+  });
+
+  it("does not expose raw Storage delete capability to the browser — the client never calls supabase.storage....remove() directly, only the server function", () => {
+    expect(imageField).not.toMatch(/supabase\.storage[\s\S]{0,40}\.remove\(/);
+    expect(imageField).toContain("deleteFn");
+    expect(imageField).toContain("deleteProductImage");
+  });
+
+  it("6. Regenerate deletes the previous temporary image, but only after the new generation has already succeeded", () => {
+    const handleGenerate = imageField.match(/async function handleGenerate\(\)[\s\S]*?\n {2}\}/)?.[0]!;
+    const setAiPreviewIdx = handleGenerate.indexOf("setAiPreview({");
+    const deleteIdx = handleGenerate.indexOf("if (previousAiPreviewPath) void deleteTempImage(previousAiPreviewPath);");
+    expect(setAiPreviewIdx).toBeGreaterThanOrEqual(0);
+    expect(deleteIdx).toBeGreaterThan(setAiPreviewIdx);
+    // the delete call must be inside the try block (before catch), i.e. only
+    // reached on the success path
+    const catchIdx = handleGenerate.indexOf("} catch");
+    expect(deleteIdx).toBeLessThan(catchIdx);
+  });
+
+  it("7. a failed Regenerate keeps the previous preview — the catch block never clears or replaces aiPreview, and never deletes the still-displayed previous preview", () => {
+    const handleGenerate = imageField.match(/async function handleGenerate\(\)[\s\S]*?\n {2}\}/)?.[0]!;
+    const catchBlock = handleGenerate.match(/\} catch[\s\S]*?\} finally/)?.[0]!;
+    expect(catchBlock).not.toContain("setAiPreview");
+    expect(catchBlock).not.toContain("deleteTempImage");
+  });
+
+  it("8. Cancel (handleCancelAi) deletes the pending unsaved temporary generated image", () => {
+    const handleCancelAi = imageField.match(/function handleCancelAi\(\)[\s\S]*?\n {2}\}/)?.[0]!;
+    expect(handleCancelAi).toContain("if (aiPreview) void deleteTempImage(aiPreview.path);");
+    const deleteIdx = handleCancelAi.indexOf("deleteTempImage(aiPreview.path)");
+    const clearIdx = handleCancelAi.indexOf("setAiPreview(null)");
+    expect(deleteIdx).toBeLessThan(clearIdx);
+  });
+
+  it("9. replacing an already-selected temporary upload/generation deletes the old temporary image, computed before it's overwritten and preserving the pre-existing saved image", () => {
+    const handleFileSelected = imageField.match(/async function handleFileSelected\([\s\S]*?\n {2}\}/)?.[0]!;
+    expect(handleFileSelected).toContain(
+      "const previousTempPath =\n        selected && selected.path !== initialImagePath ? selected.path : null;",
+    );
+    expect(handleFileSelected).toContain("if (previousTempPath) void deleteTempImage(previousTempPath);");
+    const handleUseImage = imageField.match(/async function handleUseImage\(\)[\s\S]*?\n {2}\}/)?.[0]!;
+    expect(handleUseImage).toContain(
+      "const previousTempPath =\n        selected && selected.path !== initialImagePath ? selected.path : null;",
+    );
+    expect(handleUseImage).toContain("if (previousTempPath) void deleteTempImage(previousTempPath);");
+  });
+
+  it("10. a successful Save retains the selected image — cleanupUnsaved is called with the saved path as keepPath, so it is never a deletion target", () => {
+    const itemsSection = inventoryModule.match(/function ItemsSection[\s\S]*?\n\}/)?.[0]!;
+    const submitFn = itemsSection.match(/const submit = async[\s\S]*?\n {2}\};/)?.[0]!;
+    expect(submitFn).toContain(
+      "imageFieldRef.current?.cleanupUnsaved(imageSelection?.path ?? editing?.image_path ?? null);",
+    );
+    // cleanupUnsaved itself never deletes a path equal to keepPath
+    const cleanupImpl = imageField.match(/cleanupUnsaved\(keepPath\)\s*\{[\s\S]*?\n {6}\},/)?.[0]!;
+    expect(cleanupImpl).toContain("selected.path !== keepPath");
+  });
+
+  it("11. cancelling the edit dialog never deletes the pre-existing saved product image — cleanupUnsaved's selected-branch also excludes initialImagePath unconditionally, independent of keepPath", () => {
+    const itemsSection = inventoryModule.match(/function ItemsSection[\s\S]*?\n\}/)?.[0]!;
+    expect(itemsSection).toContain("imageFieldRef.current?.cleanupUnsaved(editing?.image_path ?? null);");
+    const cleanupImpl = imageField.match(/cleanupUnsaved\(keepPath\)\s*\{[\s\S]*?\n {6}\},/)?.[0]!;
+    expect(cleanupImpl).toContain("selected.path !== initialImagePath");
+  });
+
+  it("12. a cleanup delete failure never breaks the product form — deleteTempImage swallows errors into a console warning instead of throwing or touching component state", () => {
+    const deleteTempImageFn = imageField.match(/async function deleteTempImage[\s\S]*?\n {2}\}/)?.[0]!;
+    expect(deleteTempImageFn).toContain("try {");
+    expect(deleteTempImageFn).toContain("} catch (err) {");
+    expect(deleteTempImageFn).toContain("console.warn(");
+    expect(deleteTempImageFn).not.toMatch(/throw|setSelected|setAiPreview|toast\.error/);
+  });
+
+  it("documents the residual limitation: a browser/tab close mid-flow (no clean unmount) can still leave an orphan, and this is intentionally not solved with background infrastructure", () => {
+    expect(imageField).toMatch(/Best-effort/);
   });
 });
 

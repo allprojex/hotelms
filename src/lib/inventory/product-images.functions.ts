@@ -11,6 +11,7 @@ import {
   validateProductImageFile,
   sanitizeProductImagePrompt,
   productImageStoragePath,
+  assertProductImageNamespace,
 } from "@/lib/inventory/domain";
 import { buildProductImagePrompt, generateProductImageBytes } from "@/lib/inventory/product-image-ai.server";
 
@@ -119,11 +120,14 @@ export const generateProductImage = createServerFn({ method: "POST" })
     }),
   )
   .handler(async ({ data, context }) => {
+    // Authorization before any product-specific data access: an unauthorized
+    // caller must get the same rejection whether or not itemId exists/belongs
+    // to this property, so existence/ownership is never leaked pre-auth.
+    await assertProductManagePermission(context, data.propertyId);
+    await checkGenerationRateLimit(context);
     if (data.itemId) {
       await assertProductImageOwnership(context, data.itemId, data.propertyId);
     }
-    await assertProductManagePermission(context, data.propertyId);
-    await checkGenerationRateLimit(context);
 
     const finalPrompt = buildProductImagePrompt({
       prompt: data.prompt,
@@ -186,9 +190,7 @@ export const applyProductImage = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }) => {
     await assertProductManagePermission(context, data.propertyId);
-    if (!data.storagePath.startsWith(`${data.propertyId}/`) || data.storagePath.includes("..")) {
-      throw new Error("Invalid image reference");
-    }
+    assertProductImageNamespace(data.storagePath, data.propertyId);
     // Audit only: this does not persist to inventory_items. The product form
     // still requires an explicit Save/Update through the normal product
     // workflow before the image is attached to the product record.
@@ -215,12 +217,46 @@ export const getProductImageUrl = createServerFn({ method: "POST" })
       ...PRODUCT_IMAGE_PERMISSIONS.imagesView,
       defaultRoles: PRODUCT_MANAGEMENT_ROLES,
     });
-    if (!data.storagePath.startsWith(`${data.propertyId}/`) || data.storagePath.includes("..")) {
-      throw new Error("Invalid image reference");
-    }
+    assertProductImageNamespace(data.storagePath, data.propertyId);
     const signed = await context.supabase.storage
       .from(PRODUCT_IMAGES_BUCKET)
       .createSignedUrl(data.storagePath, SIGNED_URL_TTL_SECONDS);
     if (signed.error) throw new Error(signed.error.message);
     return { url: signed.data.signedUrl as string };
+  });
+
+/**
+ * Deletes a temporary (never-saved) product image. Only ever called by the
+ * product form's own cleanup logic — the storage RLS DELETE policy and the
+ * "not currently in use" guard below both fail closed, so a direct call
+ * cannot remove an image a product actually references.
+ */
+export const deleteProductImage = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: { propertyId: string; storagePath: string }) => ({
+    propertyId: uuid(d.propertyId),
+    storagePath: String(d.storagePath ?? ""),
+  }))
+  .handler(async ({ data, context }) => {
+    await assertProductManagePermission(context, data.propertyId);
+    assertProductImageNamespace(data.storagePath, data.propertyId);
+
+    const inUse = await context.supabase
+      .from("inventory_items")
+      .select("id")
+      .eq("property_id", data.propertyId)
+      .eq("image_path", data.storagePath)
+      .maybeSingle();
+    if (inUse.error) throw new Error(inUse.error.message);
+    if (inUse.data) {
+      throw new Error("This image is currently in use by a product and cannot be removed here.");
+    }
+
+    const removed = await context.supabase.storage
+      .from(PRODUCT_IMAGES_BUCKET)
+      .remove([data.storagePath]);
+    if (removed.error) {
+      throw new Error("Could not remove the temporary image.");
+    }
+    return { ok: true };
   });

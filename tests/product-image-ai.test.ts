@@ -15,6 +15,7 @@ import {
 } from "@/lib/inventory/product-image-ai.server";
 import {
   MAX_PRODUCT_IMAGE_PROMPT_LENGTH,
+  assertProductImageNamespace,
   productImageStoragePath,
   sanitizeProductImagePrompt,
   uuid,
@@ -223,5 +224,43 @@ describe("product image domain validation", () => {
         fileName: "photo.png",
       }),
     ).toThrow();
+  });
+});
+
+describe("assertProductImageNamespace — used before every read/apply/delete of a client-supplied path", () => {
+  const OTHER_PROPERTY_ID = "00000000-0000-4000-8000-00000000000f";
+
+  it("accepts a well-formed path that actually belongs to the given property", () => {
+    const path = productImageStoragePath({
+      propertyId: PROPERTY_ID,
+      itemId: ITEM_ID,
+      imageId: "00000000-0000-4000-8000-0000000000c1",
+      fileName: "ai-generated.webp",
+    });
+    expect(() => assertProductImageNamespace(path, PROPERTY_ID)).not.toThrow();
+  });
+
+  it("rejects a path whose property segment does not match the claimed propertyId (cross-property attempt)", () => {
+    const path = productImageStoragePath({
+      propertyId: OTHER_PROPERTY_ID,
+      itemId: ITEM_ID,
+      imageId: "00000000-0000-4000-8000-0000000000c1",
+      fileName: "ai-generated.webp",
+    });
+    expect(() => assertProductImageNamespace(path, PROPERTY_ID)).toThrow("Invalid image reference");
+  });
+
+  it("rejects a path outside the inventory-items namespace entirely", () => {
+    expect(() => assertProductImageNamespace(`${PROPERTY_ID}/something-else/x`, PROPERTY_ID)).toThrow();
+  });
+
+  it("rejects a path traversal attempt disguised as a filename segment", () => {
+    expect(() =>
+      assertProductImageNamespace(`${PROPERTY_ID}/inventory-items/${ITEM_ID}/../../../etc/passwd`, PROPERTY_ID),
+    ).toThrow();
+  });
+
+  it("rejects a bare prefix match that isn't actually shaped like a real generated path", () => {
+    expect(() => assertProductImageNamespace(`${PROPERTY_ID}/evil`, PROPERTY_ID)).toThrow();
   });
 });

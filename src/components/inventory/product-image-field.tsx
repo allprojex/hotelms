@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { ImagePlus, Loader2, Sparkles, X } from "lucide-react";
@@ -13,11 +13,23 @@ import { PRODUCT_IMAGE_MIME_TYPES, MAX_PRODUCT_IMAGE_BYTES, type ProductImageBac
 import {
   applyProductImage,
   createProductImageUploadTicket,
+  deleteProductImage,
   generateProductImage,
   getProductImageUrl,
 } from "@/lib/inventory/product-images.functions";
 
 export type ProductImageSelection = { path: string; source: "upload" | "ai" } | null;
+
+export type ProductImageFieldHandle = {
+  /**
+   * Deletes any temporary (never-saved) images this session created — a
+   * pending AI preview, and/or an applied-but-unsaved selection — other than
+   * `keepPath`. The pre-existing saved image (initialImagePath) is never
+   * touched by this, regardless of `keepPath`. Best-effort: failures are
+   * logged, not thrown, so cleanup can never break the product form.
+   */
+  cleanupUnsaved: (keepPath?: string | null) => void;
+};
 
 interface Props {
   propertyId: string;
@@ -51,20 +63,15 @@ function buildDefaultPrompt(input: {
   return parts.join(", ") + ".";
 }
 
-export function ProductImageField({
-  propertyId,
-  itemId,
-  initialImagePath,
-  productName,
-  description,
-  category,
-  color,
-  onChange,
-}: Props) {
+export const ProductImageField = forwardRef<ProductImageFieldHandle, Props>(function ProductImageField(
+  { propertyId, itemId, initialImagePath, productName, description, category, color, onChange },
+  ref,
+) {
   const ticketFn = useServerFn(createProductImageUploadTicket);
   const generateFn = useServerFn(generateProductImage);
   const applyFn = useServerFn(applyProductImage);
   const previewUrlFn = useServerFn(getProductImageUrl);
+  const deleteFn = useServerFn(deleteProductImage);
 
   const { allowed: canManageImages, loading: permissionLoading } = usePermission({
     propertyId,
@@ -82,6 +89,34 @@ export function ProductImageField({
   const [generating, setGenerating] = useState(false);
   const [aiPreview, setAiPreview] = useState<{ path: string; previewUrl: string } | null>(null);
   const [applying, setApplying] = useState(false);
+
+  // Best-effort: an orphaned temp object left behind by a failed cleanup is a
+  // storage-cost nuisance, never a data-integrity or security problem (see
+  // the server-side "not currently in use" guard in deleteProductImage), so
+  // failures here must never surface as a form error.
+  async function deleteTempImage(storagePath: string) {
+    try {
+      await deleteFn({ data: { propertyId, storagePath } });
+    } catch (err) {
+      console.warn("[product-image] failed to clean up a temporary image", storagePath, err);
+    }
+  }
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      cleanupUnsaved(keepPath) {
+        if (aiPreview && aiPreview.path !== keepPath) {
+          void deleteTempImage(aiPreview.path);
+        }
+        if (selected && selected.path !== keepPath && selected.path !== initialImagePath) {
+          void deleteTempImage(selected.path);
+        }
+      },
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [aiPreview, selected, initialImagePath, propertyId],
+  );
 
   // Existing saved image (edit mode): resolve a signed preview URL once.
   useEffect(() => {
@@ -126,11 +161,19 @@ export function ProductImageField({
         .upload(ticket.storagePath, file, { contentType: file.type, upsert: false });
       if (stored.error) throw stored.error;
 
+      // Replacing an already-selected but still-unsaved image: the old one
+      // is now unreachable from the form, so clean it up once the new one
+      // is safely in place. The pre-existing saved image is never a target
+      // here — it can never be equal to a fresh, randomly-named temp path.
+      const previousTempPath =
+        selected && selected.path !== initialImagePath ? selected.path : null;
+
       const objectUrl = URL.createObjectURL(file);
       setSelected({ path: ticket.storagePath, source: "upload" });
       setPreviewUrl(objectUrl);
       onChange({ path: ticket.storagePath, source: "upload" });
       toast.success("Image uploaded — remember to save the product");
+      if (previousTempPath) void deleteTempImage(previousTempPath);
     } catch (err: any) {
       toast.error(err?.message ?? "Could not upload image");
     } finally {
@@ -140,6 +183,7 @@ export function ProductImageField({
 
   async function handleGenerate() {
     setGenerating(true);
+    const previousAiPreviewPath = aiPreview?.path ?? null;
     try {
       const result = await generateFn({
         data: {
@@ -154,6 +198,9 @@ export function ProductImageField({
         },
       });
       setAiPreview({ path: result.storagePath, previewUrl: result.previewUrl });
+      // Delete the previous preview only after the new one succeeded, so a
+      // failed regenerate always leaves the last good preview in place.
+      if (previousAiPreviewPath) void deleteTempImage(previousAiPreviewPath);
     } catch (err: any) {
       toast.error(err?.message ?? "This image could not be generated. Please adjust the description and try again.");
     } finally {
@@ -168,12 +215,16 @@ export function ProductImageField({
       await applyFn({
         data: { propertyId, itemId: itemId ?? undefined, storagePath: aiPreview.path, source: "ai" },
       });
+      const previousTempPath =
+        selected && selected.path !== initialImagePath ? selected.path : null;
+
       setSelected({ path: aiPreview.path, source: "ai" });
       setPreviewUrl(aiPreview.previewUrl);
       onChange({ path: aiPreview.path, source: "ai" });
       setAiPreview(null);
       setAiOpen(false);
       toast.success("AI image selected — remember to save the product");
+      if (previousTempPath) void deleteTempImage(previousTempPath);
     } catch (err: any) {
       toast.error(err?.message ?? "Could not apply the generated image");
     } finally {
@@ -182,6 +233,7 @@ export function ProductImageField({
   }
 
   function handleCancelAi() {
+    if (aiPreview) void deleteTempImage(aiPreview.path);
     setAiPreview(null);
     setAiOpen(false);
   }
@@ -306,4 +358,4 @@ export function ProductImageField({
       ) : null}
     </div>
   );
-}
+});
