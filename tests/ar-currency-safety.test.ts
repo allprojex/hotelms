@@ -13,6 +13,10 @@ const receiptFunctions = readFileSync(
   resolve(root, "src/lib/accounting/ar-receipts.functions.ts"),
   "utf8",
 );
+const customerFunctions = readFileSync(
+  resolve(root, "src/lib/accounting/ar-customers.functions.ts"),
+  "utf8",
+);
 
 describe("AR currency safety", () => {
   it.each(["GHS", "USD", "EUR", "GBP"])("formats valid currency %s", (currency) => {
@@ -32,8 +36,10 @@ describe("AR currency safety", () => {
     expect(() => requireValidCurrencyCode("GHS4554")).toThrow(
       "Currency must be a valid 3-letter code",
     );
-    expect(arPage.indexOf("requireValidCurrencyCode(form.currency)")).toBeLessThan(
-      arPage.indexOf('.from("ar_invoices").insert'),
+    expect(arPage).toContain("currency: requireValidCurrencyCode(form.currency)");
+    expect(customerFunctions).toContain("currency: requireValidCurrencyCode(d.currency)");
+    expect(customerFunctions.indexOf("requireValidCurrencyCode(d.currency)")).toBeLessThan(
+      customerFunctions.indexOf('.rpc("create_ar_invoice"'),
     );
   });
 

@@ -712,6 +712,56 @@ export type Database = {
           },
         ]
       }
+      ar_customers: {
+        Row: {
+          account_code: string
+          active: boolean
+          address: string | null
+          created_at: string
+          created_by: string | null
+          email: string | null
+          id: string
+          name: string
+          phone: string | null
+          property_id: string
+          updated_at: string
+        }
+        Insert: {
+          account_code?: string
+          active?: boolean
+          address?: string | null
+          created_at?: string
+          created_by?: string | null
+          email?: string | null
+          id?: string
+          name: string
+          phone?: string | null
+          property_id: string
+          updated_at?: string
+        }
+        Update: {
+          account_code?: string
+          active?: boolean
+          address?: string | null
+          created_at?: string
+          created_by?: string | null
+          email?: string | null
+          id?: string
+          name?: string
+          phone?: string | null
+          property_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ar_customers_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ar_invoice_lines: {
         Row: {
           created_at: string
@@ -776,6 +826,7 @@ export type Database = {
           code: string
           created_at: string
           created_by: string | null
+          customer_id: string | null
           currency: string
           due_date: string
           id: string
@@ -798,6 +849,7 @@ export type Database = {
           code: string
           created_at?: string
           created_by?: string | null
+          customer_id?: string | null
           currency?: string
           due_date?: string
           id?: string
@@ -820,6 +872,7 @@ export type Database = {
           code?: string
           created_at?: string
           created_by?: string | null
+          customer_id?: string | null
           currency?: string
           due_date?: string
           id?: string
@@ -835,6 +888,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "ar_invoices_customer_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "ar_customers"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "ar_invoices_posted_entry_id_fkey"
             columns: ["posted_entry_id"]
@@ -4431,6 +4491,18 @@ export type Database = {
           _property_id: string
         }
         Returns: undefined
+      }
+      create_ar_invoice: {
+        Args: {
+          _currency: string
+          _customer_id: string
+          _due_date: string
+          _issue_date: string
+          _lines: Json
+          _notes: string | null
+          _property_id: string
+        }
+        Returns: string
       }
       audit_capture: {
         Args: {

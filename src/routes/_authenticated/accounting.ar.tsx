@@ -4,6 +4,8 @@ import { useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
 import { createArReceipt } from "@/lib/accounting/ar-receipts.functions";
+import { createArInvoice, listArCustomers } from "@/lib/accounting/ar-customers.functions";
+import { ArCustomerManager } from "@/components/accounting/ar-customer-manager";
 import { renderAdminPdf } from "@/lib/admin/pdf.functions";
 import { downloadServerPdf } from "@/lib/admin/pdf-docs";
 import { useActiveProperty } from "@/hooks/use-active-property";
@@ -16,7 +18,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Plus, Trash2, FileText, Send, DollarSign, Receipt as ReceiptIcon } from "lucide-react";
+import { Plus, Trash2, FileText, Send, DollarSign, Receipt as ReceiptIcon, Users } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { AccountingWorkspaceShell } from "@/components/accounting/accounting-workspace-nav";
@@ -37,8 +39,12 @@ function ARPage() {
   const propertyId = useActiveProperty();
   const qc = useQueryClient();
   const createReceiptFn = useServerFn(createArReceipt);
+  const createInvoiceFn = useServerFn(createArInvoice);
+  const listCustomersFn = useServerFn(listArCustomers);
   const renderPdf = useServerFn(renderAdminPdf);
   const [open, setOpen] = useState(false);
+  const [customersOpen, setCustomersOpen] = useState(false);
+  const [customerId, setCustomerId] = useState("");
   const [payOpen, setPayOpen] = useState(false);
   const [payMethod, setPayMethod] = useState<"cash" | "card" | "bank_transfer">("bank_transfer");
   const [payReference, setPayReference] = useState("");
@@ -52,6 +58,18 @@ function ARPage() {
     currency: "GHS", notes: "",
   });
   const [lines, setLines] = useState<Line[]>([{ description: "", quantity: "1", unit_price: "0", tax_rate: "0" }]);
+
+  const customers = useQuery({
+    queryKey: ["ar-customers", propertyId, "active"],
+    queryFn: () => listCustomersFn({ data: { propertyId: propertyId! } }),
+    enabled: !!propertyId,
+  });
+
+  function selectCustomer(id: string) {
+    setCustomerId(id);
+    const customer = (customers.data ?? []).find((row: any) => row.id === id) as any;
+    setForm((current) => ({ ...current, bill_to_name: customer?.name ?? "", bill_to_email: customer?.email ?? "", bill_to_address: customer?.address ?? "" }));
+  }
 
   const invoices = useQuery({
     queryKey: ["ar-invoices", propertyId],
@@ -96,26 +114,18 @@ function ARPage() {
     mutationFn: async () => {
       const valid = lines.filter((l) => l.description && parseFloat(l.unit_price) >= 0);
       if (valid.length === 0) throw new Error("Add at least one line");
-      const currency = requireValidCurrencyCode(form.currency);
-      const sub = valid.reduce((s, l) => s + parseFloat(l.quantity) * parseFloat(l.unit_price), 0);
-      const tax = valid.reduce((s, l) => s + parseFloat(l.quantity) * parseFloat(l.unit_price) * parseFloat(l.tax_rate) / 100, 0);
-      const { data: inv, error } = await supabase.from("ar_invoices").insert({
-        property_id: propertyId!, ...form, currency,
-        subtotal: sub, tax, total: sub + tax, status: "draft",
-      } as any).select().single();
-      if (error) throw error;
-      const { error: lerr } = await supabase.from("ar_invoice_lines").insert(
-        valid.map((l) => ({
-          invoice_id: inv.id, description: l.description,
-          quantity: parseFloat(l.quantity), unit_price: parseFloat(l.unit_price), tax_rate: parseFloat(l.tax_rate),
-        }))
-      );
-      if (lerr) throw lerr;
-      return inv.id as string;
+      if (!customerId) throw new Error("Select an AR customer");
+      return createInvoiceFn({ data: {
+        propertyId: propertyId!, customerId, issueDate: form.issue_date, dueDate: form.due_date,
+        currency: requireValidCurrencyCode(form.currency), notes: form.notes,
+        lines: valid.map((line) => ({ description: line.description, quantity: parseFloat(line.quantity), unit_price: parseFloat(line.unit_price), tax_rate: parseFloat(line.tax_rate) })),
+      } });
     },
     onSuccess: () => {
       toast.success("Invoice created as draft");
       setOpen(false);
+      setCustomerId("");
+      setForm((current) => ({ ...current, bill_to_name: "", bill_to_email: "", bill_to_address: "", notes: "" }));
       setLines([{ description: "", quantity: "1", unit_price: "0", tax_rate: "0" }]);
       qc.invalidateQueries({ queryKey: ["ar-invoices", propertyId] });
     },
@@ -209,6 +219,7 @@ function ARPage() {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-display font-semibold flex items-center gap-2"><FileText className="h-6 w-6" /> Accounts Receivable</h1>
         <div className="flex items-center gap-2">
+          <Button size="sm" variant="outline" onClick={() => setCustomersOpen(true)}><Users className="h-4 w-4 mr-1" /> AR customers</Button>
           <Button size="sm" variant="outline" disabled={eligibleInvoices.length === 0} onClick={openReceivePayment}>
             <DollarSign className="h-4 w-4 mr-1" /> Receive payment
           </Button>
@@ -217,14 +228,22 @@ function ARPage() {
           <DialogContent className="max-w-3xl">
             <DialogHeader><DialogTitle>New AR invoice</DialogTitle></DialogHeader>
             <div className="space-y-3">
+              <div>
+                <Label>AR customer</Label>
+                <Select value={customerId} onValueChange={selectCustomer}>
+                  <SelectTrigger><SelectValue placeholder="Select a customer account" /></SelectTrigger>
+                  <SelectContent>{(customers.data ?? []).map((customer: any) => <SelectItem key={customer.id} value={customer.id}>{customer.account_code} · {customer.name}</SelectItem>)}</SelectContent>
+                </Select>
+                {(customers.data ?? []).length === 0 && <p className="text-xs text-muted-foreground mt-1">Create an AR customer account before creating an invoice.</p>}
+              </div>
               <div className="grid grid-cols-2 gap-2">
-                <div><Label>Bill to</Label><Input value={form.bill_to_name} onChange={(e) => setForm({ ...form, bill_to_name: e.target.value })} /></div>
-                <div><Label>Email</Label><Input value={form.bill_to_email} onChange={(e) => setForm({ ...form, bill_to_email: e.target.value })} /></div>
+                <div><Label>Bill-to snapshot</Label><Input readOnly value={form.bill_to_name} /></div>
+                <div><Label>Email snapshot</Label><Input readOnly value={form.bill_to_email} /></div>
                 <div><Label>Issue date</Label><Input type="date" value={form.issue_date} onChange={(e) => setForm({ ...form, issue_date: e.target.value })} /></div>
                 <div><Label>Due date</Label><Input type="date" value={form.due_date} onChange={(e) => setForm({ ...form, due_date: e.target.value })} /></div>
                 <div><Label>Currency</Label><Input value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value.toUpperCase() })} /></div>
               </div>
-              <div><Label>Address</Label><Textarea rows={2} value={form.bill_to_address} onChange={(e) => setForm({ ...form, bill_to_address: e.target.value })} /></div>
+              <div><Label>Address snapshot</Label><Textarea readOnly rows={2} value={form.bill_to_address} /></div>
               <div className="border rounded-md">
                 <div className="grid grid-cols-[2fr_60px_100px_70px_32px] gap-2 p-2 text-xs font-medium bg-muted/50 border-b">
                   <div>Description</div><div>Qty</div><div>Price</div><div>Tax %</div><div></div>
@@ -243,7 +262,7 @@ function ARPage() {
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-              <Button disabled={create.isPending} onClick={() => create.mutate()}>Create draft</Button>
+              <Button disabled={create.isPending || !customerId} onClick={() => create.mutate()}>Create draft</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -369,6 +388,7 @@ function ARPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <ArCustomerManager propertyId={propertyId} open={customersOpen} onOpenChange={setCustomersOpen} onChanged={() => qc.invalidateQueries({ queryKey: ["ar-customers", propertyId] })} />
     </div>
   );
 }

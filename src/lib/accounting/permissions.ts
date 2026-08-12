@@ -19,6 +19,14 @@ export const ACCOUNTING_ADMIN_ROLES: readonly AppRole[] = [
   "accountant",
 ];
 
+export const ACCOUNTING_AR_ROLES: readonly AppRole[] = [...ACCOUNTING_ADMIN_ROLES, "front_desk"];
+
+export const AR_PERMISSIONS = {
+  customersView: { module: "accounts_receivable", capability: "view" },
+  customersManage: { module: "accounts_receivable", capability: "manage_settings" },
+  invoicesCreate: { module: "accounts_receivable", capability: "create" },
+} as const;
+
 export const EXPENSE_PERMISSIONS = {
   overviewView: { module: "accounting_overview", capability: "view" },
 

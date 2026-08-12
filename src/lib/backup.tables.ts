@@ -55,6 +55,7 @@ export const BACKUP_TABLES: string[] = [
   "ap_bills",
   "ap_bill_lines",
   "ap_payments",
+  "ar_customers",
   "ar_invoices",
   "ar_invoice_lines",
   // Channels
