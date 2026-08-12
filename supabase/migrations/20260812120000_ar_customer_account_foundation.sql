@@ -29,6 +29,8 @@ BEGIN
   RETURN NEW;
 END; $$;
 
+REVOKE ALL ON FUNCTION public.gen_ar_customer_code() FROM PUBLIC;
+
 CREATE TRIGGER trg_ar_customer_code
   BEFORE INSERT OR UPDATE OF account_code ON public.ar_customers
   FOR EACH ROW EXECUTE FUNCTION public.gen_ar_customer_code();
@@ -133,4 +135,5 @@ BEGIN
   RETURN _invoice_id;
 END; $$;
 
+REVOKE ALL ON FUNCTION public.create_ar_invoice(uuid, uuid, date, date, text, text, jsonb) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.create_ar_invoice(uuid, uuid, date, date, text, text, jsonb) TO authenticated;

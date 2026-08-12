@@ -158,6 +158,26 @@ describe("AR customer account foundation", () => {
     expect(migration).toContain("SET subtotal = _subtotal, tax = _tax, total = _subtotal + _tax");
   });
 
+  it("restricts the SECURITY DEFINER invoice RPC to authenticated callers", () => {
+    const signature =
+      "public.create_ar_invoice(uuid, uuid, date, date, text, text, jsonb)";
+    expect(migration).toMatch(
+      /CREATE OR REPLACE FUNCTION public\.create_ar_invoice\([\s\S]*?LANGUAGE plpgsql SECURITY DEFINER SET search_path=public/,
+    );
+    expect(migration).toContain(`REVOKE ALL ON FUNCTION ${signature} FROM PUBLIC;`);
+    expect(migration).toContain(`GRANT EXECUTE ON FUNCTION ${signature} TO authenticated;`);
+    expect(migration).not.toMatch(/GRANT EXECUTE ON FUNCTION public\.create_ar_invoice\([^;]+\) TO anon/);
+    expect(migration).toContain("IF NOT public.has_any_role(auth.uid()");
+    expect(migration).toContain("_property_id) THEN");
+  });
+
+  it("removes unnecessary PUBLIC execution from the trigger-only code generator", () => {
+    expect(migration).toContain(
+      "REVOKE ALL ON FUNCTION public.gen_ar_customer_code() FROM PUBLIC;",
+    );
+    expect(migration).not.toMatch(/GRANT EXECUTE ON FUNCTION public\.gen_ar_customer_code/);
+  });
+
   it("leaves posting, ageing and receipt allocation logic unchanged", () => {
     expect(migration).not.toContain("post_ar_invoice");
     expect(migration).not.toContain("post_ar_receipt");
