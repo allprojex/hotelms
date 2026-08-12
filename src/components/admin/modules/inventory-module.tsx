@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -6,6 +6,11 @@ import { Pencil, Package, Tag, Truck, MapPin, Receipt } from "lucide-react";
 import { CrudTable } from "@/components/admin/crud-table";
 import { DeleteConfirm } from "@/components/admin/delete-confirm";
 import { FieldForm } from "@/components/admin/field-form";
+import {
+  ProductImageField,
+  type ProductImageFieldHandle,
+  type ProductImageSelection,
+} from "@/components/inventory/product-image-field";
 import { useEntityCrud } from "@/lib/admin/use-entity-crud";
 import { downloadServerPdf } from "@/lib/admin/pdf-docs";
 import { renderAdminPdf } from "@/lib/admin/pdf.functions";
@@ -64,6 +69,8 @@ function ItemCategoriesSection({ propertyId }: { propertyId: string }) {
 
 function ItemsSection({ propertyId }: { propertyId: string }) {
   const [open, setOpen] = useState(false); const [editing, setEditing] = useState<any | null>(null);
+  const [imageSelection, setImageSelection] = useState<ProductImageSelection>(null);
+  const imageFieldRef = useRef<ProductImageFieldHandle>(null);
   const { list: cats } = useEntityCrud<any>({
     table: "item_categories", queryKey: ["admin", "item_categories", propertyId],
     filter: (q) => q.eq("property_id", propertyId), order: { column: "name" },
@@ -83,16 +90,26 @@ function ItemsSection({ propertyId }: { propertyId: string }) {
     { name: "is_active", label: "Active", type: "switch" as const },
   ];
   const submit = async (v: Record<string, unknown>) => {
-    const payload = { ...v, property_id: propertyId };
+    const payload: Record<string, unknown> = { ...v, property_id: propertyId };
+    // Generating/uploading an AI or file image never writes to the product by
+    // itself — it only becomes part of the payload here, on explicit Save.
+    if (imageSelection) {
+      payload.image_path = imageSelection.path;
+      payload.image_source = imageSelection.source;
+      payload.image_updated_at = new Date().toISOString();
+    }
     if (editing) await update.mutateAsync({ id: editing.id, values: payload });
     else await create.mutateAsync(payload);
-    setOpen(false); setEditing(null);
+    // Save succeeded: retain the selected image, clean up only a dangling
+    // AI preview that was generated but never applied via Use Image.
+    imageFieldRef.current?.cleanupUnsaved(imageSelection?.path ?? editing?.image_path ?? null);
+    setOpen(false); setEditing(null); setImageSelection(null);
   };
   return (
     <>
       <CrudTable title="Inventory Items" icon={<Package className="h-4 w-4" />}
         rows={list.data} loading={list.isLoading} rowKey={(r) => r.id}
-        onAdd={() => { setEditing(null); setOpen(true); }} addLabel="New item"
+        onAdd={() => { setEditing(null); setImageSelection(null); setOpen(true); }} addLabel="New item"
         columns={[
           { label: "Name", cell: (r) => r.name, searchValue: (r) => r.name, printValue: (r) => r.name },
           { label: "SKU", cell: (r) => <span className="font-mono text-xs">{r.sku ?? "—"}</span>, searchValue: (r) => r.sku, printValue: (r) => r.sku },
@@ -102,11 +119,41 @@ function ItemsSection({ propertyId }: { propertyId: string }) {
           { label: "Reorder", cell: (r) => r.reorder_point ?? 0, num: true, printValue: (r) => r.reorder_point },
         ]}
         rowActions={(r) => <>
-          <Button size="sm" variant="ghost" onClick={() => { setEditing(r); setOpen(true); }}><Pencil className="h-3.5 w-3.5" /></Button>
+          <Button size="sm" variant="ghost" onClick={() => { setEditing(r); setImageSelection(null); setOpen(true); }}><Pencil className="h-3.5 w-3.5" /></Button>
           <DeleteConfirm onConfirm={() => remove.mutateAsync(r.id)} />
         </>}
       />
-      <FieldForm open={open} onOpenChange={setOpen} title={editing ? "Edit item" : "New item"} fields={fields} initial={editing ?? { is_active: true, unit: "ea" }} onSubmit={submit} submitting={create.isPending || update.isPending} />
+      <FieldForm
+        open={open}
+        onOpenChange={(v) => {
+          if (!v) {
+            // Dialog dismissed without saving (Cancel/Escape/overlay click):
+            // drop any unsaved temp image, but never the pre-existing saved one.
+            imageFieldRef.current?.cleanupUnsaved(editing?.image_path ?? null);
+            setImageSelection(null);
+          }
+          setOpen(v);
+        }}
+        title={editing ? "Edit item" : "New item"}
+        fields={fields}
+        initial={editing ?? { is_active: true, unit: "ea" }}
+        onSubmit={submit}
+        submitting={create.isPending || update.isPending}
+        extra={
+          <ProductImageField
+            ref={imageFieldRef}
+            key={open ? (editing?.id ?? "new") : "closed"}
+            propertyId={propertyId}
+            itemId={editing?.id ?? null}
+            initialImagePath={editing?.image_path ?? null}
+            productName={editing?.name}
+            description={undefined}
+            category={catMap.get(editing?.category_id) ?? undefined}
+            color={undefined}
+            onChange={setImageSelection}
+          />
+        }
+      />
     </>
   );
 }
