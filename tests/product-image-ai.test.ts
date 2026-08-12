@@ -53,6 +53,13 @@ describe("product image AI module — successful mocked generation", () => {
     expect(generateMock).toHaveBeenCalledTimes(1);
   });
 
+  it("explicitly disables the OpenAI SDK's own automatic retry for this call, so a transient 5xx/timeout cannot silently turn into a second billable generation", async () => {
+    generateMock.mockResolvedValueOnce({ data: [{ b64_json: b64ImagePayload() }] });
+    await generateProductImageBytes({ prompt: "a red mug", background: "studio" });
+    const requestOptions = generateMock.mock.calls[0][1];
+    expect(requestOptions).toEqual({ maxRetries: 0 });
+  });
+
   it("uses gpt-image-2 with an opaque background for studio/lifestyle requests", async () => {
     generateMock.mockResolvedValueOnce({ data: [{ b64_json: b64ImagePayload() }] });
     await generateProductImageBytes({ prompt: "a red mug", background: "studio" });

@@ -77,15 +77,24 @@ export async function generateProductImageBytes(input: {
 
   let response: OpenAI.Images.ImagesResponse;
   try {
-    response = await openai.images.generate({
-      model,
-      prompt: input.prompt,
-      size: PRODUCT_IMAGE_MODEL_CONFIG.size,
-      quality: PRODUCT_IMAGE_MODEL_CONFIG.quality,
-      background: transparent ? "transparent" : "opaque",
-      output_format: outputFormat,
-      n: 1,
-    });
+    response = await openai.images.generate(
+      {
+        model,
+        prompt: input.prompt,
+        size: PRODUCT_IMAGE_MODEL_CONFIG.size,
+        quality: PRODUCT_IMAGE_MODEL_CONFIG.quality,
+        background: transparent ? "transparent" : "opaque",
+        output_format: outputFormat,
+        n: 1,
+      },
+      // The SDK client retries certain failures (5xx, timeouts, connection
+      // errors) by default — up to 2 extra attempts — which for a billable
+      // image generation could mean OpenAI actually processed and charged
+      // for more than one image behind a single Generate click. Disabled
+      // here specifically; a genuine failure surfaces immediately and the
+      // user's own explicit Regenerate is the only retry path.
+      { maxRetries: 0 },
+    );
   } catch (error) {
     throw new Error(mapGenerationError(error));
   }

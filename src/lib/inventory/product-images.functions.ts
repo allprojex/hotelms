@@ -17,7 +17,8 @@ import { buildProductImagePrompt, generateProductImageBytes } from "@/lib/invent
 
 const PRODUCT_IMAGES_BUCKET = "product-images";
 const SIGNED_URL_TTL_SECONDS = 300;
-const GENERATION_RATE_LIMIT_WINDOW_MS = 60_000;
+// Window is enforced inside count_recent_product_image_generations() (60s,
+// hardcoded in the migration) — keep this in sync if either one changes.
 const GENERATION_RATE_LIMIT_MAX = 6;
 
 async function assertProductManagePermission(
@@ -45,17 +46,24 @@ async function assertProductImageOwnership(
   if (!item || item.property_id !== propertyId) throw new Error("Product not found");
 }
 
-/** Cost control only — never the authorization gate. Fails open on read errors. */
-async function checkGenerationRateLimit(context: { userId: string; supabase: any }): Promise<void> {
-  const since = new Date(Date.now() - GENERATION_RATE_LIMIT_WINDOW_MS).toISOString();
-  const result = await context.supabase
-    .from("admin_action_logs")
-    .select("id", { count: "exact", head: true })
-    .eq("actor_id", context.userId)
-    .eq("action", "product_image.generated")
-    .gte("created_at", since);
+/**
+ * Cost control only — never the authorization gate. Fails open on errors.
+ *
+ * Goes through count_recent_product_image_generations(), a SECURITY DEFINER
+ * RPC, rather than a plain SELECT against admin_action_logs. A direct SELECT
+ * would run through the caller's own RLS-scoped session, and
+ * admin_action_logs' only read policy is restricted to
+ * super_admin/hotel_owner/general_manager — so any other role explicitly
+ * granted product_images:create (which this permission design exists to
+ * support) would always see zero rows there and never actually get
+ * rate-limited. The RPC counts only auth.uid()'s own rows and returns
+ * nothing but an integer, so this works identically for every authorized
+ * role without granting anyone broader audit-log visibility.
+ */
+async function checkGenerationRateLimit(context: { supabase: any }): Promise<void> {
+  const result = await context.supabase.rpc("count_recent_product_image_generations");
   if (result.error) return;
-  if ((result.count ?? 0) >= GENERATION_RATE_LIMIT_MAX) {
+  if ((result.data ?? 0) >= GENERATION_RATE_LIMIT_MAX) {
     throw new Error("Too many image generation requests. Please wait a moment and try again.");
   }
 }

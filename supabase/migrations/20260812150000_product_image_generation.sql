@@ -79,3 +79,32 @@ USING (
   bucket_id = 'product-images'
   AND public.has_permission(auth.uid(), ((storage.foldername(name))[1])::uuid, 'product_images', 'create')
 );
+
+-- ============ GENERATION RATE-LIMIT COUNT ============
+-- checkGenerationRateLimit (product-images.functions.ts) previously counted
+-- the caller's recent product_image.generated events with a plain SELECT
+-- against admin_action_logs through the caller's own RLS-scoped session.
+-- That table's only SELECT policy ("Admins can view logs for their
+-- properties") is restricted to super_admin/hotel_owner/general_manager, so
+-- any other role explicitly granted product_images:create — a case this
+-- permission design exists specifically to support — would see zero rows
+-- there regardless of real usage, silently defeating the limiter for that
+-- role rather than erroring.
+--
+-- This RPC is SECURITY DEFINER so it bypasses that RLS restriction, but it
+-- only ever counts the CALLING user's own rows: the actor is taken from
+-- auth.uid() inside the function body, never from a caller-supplied
+-- parameter, so no caller can inspect another user's generation count. It
+-- returns nothing but an integer — no audit-log content, no other user's
+-- data — and admin_action_logs' own RLS/read policy is left untouched.
+CREATE OR REPLACE FUNCTION public.count_recent_product_image_generations()
+RETURNS integer
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+  SELECT COUNT(*)::integer
+  FROM public.admin_action_logs
+  WHERE actor_id = auth.uid()
+    AND action = 'product_image.generated'
+    AND created_at >= now() - interval '60 seconds'
+$$;
+REVOKE ALL ON FUNCTION public.count_recent_product_image_generations() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.count_recent_product_image_generations() TO authenticated;

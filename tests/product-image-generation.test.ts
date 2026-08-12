@@ -32,6 +32,10 @@ const inventoryItemsMigration = readFileSync(
   resolve(root, "supabase/migrations/20260705032118_e058dda0-25db-4d70-8408-f042276a7240.sql"),
   "utf8",
 );
+const adminActionLogsMigration = readFileSync(
+  resolve(root, "supabase/migrations/20260705095718_db7ce255-abe2-4a25-b1f4-59f68a09d151.sql"),
+  "utf8",
+);
 
 // ============ PERMISSION MODEL ============
 
@@ -241,9 +245,13 @@ describe("cost control", () => {
     expect(imageField).toMatch(/disabled=\{generating/);
   });
 
-  it("36. no automatic retry/backoff loop around generation", () => {
+  it("36. no automatic retry/backoff loop around generation, and the OpenAI SDK's own automatic retry is explicitly disabled for this billable call", () => {
     expect(aiServerModule).not.toMatch(/setTimeout|setInterval|for\s*\(.*retry/i);
     expect(productImagesFns).not.toMatch(/setTimeout|setInterval/);
+    // The SDK retries 5xx/timeout/connection failures by default (up to 2
+    // extra attempts), which could otherwise turn one Generate click into
+    // more than one billable OpenAI request.
+    expect(aiServerModule).toContain("{ maxRetries: 0 }");
   });
 
   it("37. one Generate click issues exactly one server call, which issues exactly one OpenAI request (see product-image-ai.test.ts for the mocked call-count assertion)", () => {
@@ -251,11 +259,108 @@ describe("cost control", () => {
     expect(handleGenerate).toBeDefined();
     expect(handleGenerate).not.toMatch(/for\s*\(|while\s*\(/);
   });
+});
 
-  it("applies a modest server-side rate limit reusing the existing audit table, without new rate-limiting infrastructure", () => {
-    expect(productImagesFns).toContain("checkGenerationRateLimit");
-    expect(productImagesFns).toContain("admin_action_logs");
-    expect(productImagesFns).toContain("GENERATION_RATE_LIMIT_MAX");
+// ============ RATE LIMIT ============
+
+describe("generation rate limit — role-independent, per-user, audit-visibility-independent", () => {
+  const rpcName = "count_recent_product_image_generations";
+  const rpcDef = migration.match(
+    new RegExp(`CREATE OR REPLACE FUNCTION public\\.${rpcName}[\\s\\S]*?\\$\\$;`),
+  )?.[0];
+  const adminLogsReadPolicy = adminActionLogsMigration.match(
+    /"Admins can view logs for their properties"[\s\S]*?;/,
+  )?.[0];
+
+  it("uses a SECURITY DEFINER RPC rather than a plain SELECT against admin_action_logs through the caller's own RLS session", () => {
+    expect(rpcDef).toBeDefined();
+    expect(rpcDef).toContain("SECURITY DEFINER");
+    expect(rpcDef).toContain("SET search_path = public");
+    expect(productImagesFns).toContain('context.supabase.rpc("count_recent_product_image_generations")');
+    expect(productImagesFns).not.toMatch(/from\(["']admin_action_logs["']\)\.select/);
+  });
+
+  it("1-4. rate-limit logic never branches on role — the same unconditional check runs for every authorized caller, so it applies identically to admin, super_admin, hotel_owner, and general_manager", () => {
+    const start = productImagesFns.indexOf("async function checkGenerationRateLimit");
+    const body = productImagesFns.slice(start, productImagesFns.indexOf("\n}", start));
+    expect(body).not.toMatch(/role\s*===|\.includes\(\s*role/i);
+    expect(body).not.toMatch(/super_admin|hotel_owner|general_manager/);
+  });
+
+  it("5. the RPC's own query has no role filter at all (only actor_id = auth.uid()), so it is blind neither to the 3 legacy admin-log-visible roles nor to a custom role granted product_images:create but no separate audit-log visibility", () => {
+    expect(rpcDef).toContain("WHERE actor_id = auth.uid()");
+    expect(rpcDef).not.toMatch(/super_admin|hotel_owner|general_manager|has_any_role|has_permission/);
+  });
+
+  it("proves the actual bug this replaces: admin_action_logs' own SELECT policy really is restricted to the 3 legacy roles, which is exactly why a direct table query was blind for any other authorized role", () => {
+    expect(adminLogsReadPolicy).toBeDefined();
+    expect(adminLogsReadPolicy).toContain(
+      "ARRAY['super_admin','hotel_owner','general_manager']::app_role[]",
+    );
+  });
+
+  it("6. an unauthorized caller never reaches the rate limiter or OpenAI — permission is asserted first (see the authorization-order suite for the full ordering proof)", () => {
+    const start = productImagesFns.indexOf("export const generateProductImage");
+    const body = productImagesFns.slice(start, productImagesFns.indexOf("export const applyProductImage"));
+    const permissionIdx = body.indexOf("assertProductManagePermission");
+    const rateLimitIdx = body.indexOf("checkGenerationRateLimit");
+    expect(permissionIdx).toBeGreaterThanOrEqual(0);
+    expect(permissionIdx).toBeLessThan(rateLimitIdx);
+  });
+
+  it("7. per-user isolation — the RPC counts only auth.uid()'s own rows, taken from the session, never a caller-supplied identifier, so one user's usage cannot consume another user's quota", () => {
+    expect(rpcDef).toMatch(/count_recent_product_image_generations\(\)/);
+    expect(rpcDef).not.toMatch(/_user_id|_actor_id|p_user/);
+    expect(rpcDef).toContain("actor_id = auth.uid()");
+  });
+
+  it("8. exactly 6 successful generations are allowed before the 7th is rejected — the comparison is >= (not >) against a limit of 6", () => {
+    expect(productImagesFns).toContain("const GENERATION_RATE_LIMIT_MAX = 6;");
+    expect(productImagesFns).toContain("(result.data ?? 0) >= GENERATION_RATE_LIMIT_MAX");
+  });
+
+  it("9. the window is a rolling 60 seconds, so generation becomes available again once older events age out rather than via a fixed reset time", () => {
+    expect(rpcDef).toContain("created_at >= now() - interval '60 seconds'");
+  });
+
+  it("10/11. a rate-limited or permission-denied call never reaches generateProductImageBytes — both checks precede the OpenAI call in a plain sequential await chain, and neither is wrapped in a try/catch that could swallow the rejection and continue (the handler has no try/catch at all before the OpenAI call)", () => {
+    const start = productImagesFns.indexOf("export const generateProductImage");
+    const handlerStart = productImagesFns.indexOf(".handler(async", start);
+    const body = productImagesFns.slice(handlerStart, productImagesFns.indexOf("export const applyProductImage"));
+    const permissionIdx = body.indexOf("await assertProductManagePermission");
+    const rateLimitIdx = body.indexOf("await checkGenerationRateLimit");
+    const openAiIdx = body.indexOf("await generateProductImageBytes(");
+    expect(permissionIdx).toBeGreaterThanOrEqual(0);
+    expect(rateLimitIdx).toBeGreaterThan(permissionIdx);
+    expect(openAiIdx).toBeGreaterThan(rateLimitIdx);
+    // nothing before the OpenAI call can catch and continue past a
+    // permission/rate-limit rejection, because there is no try/catch at all
+    // until the OpenAI call itself
+    const preOpenAiBody = body.slice(0, openAiIdx);
+    expect(preOpenAiBody).not.toContain("try {");
+  });
+
+  it("12. no caller can request another user's generation count — the RPC takes zero parameters and is never called with an id argument", () => {
+    expect(rpcDef).toMatch(/FUNCTION public\.count_recent_product_image_generations\(\)/);
+    expect(productImagesFns).toContain('context.supabase.rpc("count_recent_product_image_generations");');
+    expect(productImagesFns).not.toMatch(/count_recent_product_image_generations["'],\s*\{/);
+  });
+
+  it("13. no general audit-log data is exposed — the RPC returns only an integer count, PUBLIC/anon execute are revoked, and only authenticated gets EXECUTE", () => {
+    expect(rpcDef).toMatch(/RETURNS integer/);
+    expect(rpcDef).not.toMatch(/RETURNS SETOF|RETURNS TABLE|RETURNS public\.admin_action_logs/);
+    expect(migration).toContain(
+      "REVOKE ALL ON FUNCTION public.count_recent_product_image_generations() FROM PUBLIC;",
+    );
+    expect(migration).toContain(
+      "GRANT EXECUTE ON FUNCTION public.count_recent_product_image_generations() TO authenticated;",
+    );
+    expect(productImagesFns).toContain("result.data ?? 0");
+  });
+
+  it("does not weaken admin_action_logs' own RLS — the pre-existing role-restricted read policy is untouched by this migration", () => {
+    expect(adminLogsReadPolicy).toBeDefined();
+    expect(migration).not.toMatch(/DROP POLICY.*admin_action_logs|ALTER TABLE public\.admin_action_logs/);
   });
 });
 
