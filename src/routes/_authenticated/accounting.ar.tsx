@@ -20,6 +20,7 @@ import { Plus, Trash2, FileText, Send, DollarSign, Receipt as ReceiptIcon } from
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { AccountingWorkspaceShell } from "@/components/accounting/accounting-workspace-nav";
+import { formatMoney, isValidCurrencyCode, requireValidCurrencyCode } from "@/lib/accounting/domain";
 
 export const Route = createFileRoute("/_authenticated/accounting/ar")({
   head: () => ({ meta: [{ title: "Accounts Receivable · Accounting" }] }),
@@ -31,8 +32,6 @@ export const Route = createFileRoute("/_authenticated/accounting/ar")({
 });
 
 type Line = { description: string; quantity: string; unit_price: string; tax_rate: string };
-
-function fmt(n: number, c = "GHS") { return new Intl.NumberFormat(undefined, { style: "currency", currency: c }).format(n); }
 
 function ARPage() {
   const propertyId = useActiveProperty();
@@ -97,10 +96,11 @@ function ARPage() {
     mutationFn: async () => {
       const valid = lines.filter((l) => l.description && parseFloat(l.unit_price) >= 0);
       if (valid.length === 0) throw new Error("Add at least one line");
+      const currency = requireValidCurrencyCode(form.currency);
       const sub = valid.reduce((s, l) => s + parseFloat(l.quantity) * parseFloat(l.unit_price), 0);
       const tax = valid.reduce((s, l) => s + parseFloat(l.quantity) * parseFloat(l.unit_price) * parseFloat(l.tax_rate) / 100, 0);
       const { data: inv, error } = await supabase.from("ar_invoices").insert({
-        property_id: propertyId!, ...form,
+        property_id: propertyId!, ...form, currency,
         subtotal: sub, tax, total: sub + tax, status: "draft",
       } as any).select().single();
       if (error) throw error;
@@ -185,7 +185,7 @@ function ARPage() {
       });
     },
     onSuccess: (receipt: any) => {
-      toast.success(`Receipt ${receipt.code} posted for ${fmt(Number(receipt.amount), receipt.currency)}`);
+      toast.success(`Receipt ${receipt.code} posted for ${formatMoney(Number(receipt.amount), receipt.currency)}`);
       setPayOpen(false);
       setPayAllocations({});
       qc.invalidateQueries({ queryKey: ["ar-invoices", propertyId] });
@@ -251,9 +251,9 @@ function ARPage() {
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
-        <Card><CardContent className="p-3"><div className="text-xs text-muted-foreground">Outstanding</div><div className="text-lg font-semibold">{fmt(outstanding)}</div></CardContent></Card>
+        <Card><CardContent className="p-3"><div className="text-xs text-muted-foreground">Outstanding</div><div className="text-lg font-semibold">{formatMoney(outstanding)}</div></CardContent></Card>
         {bucketTotals.map((b) => (
-          <Card key={b.bucket}><CardContent className="p-3"><div className="text-xs text-muted-foreground capitalize">{b.bucket}</div><div className="text-lg font-mono">{fmt(b.total)}</div></CardContent></Card>
+          <Card key={b.bucket}><CardContent className="p-3"><div className="text-xs text-muted-foreground capitalize">{b.bucket}</div><div className="text-lg font-mono">{formatMoney(b.total)}</div></CardContent></Card>
         ))}
       </div>
 
@@ -269,7 +269,7 @@ function ARPage() {
               </div>
               <div className="flex items-center gap-3">
                 <span className="text-xs text-muted-foreground">Due {i.due_date}</span>
-                <span className="font-mono text-sm">{fmt(Number(i.total), i.currency)}</span>
+                <span className="font-mono text-sm" title={!isValidCurrencyCode(i.currency) ? `Stored currency '${i.currency ?? ""}' is invalid; showing GHS` : undefined}>{formatMoney(Number(i.total), i.currency)}</span>
                 {i.status === "draft" && (
                   <Button size="sm" variant="outline" className="h-7" onClick={() => post.mutate(i.id)}>
                     <Send className="h-3 w-3 mr-1" /> Post
@@ -293,7 +293,7 @@ function ARPage() {
                 <Badge variant="outline" className="text-[10px] uppercase">{r.method}</Badge>
               </div>
               <div className="flex items-center gap-3">
-                <span className="font-mono text-sm">{fmt(Number(r.amount), r.currency)}</span>
+                <span className="font-mono text-sm" title={!isValidCurrencyCode(r.currency) ? `Stored currency '${r.currency ?? ""}' is invalid; showing GHS` : undefined}>{formatMoney(Number(r.amount), r.currency)}</span>
                 <Button size="sm" variant="ghost" className="h-7" title="Print receipt" onClick={() => printReceipt(r.id)}>
                   <ReceiptIcon className="h-3.5 w-3.5" />
                 </Button>
@@ -337,7 +337,7 @@ function ARPage() {
                     <div className="min-w-0 truncate text-xs">
                       <span className="font-mono text-muted-foreground mr-1">{inv.code}</span>{inv.bill_to_name}
                     </div>
-                    <div className="text-xs font-mono">{fmt(remaining, inv.currency)}</div>
+                    <div className="text-xs font-mono">{formatMoney(remaining, inv.currency)}</div>
                     <Input
                       className="h-8"
                       type="number"
@@ -355,7 +355,7 @@ function ARPage() {
 
             <div className="flex items-center justify-between text-sm">
               <span className="text-muted-foreground">Receipt total</span>
-              <span className="font-mono font-semibold">{fmt(receiveTotal)}</span>
+              <span className="font-mono font-semibold">{formatMoney(receiveTotal)}</span>
             </div>
             {receiveOverAllocated && (
               <div className="text-xs text-destructive">One or more amounts exceed the invoice's remaining balance.</div>

@@ -50,11 +50,26 @@ export function expenseReceiptStoragePath(input: {
   return `${input.propertyId}/expenses/${input.expenseId}/${input.receiptId}-${safeStorageSegment(input.fileName)}`;
 }
 
-export function formatMoney(amount: number | string, currency: string): string {
+export function isValidCurrencyCode(currency: unknown): currency is string {
+  return typeof currency === "string" && /^[A-Z]{3}$/.test(currency.trim().toUpperCase());
+}
+
+export function requireValidCurrencyCode(currency: unknown): string {
+  const normalized = typeof currency === "string" ? currency.trim().toUpperCase() : "";
+  if (!isValidCurrencyCode(normalized)) throw new Error("Currency must be a valid 3-letter code");
+  return normalized;
+}
+
+export function safeCurrencyCode(currency: unknown, fallback = "GHS"): string {
+  const normalized = typeof currency === "string" ? currency.trim().toUpperCase() : "";
+  return isValidCurrencyCode(normalized) ? normalized : requireValidCurrencyCode(fallback);
+}
+
+export function formatMoney(amount: number | string, currency?: unknown): string {
   const value = typeof amount === "string" ? Number(amount) : amount;
   return new Intl.NumberFormat(undefined, {
     style: "currency",
-    currency: currency || "GHS",
+    currency: safeCurrencyCode(currency),
     currencyDisplay: "narrowSymbol",
   }).format(Number.isFinite(value) ? value : 0);
 }
