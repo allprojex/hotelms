@@ -5,36 +5,29 @@ import { resolvePermission, type PermissionGrant, type PropertyRole } from "@/li
 import { PRODUCT_IMAGE_PERMISSIONS, PRODUCT_MANAGEMENT_ROLES } from "@/lib/inventory/permissions";
 
 const root = resolve(__dirname, "..");
-const migration = readFileSync(
+// Normalizes CRLF -> LF so literal multi-line `.toContain()` assertions below
+// don't depend on the working tree's checkout line-ending state (git's
+// core.autocrlf can rewrite tracked files to CRLF on checkout on Windows).
+function read(path: string): string {
+  return readFileSync(path, "utf8").replace(/\r\n/g, "\n");
+}
+const migration = read(
   resolve(root, "supabase/migrations/20260812150000_product_image_generation.sql"),
-  "utf8",
 );
-const productImagesFns = readFileSync(
-  resolve(root, "src/lib/inventory/product-images.functions.ts"),
-  "utf8",
-);
-const aiServerModule = readFileSync(
-  resolve(root, "src/lib/inventory/product-image-ai.server.ts"),
-  "utf8",
-);
-const domain = readFileSync(resolve(root, "src/lib/inventory/domain.ts"), "utf8");
-const permissionsModule = readFileSync(resolve(root, "src/lib/inventory/permissions.ts"), "utf8");
-const imageField = readFileSync(
-  resolve(root, "src/components/inventory/product-image-field.tsx"),
-  "utf8",
-);
-const inventoryModule = readFileSync(
+const productImagesFns = read(resolve(root, "src/lib/inventory/product-images.functions.ts"));
+const aiServerModule = read(resolve(root, "src/lib/inventory/product-image-ai.server.ts"));
+const domain = read(resolve(root, "src/lib/inventory/domain.ts"));
+const permissionsModule = read(resolve(root, "src/lib/inventory/permissions.ts"));
+const imageField = read(resolve(root, "src/components/inventory/product-image-field.tsx"));
+const inventoryModule = read(
   resolve(root, "src/components/admin/modules/inventory-module.tsx"),
-  "utf8",
 );
-const envExample = readFileSync(resolve(root, ".env.production.example"), "utf8");
-const inventoryItemsMigration = readFileSync(
+const envExample = read(resolve(root, ".env.production.example"));
+const inventoryItemsMigration = read(
   resolve(root, "supabase/migrations/20260705032118_e058dda0-25db-4d70-8408-f042276a7240.sql"),
-  "utf8",
 );
-const adminActionLogsMigration = readFileSync(
+const adminActionLogsMigration = read(
   resolve(root, "supabase/migrations/20260705095718_db7ce255-abe2-4a25-b1f4-59f68a09d151.sql"),
-  "utf8",
 );
 
 // ============ PERMISSION MODEL ============
