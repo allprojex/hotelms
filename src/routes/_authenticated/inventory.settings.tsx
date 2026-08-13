@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useActiveProperty } from "@/hooks/use-active-property";
 import { Card } from "@/components/ui/card";
@@ -14,6 +14,11 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogT
 import { Textarea } from "@/components/ui/textarea";
 import { Plus, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import {
+  ProductImageField,
+  type ProductImageFieldHandle,
+  type ProductImageSelection,
+} from "@/components/inventory/product-image-field";
 
 export const Route = createFileRoute("/_authenticated/inventory/settings")({
   head: () => ({ meta: [{ title: "Inventory settings" }] }),
@@ -113,16 +118,39 @@ function ItemDialog({ propertyId, cats, existing, trigger, onDone }: any) {
     unit: existing?.unit ?? "each", cost: existing?.cost ?? 0, sale_price: existing?.sale_price ?? 0,
     reorder_level: existing?.reorder_level ?? 0, active: existing?.active ?? true,
   });
+  const [imageSelection, setImageSelection] = useState<ProductImageSelection>(null);
+  const imageFieldRef = useRef<ProductImageFieldHandle>(null);
   async function save() {
     if (!propertyId) return;
     const payload: any = { ...f, property_id: propertyId, category_id: f.category_id || null };
+    // Generating/uploading an AI or file image never writes to the item by
+    // itself — it only becomes part of the payload here, on explicit Save.
+    if (imageSelection) {
+      payload.image_path = imageSelection.path;
+      payload.image_source = imageSelection.source;
+      payload.image_updated_at = new Date().toISOString();
+    }
     const q = existing ? (supabase.from as any)("inventory_items").update(payload).eq("id", existing.id) : (supabase.from as any)("inventory_items").insert(payload);
     const { error } = await q;
     if (error) return toast.error(error.message);
+    // Save succeeded: retain the selected image, clean up only a dangling
+    // AI preview that was generated but never applied via Use Image.
+    imageFieldRef.current?.cleanupUnsaved(imageSelection?.path ?? existing?.image_path ?? null);
     toast.success("Saved"); setOpen(false); onDone();
   }
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog
+      open={open}
+      onOpenChange={(v) => {
+        if (!v) {
+          // Dialog dismissed without saving (Cancel/Escape/overlay click):
+          // drop any unsaved temp image, but never the pre-existing saved one.
+          imageFieldRef.current?.cleanupUnsaved(existing?.image_path ?? null);
+          setImageSelection(null);
+        }
+        setOpen(v);
+      }}
+    >
       <DialogTrigger asChild>{trigger ?? <Button><Plus className="h-4 w-4 mr-1" /> New item</Button>}</DialogTrigger>
       <DialogContent>
         <DialogHeader><DialogTitle>{existing ? "Edit" : "New"} item</DialogTitle></DialogHeader>
@@ -144,6 +172,16 @@ function ItemDialog({ propertyId, cats, existing, trigger, onDone }: any) {
           <div><Label>Sale price</Label><Input type="number" step="0.01" value={f.sale_price} onChange={(e) => setF({ ...f, sale_price: +e.target.value })} /></div>
           <div><Label>Reorder level</Label><Input type="number" step="0.01" value={f.reorder_level} onChange={(e) => setF({ ...f, reorder_level: +e.target.value })} /></div>
         </div>
+        <ProductImageField
+          ref={imageFieldRef}
+          key={open ? (existing?.id ?? "new") : "closed"}
+          propertyId={propertyId}
+          itemId={existing?.id ?? null}
+          initialImagePath={existing?.image_path ?? null}
+          productName={f.name}
+          category={cats.find((c: any) => c.id === f.category_id)?.name}
+          onChange={setImageSelection}
+        />
         <DialogFooter><Button onClick={save}>Save</Button></DialogFooter>
       </DialogContent>
     </Dialog>
