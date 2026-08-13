@@ -140,6 +140,58 @@ describe("product image AI module — failure handling", () => {
     generateMock.mockResolvedValueOnce({ data: [] });
     await expect(generateProductImageBytes({ prompt: "x", background: "studio" })).rejects.toThrow();
   });
+
+  it("logs the OpenAI error's structured status/code/type/name server-side on failure, so a real failure is diagnosable from logs", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    generateMock.mockRejectedValueOnce(
+      Object.assign(new Error("Incorrect API key provided: sk-***abcd"), {
+        name: "AuthenticationError",
+        status: 401,
+        code: "invalid_api_key",
+        type: "invalid_request_error",
+      }),
+    );
+    await expect(generateProductImageBytes({ prompt: "x", background: "studio" })).rejects.toThrow();
+    expect(consoleError).toHaveBeenCalledTimes(1);
+    const logged = consoleError.mock.calls[0].join(" ");
+    expect(logged).toContain('"status":401');
+    expect(logged).toContain('"code":"invalid_api_key"');
+    expect(logged).toContain('"type":"invalid_request_error"');
+    expect(logged).toContain('"name":"AuthenticationError"');
+    consoleError.mockRestore();
+  });
+
+  it("never logs the error's raw message — the exact field that echoes back a redacted API key fragment on auth failures", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    generateMock.mockRejectedValueOnce(
+      Object.assign(new Error("Incorrect API key provided: sk-***abcd"), { name: "AuthenticationError", status: 401 }),
+    );
+    await expect(generateProductImageBytes({ prompt: "x", background: "studio" })).rejects.toThrow();
+    const logged = consoleError.mock.calls.map((c) => c.join(" ")).join(" ");
+    expect(logged).not.toContain("sk-***abcd");
+    expect(logged).not.toContain("Incorrect API key provided");
+    consoleError.mockRestore();
+  });
+
+  it("does not log anything on a successful generation", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    generateMock.mockResolvedValueOnce({ data: [{ b64_json: b64ImagePayload() }] });
+    await generateProductImageBytes({ prompt: "x", background: "studio" });
+    expect(consoleError).not.toHaveBeenCalled();
+    consoleError.mockRestore();
+  });
+
+  it("classifies a network-level failure (no HTTP status at all, e.g. APIConnectionError) distinctly from an OpenAI-issued status code", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    generateMock.mockRejectedValueOnce(Object.assign(new Error("fetch failed"), { name: "APIConnectionError" }));
+    await expect(generateProductImageBytes({ prompt: "x", background: "studio" })).rejects.toThrow(
+      "Image generation failed. Please try again.",
+    );
+    const logged = consoleError.mock.calls[0].join(" ");
+    expect(logged).toContain('"status":null');
+    expect(logged).toContain('"name":"APIConnectionError"');
+    consoleError.mockRestore();
+  });
 });
 
 describe("buildProductImagePrompt", () => {

@@ -96,6 +96,7 @@ export async function generateProductImageBytes(input: {
       { maxRetries: 0 },
     );
   } catch (error) {
+    logGenerationFailure(error);
     throw new Error(mapGenerationError(error));
   }
 
@@ -119,6 +120,30 @@ export async function generateProductImageBytes(input: {
     contentType: `image/${outputFormat}`,
     extension: outputFormat,
   };
+}
+
+/**
+ * Logs only the OpenAI SDK's own structured error classification — status,
+ * code, type, and the error class name (e.g. "AuthenticationError",
+ * "APIConnectionError" for a network failure with no status at all). Never
+ * logs `.message` or the raw error body: OpenAI's own error messages for
+ * invalid-key failures echo back a redacted fragment of the offending key
+ * (e.g. "Incorrect API key provided: sk-***abcd"), and this must never
+ * reach logs. Without this, a generation failure is completely
+ * undiagnosable after the fact — the caller only ever sees the generic,
+ * sanitized user-facing message from mapGenerationError().
+ */
+function logGenerationFailure(error: unknown): void {
+  const e = error as { name?: string; status?: number; code?: string | null; type?: string | null } | null;
+  console.error(
+    "[product-image-ai] OpenAI image generation request failed",
+    JSON.stringify({
+      name: e?.name ?? typeof error,
+      status: e?.status ?? null,
+      code: e?.code ?? null,
+      type: e?.type ?? null,
+    }),
+  );
 }
 
 function mapGenerationError(error: unknown): string {
