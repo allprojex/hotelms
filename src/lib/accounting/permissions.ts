@@ -25,6 +25,10 @@ export const AR_PERMISSIONS = {
   customersView: { module: "accounts_receivable", capability: "view" },
   customersManage: { module: "accounts_receivable", capability: "manage_settings" },
   invoicesCreate: { module: "accounts_receivable", capability: "create" },
+  // Assigning a stable customer identity to a historical invoice is an
+  // administrative reconciliation action, not mere viewing — reuses the
+  // same manage_settings capability already gating AR customer create/edit.
+  invoicesMapCustomer: { module: "accounts_receivable", capability: "manage_settings" },
 } as const;
 
 export const EXPENSE_PERMISSIONS = {
