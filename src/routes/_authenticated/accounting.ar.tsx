@@ -6,6 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { createArReceipt } from "@/lib/accounting/ar-receipts.functions";
 import { createArInvoice, listArCustomers } from "@/lib/accounting/ar-customers.functions";
 import { ArCustomerManager } from "@/components/accounting/ar-customer-manager";
+import { ArHistoricalInvoiceMapping } from "@/components/accounting/ar-historical-invoice-mapping";
 import { renderAdminPdf } from "@/lib/admin/pdf.functions";
 import { downloadServerPdf } from "@/lib/admin/pdf-docs";
 import { useActiveProperty } from "@/hooks/use-active-property";
@@ -18,7 +19,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Plus, Trash2, FileText, Send, DollarSign, Receipt as ReceiptIcon, Users } from "lucide-react";
+import { Plus, Trash2, FileText, Send, DollarSign, Receipt as ReceiptIcon, Users, Link2 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { AccountingWorkspaceShell } from "@/components/accounting/accounting-workspace-nav";
@@ -44,6 +45,7 @@ function ARPage() {
   const renderPdf = useServerFn(renderAdminPdf);
   const [open, setOpen] = useState(false);
   const [customersOpen, setCustomersOpen] = useState(false);
+  const [mappingOpen, setMappingOpen] = useState(false);
   const [customerId, setCustomerId] = useState("");
   const [payOpen, setPayOpen] = useState(false);
   const [payMethod, setPayMethod] = useState<"cash" | "card" | "bank_transfer">("bank_transfer");
@@ -220,6 +222,7 @@ function ARPage() {
         <h1 className="text-2xl font-display font-semibold flex items-center gap-2"><FileText className="h-6 w-6" /> Accounts Receivable</h1>
         <div className="flex items-center gap-2">
           <Button size="sm" variant="outline" onClick={() => setCustomersOpen(true)}><Users className="h-4 w-4 mr-1" /> AR customers</Button>
+          <Button size="sm" variant="outline" onClick={() => setMappingOpen(true)}><Link2 className="h-4 w-4 mr-1" /> Map historical invoices</Button>
           <Button size="sm" variant="outline" disabled={eligibleInvoices.length === 0} onClick={openReceivePayment}>
             <DollarSign className="h-4 w-4 mr-1" /> Receive payment
           </Button>
@@ -389,6 +392,12 @@ function ARPage() {
         </DialogContent>
       </Dialog>
       <ArCustomerManager propertyId={propertyId} open={customersOpen} onOpenChange={setCustomersOpen} onChanged={() => qc.invalidateQueries({ queryKey: ["ar-customers", propertyId] })} />
+      <ArHistoricalInvoiceMapping
+        propertyId={propertyId}
+        open={mappingOpen}
+        onOpenChange={setMappingOpen}
+        onMapped={() => qc.invalidateQueries({ queryKey: ["ar-invoices", propertyId] })}
+      />
     </div>
   );
 }
