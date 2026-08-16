@@ -1,13 +1,14 @@
 import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { Plus } from "lucide-react";
+import { FileText, Plus } from "lucide-react";
 import { toast } from "sonner";
 import {
   listArCustomers,
   saveArCustomer,
   setArCustomerActive,
 } from "@/lib/accounting/ar-customers.functions";
+import { ArCustomerStatementView } from "@/components/accounting/ar-customer-statement-view";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -57,6 +58,7 @@ export function ArCustomerManager({
   const [search, setSearch] = useState("");
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState(emptyCustomer);
+  const [statementCustomer, setStatementCustomer] = useState<ArCustomer | null>(null);
 
   const list = useQuery({
     queryKey: ["ar-customers", propertyId, "all", search],
@@ -211,6 +213,13 @@ export function ArCustomerManager({
                     >
                       {customer.active ? "Deactivate" : "Activate"}
                     </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setStatementCustomer(customer)}
+                    >
+                      <FileText className="h-3.5 w-3.5 mr-1" /> Statement
+                    </Button>
                   </div>
                 </div>
               ))}
@@ -223,6 +232,14 @@ export function ArCustomerManager({
           </div>
         )}
       </DialogContent>
+      <ArCustomerStatementView
+        propertyId={propertyId}
+        customer={statementCustomer}
+        open={!!statementCustomer}
+        onOpenChange={(v) => {
+          if (!v) setStatementCustomer(null);
+        }}
+      />
     </Dialog>
   );
 }
