@@ -4798,6 +4798,7 @@ export type Database = {
         }
         Returns: string
       }
+      reverse_ar_invoice: { Args: { _id: string; _reason: string }; Returns: string }
       run_night_audit: {
         Args: {
           _business_date: string

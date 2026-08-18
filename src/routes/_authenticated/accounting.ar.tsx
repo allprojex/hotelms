@@ -19,7 +19,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Plus, Trash2, FileText, Send, DollarSign, Receipt as ReceiptIcon, Users, Link2 } from "lucide-react";
+import { Plus, Trash2, FileText, Send, DollarSign, Receipt as ReceiptIcon, Users, Link2, Undo2 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { AccountingWorkspaceShell } from "@/components/accounting/accounting-workspace-nav";
@@ -53,6 +53,8 @@ function ARPage() {
   const [payDate, setPayDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [payAllocations, setPayAllocations] = useState<Record<string, string>>({});
   const [payIdempotencyKey, setPayIdempotencyKey] = useState("");
+  const [reverseTarget, setReverseTarget] = useState<any>(null);
+  const [reverseReason, setReverseReason] = useState("");
   const [form, setForm] = useState({
     bill_to_name: "", bill_to_email: "", bill_to_address: "",
     issue_date: format(new Date(), "yyyy-MM-dd"),
@@ -141,6 +143,21 @@ function ARPage() {
     },
     onSuccess: () => {
       toast.success("Invoice posted to ledger");
+      qc.invalidateQueries({ queryKey: ["ar-invoices", propertyId] });
+      qc.invalidateQueries({ queryKey: ["ar-aging", propertyId] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const reverse = useMutation({
+    mutationFn: async ({ id, reason }: { id: string; reason: string }) => {
+      const { error } = await supabase.rpc("reverse_ar_invoice", { _id: id, _reason: reason });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Invoice reversed — a new offsetting journal entry was posted");
+      setReverseTarget(null);
+      setReverseReason("");
       qc.invalidateQueries({ queryKey: ["ar-invoices", propertyId] });
       qc.invalidateQueries({ queryKey: ["ar-aging", propertyId] });
     },
@@ -297,6 +314,11 @@ function ARPage() {
                     <Send className="h-3 w-3 mr-1" /> Post
                   </Button>
                 )}
+                {i.status === "sent" && Number(i.amount_paid) === 0 && (
+                  <Button size="sm" variant="outline" className="h-7" onClick={() => { setReverseReason(""); setReverseTarget(i); }}>
+                    <Undo2 className="h-3 w-3 mr-1" /> Void
+                  </Button>
+                )}
               </div>
             </div>
           ))}
@@ -387,6 +409,39 @@ function ARPage() {
             <Button variant="outline" onClick={() => setPayOpen(false)}>Cancel</Button>
             <Button disabled={receive.isPending || receiveTotal <= 0 || receiveOverAllocated} onClick={() => receive.mutate()}>
               <DollarSign className="h-4 w-4 mr-1" /> Post receipt
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={!!reverseTarget} onOpenChange={(v) => { if (!v) setReverseTarget(null); }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader><DialogTitle>Void / reverse invoice</DialogTitle></DialogHeader>
+          {reverseTarget && (
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <div><span className="text-muted-foreground">Invoice</span><div className="font-mono">{reverseTarget.code}</div></div>
+                <div><span className="text-muted-foreground">Customer</span><div className="truncate">{reverseTarget.bill_to_name}</div></div>
+                <div><span className="text-muted-foreground">Total</span><div className="font-mono">{formatMoney(Number(reverseTarget.total), reverseTarget.currency)}</div></div>
+                <div><span className="text-muted-foreground">Currency</span><div>{reverseTarget.currency}</div></div>
+              </div>
+              <p className="text-xs text-destructive">
+                This posts a new offsetting journal entry that exactly reverses the original posting and sets the invoice to void. The original journal entry is never edited or deleted. This cannot be undone through the UI.
+              </p>
+              <div>
+                <Label>Reason (required, 5–500 characters)</Label>
+                <Textarea rows={3} maxLength={500} value={reverseReason} onChange={(e) => setReverseReason(e.target.value)} placeholder="Why is this invoice being reversed?" />
+                <p className="text-xs text-muted-foreground mt-1">{reverseReason.trim().length}/500</p>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setReverseTarget(null)}>Cancel</Button>
+            <Button
+              variant="destructive"
+              disabled={reverse.isPending || reverseReason.trim().length < 5}
+              onClick={() => reverseTarget && reverse.mutate({ id: reverseTarget.id, reason: reverseReason.trim() })}
+            >
+              <Undo2 className="h-4 w-4 mr-1" /> Reverse invoice
             </Button>
           </DialogFooter>
         </DialogContent>
