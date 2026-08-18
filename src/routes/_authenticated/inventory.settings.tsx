@@ -12,13 +12,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
-import { Plus, Pencil, Trash2 } from "lucide-react";
+import { Plus, Pencil, Trash2, FileText } from "lucide-react";
 import { toast } from "sonner";
 import {
   ProductImageField,
   type ProductImageFieldHandle,
   type ProductImageSelection,
 } from "@/components/inventory/product-image-field";
+import { ApSupplierStatementView } from "@/components/accounting/ap-supplier-statement-view";
 
 export const Route = createFileRoute("/_authenticated/inventory/settings")({
   head: () => ({ meta: [{ title: "Inventory settings" }] }),
@@ -286,6 +287,7 @@ function LocationsTab() {
 function SuppliersTab() {
   const propertyId = useActiveProperty();
   const qc = useQueryClient();
+  const [statementFor, setStatementFor] = useState<any | null>(null);
   const list = useQuery({
     queryKey: ["suppliers-all", propertyId], enabled: !!propertyId,
     queryFn: async () => (await (supabase.from as any)("suppliers").select("*").eq("property_id", propertyId).order("name")).data ?? [],
@@ -312,6 +314,7 @@ function SuppliersTab() {
                 <TableCell>{s.phone}</TableCell>
                 <TableCell>{s.payment_terms}</TableCell>
                 <TableCell className="text-right flex justify-end gap-1">
+                  <Button size="sm" variant="ghost" onClick={() => setStatementFor(s)}><FileText className="h-3.5 w-3.5 mr-1" /> Statement</Button>
                   <SupplierDialog propertyId={propertyId} existing={s} trigger={<Button size="icon" variant="ghost"><Pencil className="h-4 w-4" /></Button>} onDone={() => qc.invalidateQueries({ queryKey: ["suppliers-all", propertyId] })} />
                   <Button size="icon" variant="ghost" onClick={() => del(s.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
                 </TableCell>
@@ -321,6 +324,14 @@ function SuppliersTab() {
           </TableBody>
         </Table>
       </Card>
+      {propertyId && (
+        <ApSupplierStatementView
+          propertyId={propertyId}
+          supplier={statementFor}
+          open={!!statementFor}
+          onOpenChange={(v) => { if (!v) setStatementFor(null); }}
+        />
+      )}
     </div>
   );
 }
