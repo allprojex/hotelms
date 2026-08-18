@@ -7,10 +7,7 @@ const migration = readFileSync(
   resolve(root, "supabase/migrations/20260818090000_ar_invoice_reversal.sql"),
   "utf8",
 );
-const arPage = readFileSync(
-  resolve(root, "src/routes/_authenticated/accounting.ar.tsx"),
-  "utf8",
-);
+const arPage = readFileSync(resolve(root, "src/routes/_authenticated/accounting.ar.tsx"), "utf8");
 const arStatementCalc = readFileSync(
   resolve(root, "src/lib/accounting/ar-statement-calc.ts"),
   "utf8",
@@ -21,6 +18,10 @@ const arStatementsFns = readFileSync(
 );
 const arInvoiceFoundation = readFileSync(
   resolve(root, "supabase/migrations/20260705040642_e2695ffa-2a90-4433-bfeb-059363c7aa85.sql"),
+  "utf8",
+);
+const adminLogFoundation = readFileSync(
+  resolve(root, "supabase/migrations/20260705095718_db7ce255-abe2-4a25-b1f4-59f68a09d151.sql"),
   "utf8",
 );
 
@@ -73,7 +74,9 @@ describe("AR invoice reversal — idempotency and concurrency", () => {
   });
 
   it("8. concurrent second reversal is rejected — the invoice row is locked before any status read", () => {
-    expect(reverseFn).toContain("SELECT * INTO inv FROM public.ar_invoices WHERE id=_id FOR UPDATE;");
+    expect(reverseFn).toContain(
+      "SELECT * INTO inv FROM public.ar_invoices WHERE id=_id FOR UPDATE;",
+    );
     // The lock is acquired before the status checks that decide eligibility.
     const lockIdx = reverseFn.indexOf("FOR UPDATE");
     const statusIdx = reverseFn.indexOf("IF inv.status = 'void'");
@@ -82,9 +85,7 @@ describe("AR invoice reversal — idempotency and concurrency", () => {
   });
 
   it("never creates two reversal journals for the same original entry — backed by a DB-level unique index, not just an application check", () => {
-    expect(migration).toContain(
-      "CREATE UNIQUE INDEX journal_entries_reversal_of_uniq",
-    );
+    expect(migration).toContain("CREATE UNIQUE INDEX journal_entries_reversal_of_uniq");
     expect(migration).toContain("WHERE is_reversal_of IS NOT NULL");
   });
 });
@@ -96,7 +97,9 @@ describe("AR invoice reversal — journal construction", () => {
     );
     expect(reverseFn).not.toMatch(/UPDATE public\.journal_lines/);
     expect(reverseFn).not.toMatch(/DELETE FROM public\.journal_(lines|entries)/);
-    expect(reverseFn).not.toMatch(/UPDATE public\.journal_entries\s+SET[\s\S]*?WHERE id\s*=\s*inv\.posted_entry_id/);
+    expect(reverseFn).not.toMatch(
+      /UPDATE public\.journal_entries\s+SET[\s\S]*?WHERE id\s*=\s*inv\.posted_entry_id/,
+    );
   });
 
   it("11. reversal lines are the exact inverse of the original — debit becomes credit and vice versa, including fx_rate/base amounts copied verbatim, not recomputed", () => {
@@ -139,7 +142,9 @@ describe("AR invoice reversal — journal construction", () => {
     expect(reverseFn).toContain("UPDATE public.ar_invoices SET status = 'void' WHERE id = _id;");
     expect(reverseFn).not.toMatch(/posted_entry_id\s*=\s*NULL/);
     const postFn = fn(arInvoiceFoundation, "post_ar_invoice");
-    expect(postFn).toContain("IF inv.posted_entry_id IS NOT NULL THEN RETURN inv.posted_entry_id; END IF;");
+    expect(postFn).toContain(
+      "IF inv.posted_entry_id IS NOT NULL THEN RETURN inv.posted_entry_id; END IF;",
+    );
   });
 });
 
@@ -186,24 +191,110 @@ describe("AR invoice reversal — permissions and isolation", () => {
   });
 });
 
-describe("AR invoice reversal — audit", () => {
-  it("27. a successful reversal calls the established admin_log() convention with property, invoice id/code (via before/after + memo), original and new status, and both journal entry ids", () => {
-    expect(reverseFn).toContain("PERFORM public.admin_log(");
-    expect(reverseFn).toContain("inv.property_id, 'ar_invoice', inv.id::text, 'update',");
-    expect(reverseFn).toContain("jsonb_build_object('status', inv.status, 'postedEntryId', inv.posted_entry_id)");
+describe("AR invoice reversal — audit (accountant gap fix)", () => {
+  it("does NOT route the reversal audit through the admin_log() RPC — that would silently drop accountant-initiated reversals given admin_log()'s own role check", () => {
+    expect(reverseFn).not.toMatch(/PERFORM public\.admin_log\(/);
+    expect(reverseFn).not.toMatch(/\.rpc\(["']admin_log["']/);
+  });
+
+  it("1/2/3/4. inserts directly into admin_action_logs — the same statement runs for every one of the four eligible roles, with no role-conditional branch around the insert, so accountant/super_admin/hotel_owner/general_manager all produce an audit row identically", () => {
+    expect(reverseFn).toContain("INSERT INTO public.admin_action_logs(");
     expect(reverseFn).toContain(
-      "jsonb_build_object('status', 'void', 'postedEntryId', inv.posted_entry_id, 'reversalEntryId', _reversal_entry)",
+      "property_id, actor_id, entity_type, entity_id, action, before_snapshot, after_snapshot, memo",
+    );
+    // The single has_any_role() gate above is the only role check in the whole
+    // function — nothing re-branches on role again before the audit insert.
+    const roleCheckCount = (reverseFn.match(/has_any_role\(/g) ?? []).length;
+    expect(roleCheckCount).toBe(1);
+  });
+
+  it("7. actor comes from auth.uid(), not any client-supplied parameter — reverse_ar_invoice only accepts _id and _reason", () => {
+    expect(reverseFn).toContain("VALUES (\n    inv.property_id, auth.uid(), 'ar_invoice',");
+    expect(reverseFn).toMatch(/reverse_ar_invoice\(_id UUID, _reason TEXT\)/);
+  });
+
+  it("8. audit property_id comes from the locked invoice row (inv.property_id), not a client-supplied parameter", () => {
+    expect(reverseFn).toMatch(
+      /INSERT INTO public\.admin_action_logs\([\s\S]*?\)\s*VALUES\s*\(\s*inv\.property_id/,
     );
   });
 
-  it("28. a failed reversal produces no audit event — admin_log() is only called after every guard clause and after the invoice UPDATE, so any earlier RAISE EXCEPTION rolls back the whole transaction including the audit insert", () => {
-    const auditIdx = reverseFn.indexOf("PERFORM public.admin_log(");
+  it("9. exactly one admin_action_logs INSERT statement exists in the function — one audit row per successful call, never batched or duplicated", () => {
+    const inserts = reverseFn.match(/INSERT INTO public\.admin_action_logs/g) ?? [];
+    expect(inserts).toHaveLength(1);
+  });
+
+  it("10. double reversal cannot create a duplicate audit row — the second attempt is rejected by the is_reversal_of/status guards before reaching the audit insert at all", () => {
+    const auditIdx = reverseFn.indexOf("INSERT INTO public.admin_action_logs(");
+    const existingReversalGuardIdx = reverseFn.indexOf("already has a reversal journal entry");
+    const alreadyVoidGuardIdx = reverseFn.indexOf("already been reversed");
+    expect(auditIdx).toBeGreaterThan(existingReversalGuardIdx);
+    expect(auditIdx).toBeGreaterThan(alreadyVoidGuardIdx);
+  });
+
+  it("27. audit content establishes property, invoice id/code, actor, original and new status, both journal entry ids, and the reason", () => {
+    expect(reverseFn).toContain(
+      "jsonb_build_object('status', inv.status, 'code', inv.code, 'postedEntryId', inv.posted_entry_id)",
+    );
+    expect(reverseFn).toContain(
+      "jsonb_build_object('status', 'void', 'code', inv.code, 'postedEntryId', inv.posted_entry_id, 'reversalEntryId', _reversal_entry, 'reason', _trimmed_reason)",
+    );
+    expect(reverseFn).toContain(
+      "inv.property_id, auth.uid(), 'ar_invoice', inv.id::text, 'update',",
+    );
+  });
+
+  it("5/28/11. a failed reversal produces no audit row, and the audit insert is atomic with the reversal — it only happens after every guard, after the journal insert, and after the invoice status UPDATE, all in the same function/transaction, so a successful reversal can never be missing its audit row and a failed one can never have one", () => {
+    const auditIdx = reverseFn.indexOf("INSERT INTO public.admin_action_logs(");
     const lastGuardIdx = reverseFn.lastIndexOf("RAISE EXCEPTION");
+    const invoiceUpdateIdx = reverseFn.indexOf("UPDATE public.ar_invoices SET status = 'void'");
+    const journalInsertIdx = reverseFn.indexOf("INSERT INTO public.journal_entries(");
     expect(auditIdx).toBeGreaterThan(lastGuardIdx);
+    expect(auditIdx).toBeGreaterThan(invoiceUpdateIdx);
+    expect(auditIdx).toBeGreaterThan(journalInsertIdx);
+    // No exception handler swallows a failure after the writes — a raised
+    // error anywhere aborts the whole implicit transaction, journal+status+
+    // audit included, since plpgsql functions run inside the caller's
+    // transaction by default and have no BEGIN/EXCEPTION block here.
+    expect(reverseFn).not.toMatch(/EXCEPTION\s+WHEN/);
+  });
+
+  it("6. an unauthorized role (e.g. front_desk) never reaches the audit insert — has_any_role() raises before any write happens", () => {
+    const roleCheckIdx = reverseFn.indexOf("has_any_role(");
+    const auditIdx = reverseFn.indexOf("INSERT INTO public.admin_action_logs(");
+    expect(roleCheckIdx).toBeLessThan(auditIdx);
+    expect(roleCheckIdx).toBeGreaterThan(0);
   });
 
   it("does not log unnecessary personal data — only ids, statuses, and the operator-entered reason are captured, not customer PII", () => {
     expect(reverseFn).not.toMatch(/bill_to_email|bill_to_address/);
+  });
+
+  it("12. admin_log()'s own definition and role set are untouched — this migration never redefines it, so print-audit and every other existing caller keep their exact prior behavior", () => {
+    expect(migration).not.toMatch(/CREATE OR REPLACE FUNCTION public\.admin_log/);
+    expect(adminLogFoundation).toContain(
+      "ARRAY['super_admin','hotel_owner','general_manager']::app_role[], _property_id",
+    );
+  });
+
+  it("global audit security is not weakened — admin_log() is not called with a broadened role set, and no REVOKE/GRANT on admin_log() itself is changed", () => {
+    expect(migration).not.toMatch(/(REVOKE|GRANT) EXECUTE ON FUNCTION public\.admin_log/);
+  });
+});
+
+describe("log_audit_event() finding (payroll, informational — not fixed here)", () => {
+  it("is referenced by the payroll migration but has no CREATE FUNCTION anywhere in tracked migrations — genuinely missing, not dead code", () => {
+    const payroll = readFileSync(
+      resolve(root, "supabase/migrations/20260729235900_payroll_finalization_foundation.sql"),
+      "utf8",
+    );
+    expect(payroll).toMatch(/PERFORM public\.log_audit_event\(/);
+    expect(payroll).not.toMatch(/CREATE (OR REPLACE )?FUNCTION public\.log_audit_event/);
+    // This migration (AR reversal) documents the gap but does not define,
+    // call, or otherwise touch log_audit_event() itself — no CREATE
+    // FUNCTION and no PERFORM/rpc call anywhere in the executable SQL.
+    expect(migration).not.toMatch(/CREATE (OR REPLACE )?FUNCTION public\.log_audit_event/);
+    expect(migration).not.toMatch(/PERFORM public\.log_audit_event/);
   });
 });
 
@@ -225,7 +316,9 @@ describe("AR invoice reversal — SECURITY DEFINER / ACL", () => {
   });
 
   it("this migration only adds new objects — it never edits, drops, or alters any historical migration file", () => {
-    expect(migration).not.toMatch(/DROP FUNCTION|DROP TABLE|ALTER TABLE public\.ar_invoices\s+DROP/);
+    expect(migration).not.toMatch(
+      /DROP FUNCTION|DROP TABLE|ALTER TABLE public\.ar_invoices\s+DROP/,
+    );
   });
 });
 
@@ -239,7 +332,9 @@ describe("AR invoice reversal — ageing and statement regression (18/19)", () =
   });
 
   it("the statement's own DB query also excludes non-sent/paid invoices, not just the pure calculator", () => {
-    expect(arStatementsFns).toMatch(/status.*['"]sent['"].*['"]paid['"]|in\(["']status["'],\s*\[?["']sent["']/i);
+    expect(arStatementsFns).toMatch(
+      /status.*['"]sent['"].*['"]paid['"]|in\(["']status["'],\s*\[?["']sent["']/i,
+    );
   });
 
   it("historical mapped customer relationship is untouched — this migration never writes to ar_customers or an invoice's customer_id", () => {
@@ -261,6 +356,6 @@ describe("AR invoice reversal — UI (14/30)", () => {
     expect(arPage).toContain("reverseTarget.bill_to_name");
     expect(arPage).toContain("formatMoney(Number(reverseTarget.total), reverseTarget.currency)");
     expect(arPage).toMatch(/offsetting journal entry/);
-    expect(arPage).toContain('disabled={reverse.isPending || reverseReason.trim().length < 5}');
+    expect(arPage).toContain("disabled={reverse.isPending || reverseReason.trim().length < 5}");
   });
 });

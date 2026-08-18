@@ -60,17 +60,35 @@
 --    excluded from both. No new permission-table capability is introduced;
 --    this mirrors post_ar_invoice()'s own has_any_role() gate exactly.
 --
--- 7. Audit: uses the existing, established admin_log() RPC (the same
---    mechanism ar-statement-pdf.functions.ts uses for print audit) — not the
---    log_audit_event() name referenced by the payroll migration, which has
---    no CREATE FUNCTION anywhere in this repo's migration history and does
---    not exist. Known limitation: admin_log()'s own internal role check
---    (super_admin/hotel_owner/general_manager) does not include
---    'accountant', so a reversal performed by an accountant will still
---    succeed but will not produce an admin_action_logs row. This is a
---    pre-existing gap in admin_log() itself (affects every other admin_log
---    call site in the app identically), not something introduced or
---    silently patched by this migration.
+-- 7. Audit: writes directly to admin_action_logs (the same table admin_log()
+--    itself writes to) rather than calling admin_log() as an RPC. admin_log()
+--    has no dedicated REVOKE/GRANT of its own, so it is directly callable by
+--    any authenticated (Supabase's default function privilege) client, and
+--    its own internal role check (super_admin/hotel_owner/general_manager —
+--    deliberately excluding accountant) is the *only* thing gating it.
+--    Broadening that check to include 'accountant' would let every
+--    accountant call admin_log() directly, from any context, with
+--    arbitrary entity_type/action/before/after/memo content of their own
+--    choosing — a real widening of what an accountant can claim happened,
+--    not scoped to invoice reversal. That's the wrong fix for a single
+--    caller's narrower need.
+--
+--    Instead, reverse_ar_invoice() inserts its own admin_action_logs row
+--    directly, in the same SECURITY DEFINER transaction as the journal/
+--    invoice writes, using auth.uid() as actor — after this function has
+--    already independently verified the actor holds one of the four
+--    reversal-eligible roles for this specific invoice's property, which is
+--    a strictly narrower and more specific authorization than admin_log()'s
+--    bare role check. This guarantees every successful reversal by every
+--    eligible role (including accountant) produces exactly one audit row,
+--    with zero change to admin_log() itself or any of its other callers
+--    (ar-statement-pdf.functions.ts, pdf.functions.ts print audit).
+--
+--    Separately: log_audit_event() is referenced by the payroll migration
+--    but has no CREATE FUNCTION anywhere in this repo's migration history —
+--    it does not exist as a callable function. That is a pre-existing gap
+--    unrelated to AR and is not touched by this migration; see this PR's
+--    description for the follow-up recommendation.
 
 CREATE UNIQUE INDEX journal_entries_reversal_of_uniq
   ON public.journal_entries(is_reversal_of)
@@ -167,10 +185,21 @@ BEGIN
 
   UPDATE public.ar_invoices SET status = 'void' WHERE id = _id;
 
-  PERFORM public.admin_log(
-    inv.property_id, 'ar_invoice', inv.id::text, 'update',
-    jsonb_build_object('status', inv.status, 'postedEntryId', inv.posted_entry_id),
-    jsonb_build_object('status', 'void', 'postedEntryId', inv.posted_entry_id, 'reversalEntryId', _reversal_entry),
+  -- Direct insert, not the admin_log() RPC — see the header comment (point 7)
+  -- for why: admin_log()'s own role check excludes 'accountant', and
+  -- broadening that check globally would let every accountant call
+  -- admin_log() directly with arbitrary content, unrelated to this action.
+  -- This insert happens only after every guard above has passed and after
+  -- the reversal journal + invoice status update, in the same transaction —
+  -- any earlier RAISE EXCEPTION rolls back everything including this row,
+  -- and a successful reversal can never leave this row missing (both writes
+  -- commit together or neither does).
+  INSERT INTO public.admin_action_logs(
+    property_id, actor_id, entity_type, entity_id, action, before_snapshot, after_snapshot, memo
+  ) VALUES (
+    inv.property_id, auth.uid(), 'ar_invoice', inv.id::text, 'update',
+    jsonb_build_object('status', inv.status, 'code', inv.code, 'postedEntryId', inv.posted_entry_id),
+    jsonb_build_object('status', 'void', 'code', inv.code, 'postedEntryId', inv.posted_entry_id, 'reversalEntryId', _reversal_entry, 'reason', _trimmed_reason),
     'AR invoice '||inv.code||' reversed: '||_trimmed_reason
   );
 
