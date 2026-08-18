@@ -31,6 +31,23 @@ export const AR_PERMISSIONS = {
   invoicesMapCustomer: { module: "accounts_receivable", capability: "manage_settings" },
 } as const;
 
+/**
+ * AP has no front_desk involvement anywhere in the schema — suppliers_write,
+ * ap_bills_write and ap_payments_write RLS policies all gate on exactly
+ * ACCOUNTING_ADMIN_ROLES (super_admin/hotel_owner/general_manager/
+ * accountant), never front_desk. Reused as-is rather than defined as a
+ * separate broader set, unlike AR's ACCOUNTING_AR_ROLES.
+ */
+export const ACCOUNTING_AP_ROLES: readonly AppRole[] = ACCOUNTING_ADMIN_ROLES;
+
+export const AP_PERMISSIONS = {
+  suppliersView: { module: "accounts_payable", capability: "view" },
+  // Assigning a stable supplier identity to a historical bill is an
+  // administrative reconciliation action, not mere viewing — mirrors AR's
+  // invoicesMapCustomer using the same manage_settings capability.
+  billsMapSupplier: { module: "accounts_payable", capability: "manage_settings" },
+} as const;
+
 export const EXPENSE_PERMISSIONS = {
   overviewView: { module: "accounting_overview", capability: "view" },
 
