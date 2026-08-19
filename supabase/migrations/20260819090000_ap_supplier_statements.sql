@@ -1,0 +1,21 @@
+-- AP supplier statements — statement-specific schema.
+--
+-- PR B of a two-PR split (see feature/ap-supplier-identity-foundation for
+-- PR A, which this migration depends on: assign_ap_bill_supplier() and the
+-- ap_bills(property_id, supplier_id) index it introduced must already
+-- exist). Nothing here duplicates that foundation.
+--
+-- The only schema this statement feature needs beyond PR A's foundation is
+-- one index: ap_payments had no index reaching bill_id at all before this,
+-- despite being queried by bill_id on every statement/aging lookup. The
+-- statement's payment lookup (loadApSupplierStatement in
+-- ap-statements.functions.ts) filters ap_payments by
+-- (property_id, bill_id IN (...)), which this index serves directly.
+--
+-- No new table, no new column, no new function — the statement itself is
+-- computed on read (computeApSupplierStatement, a pure function with no
+-- data access of its own) from ap_bills/ap_payments/suppliers via ordinary
+-- RLS-scoped queries, exactly mirroring how AR's customer statements
+-- required no RPC either.
+
+CREATE INDEX ap_payments_property_bill ON public.ap_payments(property_id, bill_id);
