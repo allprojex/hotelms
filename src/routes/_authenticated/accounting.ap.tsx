@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
 import { recordApPayment } from "@/lib/accounting/ap-payments.functions";
+import { ApHistoricalBillMapping } from "@/components/accounting/ap-historical-bill-mapping";
 import { useActiveProperty } from "@/hooks/use-active-property";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -13,7 +14,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Plus, Trash2, Truck, Send, DollarSign } from "lucide-react";
+import { Plus, Trash2, Truck, Send, DollarSign, Link2 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { AccountingWorkspaceShell } from "@/components/accounting/accounting-workspace-nav";
@@ -35,11 +36,12 @@ function APPage() {
   const qc = useQueryClient();
   const recordPaymentFn = useServerFn(recordApPayment);
   const [open, setOpen] = useState(false);
+  const [mappingOpen, setMappingOpen] = useState(false);
   const [payFor, setPayFor] = useState<any | null>(null);
   const [payAmount, setPayAmount] = useState("");
   const [payMethod, setPayMethod] = useState<"cash" | "card" | "bank_transfer">("bank_transfer");
   const [form, setForm] = useState({
-    supplier_name: "", reference: "",
+    supplier_id: null as string | null, supplier_name: "", reference: "",
     bill_date: format(new Date(), "yyyy-MM-dd"),
     due_date: format(new Date(Date.now() + 30 * 86400e3), "yyyy-MM-dd"),
     currency: "GHS", notes: "",
@@ -97,6 +99,7 @@ function APPage() {
     onSuccess: () => {
       toast.success("Bill created as draft");
       setOpen(false);
+      setForm((current) => ({ ...current, supplier_id: null, supplier_name: "" }));
       setLines([{ description: "", quantity: "1", unit_price: "0", tax_rate: "0" }]);
       qc.invalidateQueries({ queryKey: ["ap-bills", propertyId] });
     },
@@ -148,6 +151,8 @@ function APPage() {
     <div className="p-4 md:p-6 space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-display font-semibold flex items-center gap-2"><Truck className="h-6 w-6" /> Accounts Payable</h1>
+        <div className="flex items-center gap-2">
+        <Button size="sm" variant="outline" onClick={() => setMappingOpen(true)}><Link2 className="h-4 w-4 mr-1" /> Map historical bills</Button>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild><Button size="sm"><Plus className="h-4 w-4 mr-1" /> New bill</Button></DialogTrigger>
           <DialogContent className="max-w-3xl">
@@ -156,12 +161,22 @@ function APPage() {
               <div className="grid grid-cols-2 gap-2">
                 <div><Label>Supplier</Label>
                   {(suppliers.data ?? []).length > 0 ? (
-                    <Select value={form.supplier_name} onValueChange={(v) => setForm({ ...form, supplier_name: v })}>
+                    <Select
+                      value={form.supplier_id ?? ""}
+                      onValueChange={(id) => {
+                        const s = (suppliers.data ?? []).find((row: any) => row.id === id);
+                        setForm({ ...form, supplier_id: id, supplier_name: s?.name ?? "" });
+                      }}
+                    >
                       <SelectTrigger><SelectValue placeholder="Select supplier…" /></SelectTrigger>
-                      <SelectContent>{(suppliers.data ?? []).map((s: any) => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent>
+                      <SelectContent>{(suppliers.data ?? []).map((s: any) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
                     </Select>
                   ) : (
-                    <Input value={form.supplier_name} onChange={(e) => setForm({ ...form, supplier_name: e.target.value })} />
+                    <Input
+                      placeholder="No suppliers on file — type a name"
+                      value={form.supplier_name}
+                      onChange={(e) => setForm({ ...form, supplier_id: null, supplier_name: e.target.value })}
+                    />
                   )}
                 </div>
                 <div><Label>Reference / Invoice #</Label><Input value={form.reference} onChange={(e) => setForm({ ...form, reference: e.target.value })} /></div>
@@ -191,6 +206,7 @@ function APPage() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
@@ -251,6 +267,12 @@ function APPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <ApHistoricalBillMapping
+        propertyId={propertyId}
+        open={mappingOpen}
+        onOpenChange={setMappingOpen}
+        onMapped={() => qc.invalidateQueries({ queryKey: ["ap-bills", propertyId] })}
+      />
     </div>
   );
 }
