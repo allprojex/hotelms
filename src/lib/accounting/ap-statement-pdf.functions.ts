@@ -12,6 +12,33 @@ function isoDate(value: unknown): string {
 }
 
 /**
+ * Best-effort effective branding lookup (property override -> global
+ * default). Never throws — a branding failure must never block printing
+ * the actual statement; buildStatementPdf falls back to its prior
+ * hardcoded behavior when `brand` is undefined.
+ */
+async function fetchDocBranding(
+  context: any,
+  propertyId: string,
+): Promise<import("@/lib/admin/pdf-render.server").DocBranding | undefined> {
+  try {
+    const { data, error } = await context.supabase.rpc("get_effective_branding", {
+      _property_id: propertyId,
+    });
+    if (error || !data) return undefined;
+    const row = Array.isArray(data) ? data[0] : data;
+    if (!row) return undefined;
+    return {
+      name: row.effective_name || row.org_app_name || undefined,
+      logoUrl: row.logo_url ?? null,
+      primaryColor: row.primary_color ?? null,
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Records the print via captureAuditEvent() (audit_capture RPC), NOT the
  * admin_log() RPC that ar-statement-pdf.functions.ts uses. This is a
  * deliberate departure from that otherwise-parallel file: admin_log()'s own
@@ -76,6 +103,7 @@ export const renderApSupplierStatementPdf = createServerFn({ method: "POST" })
     const anyP = property as any;
 
     const { buildStatementPdf, toBase64 } = await import("@/lib/admin/pdf-render.server");
+    const brand = await fetchDocBranding(context, data.propertyId);
     const filename = `supplier-statement-${statement.supplier.name.replace(/[^a-z0-9]+/gi, "-")}-${data.from}-to-${data.to}.pdf`;
     const bytes = await buildStatementPdf({
       filename,
@@ -93,6 +121,7 @@ export const renderApSupplierStatementPdf = createServerFn({ method: "POST" })
         { label: "Supplier", value: statement.supplier.name },
       ],
       sections: statement.sections,
+      brand,
     });
     const base64 = toBase64(bytes);
 

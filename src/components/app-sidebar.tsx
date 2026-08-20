@@ -17,6 +17,7 @@ import {
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Input } from "@/components/ui/input";
 import { BrandMark } from "@/components/brand-mark";
+import { useEffectiveBranding } from "@/hooks/use-effective-branding";
 import {
   LayoutDashboard,
   CalendarDays,
@@ -413,6 +414,7 @@ export function AppSidebar() {
   const isActive = (path: string) =>
     currentPath === path || (path !== "/dashboard" && currentPath.startsWith(path));
   const propertyId = useActiveProperty();
+  const { data: brand } = useEffectiveBranding();
   const rolesQ = useUserRoles();
   const roleRows = rolesQ.data ?? [];
   const isSuper = roleRows.some((r) => r.role === "super_admin");
@@ -455,13 +457,27 @@ export function AppSidebar() {
 
   return (
     <Sidebar collapsible="icon">
-      <SidebarHeader className="border-b px-3 py-3">
+      <SidebarHeader
+        className="border-b-2 px-3 py-3"
+        // Conservative brand-color application: only this 2px accent border,
+        // via the dedicated --brand-primary variable (never the design
+        // system's own --sidebar-primary/--primary tokens used for
+        // interactive elements). Falls back to the existing sidebar token
+        // automatically when no brand color is configured for the
+        // effective (property override or organisation-wide) branding.
+        style={{ borderBottomColor: "var(--brand-primary, var(--sidebar-primary))" }}
+      >
         <Link to="/dashboard" className="flex items-center gap-2" onClick={handleNavigate}>
-          <BrandMark className="h-7 w-auto shrink-0" />
+          <BrandMark
+            className="h-7 w-auto shrink-0"
+            logoUrl={brand.logoUrl}
+            logoDarkUrl={brand.logoDarkUrl}
+            alt={brand.name}
+          />
           {!collapsed && (
             <div className="min-w-0">
               <div className="font-display text-sm font-semibold leading-tight truncate">
-                ThesKwoff Hotel
+                {brand.name || "ThesKwoff Hotel"}
               </div>
               <div className="text-[10px] uppercase tracking-widest text-muted-foreground">PMS</div>
             </div>

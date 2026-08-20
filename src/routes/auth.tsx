@@ -13,17 +13,28 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { BrandMark } from "@/components/brand-mark";
+import { useBrandSettings } from "@/hooks/use-brand-settings";
 import { Eye, EyeOff, Fingerprint, Shield, Users } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/auth")({
-  head: () => ({ meta: [{ title: "Staff & Admin Sign In — ThesKwoff Hotel" }] }),
+  // Static SSR/pre-hydration fallback — the live tab title is overwritten
+  // post-hydration by __root.tsx's BrandTitle with the configured
+  // organisation app_name (see that file's comment for why this isn't
+  // fully dynamic in Branding Phase 1). Kept brand-name-neutral here
+  // rather than hardcoding a specific tenant name into the static meta.
+  head: () => ({ meta: [{ title: "Staff & Admin Sign In" }] }),
   component: AuthPage,
 });
 
 function AuthPage() {
   const navigate = useNavigate();
+  // Organisation-wide branding only — the login page has no property
+  // context (property selection is client-side, post-authentication;
+  // see src/lib/property-store.ts), so per-property branding never
+  // applies here.
+  const { data: brand } = useBrandSettings();
   const signIn = useServerFn(identifierSignIn);
   const beginPasskey = useServerFn(beginPasskeyAuthentication);
   const completePasskey = useServerFn(completePasskeyAuthentication);
@@ -109,8 +120,10 @@ function AuthPage() {
       <main className="w-full max-w-md">
         <header className="mb-7 text-center">
           <BrandMark className="mx-auto h-12" />
-          <h1 className="mt-4 text-2xl font-semibold">ThesKwoff Hotel</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Property Management System</p>
+          <h1 className="mt-4 text-2xl font-semibold">{brand?.app_name || "ThesKwoff Hotel"}</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {brand?.tagline || "Property Management System"}
+          </p>
         </header>
         <section className="rounded-2xl border bg-card p-5 shadow-[var(--shadow-elegant)] sm:p-6">
           <div
