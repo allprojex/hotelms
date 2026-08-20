@@ -7,6 +7,7 @@ import { uuid } from "@/lib/accounting/domain";
 import {
   computeArCustomerStatement,
   type ArStatementAllocationRow,
+  type ArStatementCreditNoteRow,
   type ArStatementCurrencySection,
   type ArStatementInvoiceRow,
 } from "@/lib/accounting/ar-statement-calc";
@@ -134,11 +135,40 @@ export async function loadArCustomerStatement(
       );
   }
 
+  let creditNotes: ArStatementCreditNoteRow[] = [];
+  if (invoices.length > 0) {
+    const invoiceIds = invoices.map((inv) => inv.id);
+    // Filtering to status='posted' here is the real security/correctness
+    // boundary (this function's own doc comment above) — the pure
+    // calculator independently re-filters to 'posted' too, but only as
+    // defensive redundancy, the same pattern already used for invoice
+    // status. Filtering by issue_date <= to mirrors the receipt/invoice
+    // fetch above: rows strictly after `to` cannot affect this statement.
+    const { data: creditNoteRows, error: creditNoteError } = await context.supabase
+      .from("ar_credit_notes")
+      .select("invoice_id,code,total,issue_date,currency,status")
+      .eq("property_id", input.propertyId)
+      .in("invoice_id", invoiceIds)
+      .eq("status", "posted")
+      .lte("issue_date", input.to);
+    if (creditNoteError) throw new Error(creditNoteError.message);
+
+    creditNotes = (creditNoteRows ?? []).map((row: any) => ({
+      invoiceId: row.invoice_id,
+      code: row.code,
+      total: Number(row.total),
+      issueDate: row.issue_date,
+      currency: row.currency,
+      status: row.status,
+    }));
+  }
+
   const sections = computeArCustomerStatement({
     from: input.from,
     to: input.to,
     invoices,
     allocations,
+    creditNotes,
   });
 
   return {

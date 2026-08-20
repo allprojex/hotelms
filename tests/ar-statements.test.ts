@@ -233,6 +233,45 @@ describe("AR customer statement — UI", () => {
   });
 });
 
+describe("AR customer statement — posted credit notes (PR #36 blocking fix)", () => {
+  it("fetches ar_credit_notes scoped to property_id and the customer's own fetched invoice ids", () => {
+    const creditNoteQuery =
+      statementFns.match(/\.from\("ar_credit_notes"\)[\s\S]{0,260}/)?.[0] ?? "";
+    expect(creditNoteQuery).toContain('.eq("property_id", input.propertyId)');
+    expect(creditNoteQuery).toContain('.in("invoice_id", invoiceIds)');
+  });
+
+  it("filters to status='posted' at the query level — this is the real security/correctness boundary, not just the pure calculator's defensive re-filter", () => {
+    const creditNoteQuery =
+      statementFns.match(/\.from\("ar_credit_notes"\)[\s\S]{0,260}/)?.[0] ?? "";
+    expect(creditNoteQuery).toContain('.eq("status", "posted")');
+  });
+
+  it("bounds the credit note fetch by issue_date <= to, matching the invoice/receipt fetch bound", () => {
+    const creditNoteQuery =
+      statementFns.match(/\.from\("ar_credit_notes"\)[\s\S]{0,260}/)?.[0] ?? "";
+    expect(creditNoteQuery).toContain('.lte("issue_date", input.to)');
+  });
+
+  it("passes creditNotes through to the pure calculator alongside invoices and allocations", () => {
+    expect(statementFns).toContain("creditNotes,");
+    const sectionsCall =
+      statementFns.match(/computeArCustomerStatement\(\{[\s\S]{0,120}/)?.[0] ?? "";
+    expect(sectionsCall).toContain("creditNotes");
+  });
+
+  it("U (extended). the credit note query is included among the property-scoped data queries this suite already audits", () => {
+    const fromCalls = statementFns.match(/\.from\("[a-z_]+"\)[\s\S]{0,220}/g) ?? [];
+    const dataQueries = fromCalls.filter((call) =>
+      /ar_invoices|ar_receipt_allocations|ar_receipts|ar_credit_notes/.test(call),
+    );
+    expect(dataQueries.length).toBeGreaterThanOrEqual(4);
+    for (const call of dataQueries) {
+      expect(call).toContain('.eq("property_id"');
+    }
+  });
+});
+
 describe("AR customer statement — no automatic name/email inference anywhere in this feature", () => {
   it("the statement pipeline never joins or filters by bill_to_name/bill_to_email/reservation_id for identity purposes", () => {
     for (const source of [statementFns, statementCalc, statementPdfFns]) {
