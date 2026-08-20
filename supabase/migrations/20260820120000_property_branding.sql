@@ -23,12 +23,17 @@
 --      logo, display name, colors, and support contact are property-
 --      overridable.
 --   5. get_effective_branding(_property_id) is a new, separate
---      SECURITY DEFINER function alongside the existing get_brand_settings()
---      — the latter is untouched and still serves the pre-auth login page,
---      which has no property context (confirmed: property selection happens
---      client-side, post-authentication, via localStorage — src/lib/
---      property-store.ts — never before sign-in). get_effective_branding()
---      is for the authenticated, property-aware application and documents.
+--      SECURITY DEFINER function alongside get_brand_settings() — the
+--      latter still serves the pre-auth login page and every other
+--      property-agnostic caller unchanged (same query, same grants,
+--      same behaviour — only its return row type grew by one column,
+--      requiring the explicit DROP+recreate documented at PART A; see
+--      that section for why CREATE OR REPLACE cannot do this). Property
+--      selection happens client-side, post-authentication, via
+--      localStorage (src/lib/property-store.ts) — never before sign-in
+--      — so get_brand_settings() remains the only branding source the
+--      login page ever needs. get_effective_branding() is for the
+--      authenticated, property-aware application and documents.
 --   6. property_branding.updated_by is set server-side by a BEFORE
 --      trigger (PART D) — never trusted from the client payload.
 --   7. brand-assets uploads use a property-scoped path
@@ -90,13 +95,31 @@ ALTER TABLE public.system_settings
   ADD CONSTRAINT system_settings_secondary_color_not_blank
     CHECK (secondary_color IS NULL OR btrim(secondary_color) <> '');
 
--- Extend (not replace) the existing get_brand_settings() RPC to also
--- return secondary_color — a strict additive superset of its prior
--- return shape (same 9 columns plus one), so every existing caller is
--- unaffected. This keeps secondary_color available to property-agnostic
--- contexts (the pre-auth login page, and any authenticated view before a
--- property is selected) without introducing a second global-read RPC.
-CREATE OR REPLACE FUNCTION public.get_brand_settings()
+-- Extend the existing get_brand_settings() RPC to also return
+-- secondary_color, so it stays available to property-agnostic contexts
+-- (the pre-auth login page, and any authenticated view before a property
+-- is selected) without introducing a second global-read RPC.
+--
+-- This CANNOT be done via CREATE OR REPLACE FUNCTION: Postgres treats a
+-- RETURNS TABLE function's OUT-parameter row type as fixed for OR
+-- REPLACE purposes — only the body/volatility/etc. may change, not the
+-- column list, even by appending a column at the end. Production's
+-- get_brand_settings() carries its ORIGINAL 9-column signature from
+-- 20260706223717 (app_name, app_short_name, tagline, logo_url,
+-- logo_dark_url, favicon_url, primary_color, support_email,
+-- support_phone) — confirmed by the production failure this migration
+-- previously caused (42P13: cannot change return type of existing
+-- function). Adding secondary_color therefore requires an explicit DROP
+-- + recreate. Verified safe: no view or other function body anywhere in
+-- this repo's migration history calls get_brand_settings() (grepped the
+-- full migration history), so DROP FUNCTION (deliberately without
+-- CASCADE) has no dependent to silently take down — every real caller
+-- (use-brand-settings.ts, the public health check) is an
+-- application-level PostgREST RPC call that re-resolves cleanly once the
+-- schema cache reloads after this migration commits.
+DROP FUNCTION IF EXISTS public.get_brand_settings();
+
+CREATE FUNCTION public.get_brand_settings()
 RETURNS TABLE (
   app_name text,
   app_short_name text,
