@@ -7,6 +7,7 @@ import { createArReceipt } from "@/lib/accounting/ar-receipts.functions";
 import { createArInvoice, listArCustomers } from "@/lib/accounting/ar-customers.functions";
 import { ArCustomerManager } from "@/components/accounting/ar-customer-manager";
 import { ArHistoricalInvoiceMapping } from "@/components/accounting/ar-historical-invoice-mapping";
+import { ArCreditNotesPanel } from "@/components/accounting/ar-credit-notes-panel";
 import { renderAdminPdf } from "@/lib/admin/pdf.functions";
 import { downloadServerPdf } from "@/lib/admin/pdf-docs";
 import { useActiveProperty } from "@/hooks/use-active-property";
@@ -347,6 +348,15 @@ function ARPage() {
           {(receipts.data ?? []).length === 0 && <div className="p-6 text-center text-sm text-muted-foreground">No receipts yet.</div>}
         </CardContent>
       </Card>
+
+      <ArCreditNotesPanel
+        propertyId={propertyId}
+        invoices={invoices.data ?? []}
+        onPosted={() => {
+          qc.invalidateQueries({ queryKey: ["ar-invoices", propertyId] });
+          qc.invalidateQueries({ queryKey: ["ar-aging", propertyId] });
+        }}
+      />
 
       <Dialog open={payOpen} onOpenChange={setPayOpen}>
         <DialogContent className="max-w-2xl">
