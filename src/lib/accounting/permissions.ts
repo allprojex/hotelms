@@ -29,6 +29,18 @@ export const AR_PERMISSIONS = {
   // administrative reconciliation action, not mere viewing — reuses the
   // same manage_settings capability already gating AR customer create/edit.
   invoicesMapCustomer: { module: "accounts_receivable", capability: "manage_settings" },
+  // Distinct module (not "accounts_receivable") so a Permission Matrix
+  // override for invoice creation never silently also grants/revokes
+  // credit-note creation. Default role set intentionally excludes
+  // front_desk, unlike ACCOUNTING_AR_ROLES — create_ar_credit_note() and
+  // post_ar_credit_note() (20260819120000_ar_credit_notes_pr1.sql) both
+  // hardcode ACCOUNTING_ADMIN_ROLES (super_admin/hotel_owner/
+  // general_manager/accountant) in their own has_any_role() check, which
+  // an explicit role_permissions override can never widen — only narrow —
+  // since the RPC's own check is the true, unconfigurable boundary. This
+  // mirrors that boundary exactly for the UI's default-hidden state.
+  creditNotesCreate: { module: "ar_credit_notes", capability: "create" },
+  creditNotesPost: { module: "ar_credit_notes", capability: "approve" },
 } as const;
 
 /**
