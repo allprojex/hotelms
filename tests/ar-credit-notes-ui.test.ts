@@ -272,17 +272,15 @@ describe("AR Credit Note UI — draft state and posting confirmation", () => {
     expect(panel).toContain("Post credit note");
   });
 
-  it("the confirmation dialog explains that posting creates real accounting entries and cannot be edited afterward", () => {
+  it("the confirmation dialog explains that posting creates real accounting entries and describes the only path to undo it afterward", () => {
     expect(panel).toContain(
       "Posting creates a new accounting entry (debiting revenue and tax, crediting accounts",
     );
-    expect(panel).toContain("cannot be edited afterward");
+    expect(panel).toContain("can only be undone afterward by reversing it");
   });
 
-  it("the confirmation dialog is honest that no reversal exists yet in this PR (PR B dependency)", () => {
-    expect(panel).toContain(
-      "There is currently\n                no reversal for a posted credit note.",
-    );
+  it("PR B: reversal now exists — the post dialog no longer claims no reversal exists", () => {
+    expect(panel).not.toContain("no reversal for a posted credit note");
   });
 });
 
@@ -341,7 +339,7 @@ describe("AR Credit Note UI — query invalidation / refresh after create and po
   it("create invalidates only ar-credit-notes (a draft has no journal entry yet, so invoices/aging are unaffected)", () => {
     const createOnSuccess =
       panel.match(
-        /mutationFn: async \(\) => \{[\s\S]*?onError: \(e: Error\) => toast\.error\(e\.message\),\n {2}\}\);\n\n {2}const post/,
+        /mutationFn: async \(\) => \{[\s\S]*?onError: \(e: Error\) => toast\.error\(e\.message\),\n {2}\}\);\n\n {2}\/\/ Shared by post and reverse/,
       )?.[0] ?? "";
     expect(createOnSuccess).toContain(
       'qc.invalidateQueries({ queryKey: ["ar-credit-notes", propertyId] });',
@@ -350,28 +348,37 @@ describe("AR Credit Note UI — query invalidation / refresh after create and po
     expect(createOnSuccess).not.toContain('"ar-aging"');
   });
 
-  it("post invalidates ar-credit-notes plus every derived per-invoice query (balance, remaining-capacity lines, posted-ids) explicitly — not relying only on the create dialog's enabled/staleTime transition to refetch them", () => {
+  it("post and reverse both delegate to the same shared invalidateDerivedQueries() helper — every derived per-invoice query (credit notes, balance, remaining-capacity lines, posted-ids) explicitly, not relying only on the create dialog's enabled/staleTime transition to refetch them", () => {
+    const helperBody =
+      panel.match(/function invalidateDerivedQueries\(\) \{[\s\S]*?\n  \}/)?.[0] ?? "";
+    expect(helperBody).toContain(
+      'qc.invalidateQueries({ queryKey: ["ar-credit-notes", propertyId] });',
+    );
+    expect(helperBody).toContain('qc.invalidateQueries({ queryKey: ["ar-invoice-balance"] });');
+    expect(helperBody).toContain('qc.invalidateQueries({ queryKey: ["ar-credit-note-lines"] });');
+    expect(helperBody).toContain(
+      'qc.invalidateQueries({ queryKey: ["ar-credit-notes-posted-ids"] });',
+    );
+    expect(helperBody).toContain("onLedgerChanged();");
+
     const postOnSuccess =
       panel.match(
         /const post = useMutation\(\{[\s\S]*?onError: \(e: Error\) => toast\.error\(e\.message\),\n {2}\}\);/,
       )?.[0] ?? "";
-    expect(postOnSuccess).toContain(
-      'qc.invalidateQueries({ queryKey: ["ar-credit-notes", propertyId] });',
-    );
-    expect(postOnSuccess).toContain('qc.invalidateQueries({ queryKey: ["ar-invoice-balance"] });');
-    expect(postOnSuccess).toContain(
-      'qc.invalidateQueries({ queryKey: ["ar-credit-note-lines"] });',
-    );
-    expect(postOnSuccess).toContain(
-      'qc.invalidateQueries({ queryKey: ["ar-credit-notes-posted-ids"] });',
-    );
-    expect(postOnSuccess).toContain("onPosted();");
+    expect(postOnSuccess).toContain("invalidateDerivedQueries();");
+
+    const reverseOnSuccess =
+      panel.match(
+        /const reverse = useMutation\(\{[\s\S]*?onError: \(e: Error\) => toast\.error\(e\.message\),\n {2}\}\);/,
+      )?.[0] ?? "";
+    expect(reverseOnSuccess).toContain("invalidateDerivedQueries();");
   });
 
-  it("post delegates ar-invoices/ar-aging invalidation to the parent via onPosted() — posting changes invoice status/balance, matching how reverse_ar_invoice's own onSuccess behaves in this file", () => {
+  it("post/reverse delegate ar-invoices/ar-aging invalidation to the parent via onLedgerChanged() — posting/reversing changes invoice status/balance, matching how reverse_ar_invoice's own onSuccess behaves in this file", () => {
     expect(arPage).toContain(
       'qc.invalidateQueries({ queryKey: ["ar-invoices", propertyId] });\n          qc.invalidateQueries({ queryKey: ["ar-aging", propertyId] });',
     );
+    expect(arPage).toContain("onLedgerChanged={() => {");
   });
 
   it("the panel is mounted with the parent's already-fetched invoice list rather than re-querying ar_invoices a second time", () => {
@@ -387,8 +394,9 @@ describe("AR Credit Note UI — no unrelated financial code touched", () => {
     expect(serverFn).not.toMatch(/reverse_ar_receipt|void_ar_receipt/);
   });
 
-  it("no reversal RPC for credit notes is called — reverse_ar_credit_note/void_ar_credit_note do not exist in this PR", () => {
-    expect(panel).not.toMatch(/reverse_ar_credit_note|void_ar_credit_note/);
+  it("PR B superseded the original PR A constraint of 'no credit-note reversal exists yet' — reverse_ar_credit_note is now called, covered in depth by tests/ar-credit-note-receipt-reversal.test.ts", () => {
+    expect(panel).toContain('"reverse_ar_credit_note"');
+    expect(panel).not.toMatch(/void_ar_credit_note/);
   });
 
   it("imports nothing from the HRM, payroll, or AP modules — every import is scoped to AR/shared UI primitives", () => {

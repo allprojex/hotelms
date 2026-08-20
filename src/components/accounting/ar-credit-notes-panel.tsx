@@ -28,7 +28,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, FileMinus2, Send } from "lucide-react";
+import { Plus, FileMinus2, Send, Undo2 } from "lucide-react";
 import { format } from "date-fns";
 
 type ArInvoice = {
@@ -53,6 +53,8 @@ type ArCreditNote = {
   currency: string;
   status: "draft" | "posted" | "void";
   updated_at: string;
+  reversal_reason: string | null;
+  reversed_at: string | null;
   invoice: { code: string; bill_to_name: string | null } | null;
 };
 
@@ -86,13 +88,13 @@ function round4(n: number): number {
 export function ArCreditNotesPanel({
   propertyId,
   invoices,
-  onPosted,
+  onLedgerChanged,
 }: {
   propertyId: string;
   /** The parent's already-fetched invoice list — reused rather than re-queried. */
   invoices: ArInvoice[];
-  /** Called after a successful post — the parent owns ar-invoices/ar-aging query invalidation. */
-  onPosted: () => void;
+  /** Called after a successful post OR reversal — the parent owns ar-invoices/ar-aging query invalidation. */
+  onLedgerChanged: () => void;
 }) {
   const qc = useQueryClient();
   const createFn = useServerFn(createArCreditNote);
@@ -104,6 +106,8 @@ export function ArCreditNotesPanel({
   const [reason, setReason] = useState("");
   const [quantities, setQuantities] = useState<Record<string, string>>({});
   const [postTarget, setPostTarget] = useState<ArCreditNote | null>(null);
+  const [reverseTarget, setReverseTarget] = useState<ArCreditNote | null>(null);
+  const [reverseReason, setReverseReason] = useState("");
 
   const creditNotes = useQuery({
     queryKey: ["ar-credit-notes", propertyId],
@@ -115,7 +119,7 @@ export function ArCreditNotesPanel({
       const { data, error } = await (supabase as any)
         .from("ar_credit_notes")
         .select(
-          "id,code,issue_date,reason,invoice_id,subtotal,tax,total,currency,status,updated_at,invoice:ar_invoices(code,bill_to_name)",
+          "id,code,issue_date,reason,invoice_id,subtotal,tax,total,currency,status,updated_at,reversal_reason,reversed_at,invoice:ar_invoices(code,bill_to_name)",
         )
         .eq("property_id", propertyId)
         .order("issue_date", { ascending: false })
@@ -277,6 +281,19 @@ export function ArCreditNotesPanel({
     onError: (e: Error) => toast.error(e.message),
   });
 
+  // Shared by post and reverse — both change per-line remaining capacity
+  // and/or the invoice's net balance, so both need the exact same set of
+  // derived-query invalidations. Explicit rather than relying only on the
+  // create dialog's enabled/staleTime transition to happen to refetch them
+  // when reopened.
+  function invalidateDerivedQueries() {
+    qc.invalidateQueries({ queryKey: ["ar-credit-notes", propertyId] });
+    qc.invalidateQueries({ queryKey: ["ar-invoice-balance"] });
+    qc.invalidateQueries({ queryKey: ["ar-credit-note-lines"] });
+    qc.invalidateQueries({ queryKey: ["ar-credit-notes-posted-ids"] });
+    onLedgerChanged();
+  }
+
   const post = useMutation({
     mutationFn: async (id: string) => {
       // post_ar_credit_note is not yet in the generated Database types
@@ -290,16 +307,28 @@ export function ArCreditNotesPanel({
     onSuccess: () => {
       toast.success("Credit note posted — a new accounting entry was recorded");
       setPostTarget(null);
-      qc.invalidateQueries({ queryKey: ["ar-credit-notes", propertyId] });
-      // Posting consumes remaining per-line capacity and changes the
-      // invoice's net balance — explicitly invalidate every derived query
-      // that depends on that, rather than relying only on the create
-      // dialog's enabled/staleTime transition to happen to refetch them
-      // when reopened.
-      qc.invalidateQueries({ queryKey: ["ar-invoice-balance"] });
-      qc.invalidateQueries({ queryKey: ["ar-credit-note-lines"] });
-      qc.invalidateQueries({ queryKey: ["ar-credit-notes-posted-ids"] });
-      onPosted();
+      invalidateDerivedQueries();
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const reverse = useMutation({
+    mutationFn: async ({ id, reason: reversalReason }: { id: string; reason: string }) => {
+      // reverse_ar_credit_note is not yet in the generated Database types
+      // (20260821120000_ar_credit_note_receipt_reversal.sql) — same
+      // untyped-RPC precedent used for post_ar_credit_note above.
+      const { data, error } = await (supabase.rpc as any)("reverse_ar_credit_note", {
+        _id: id,
+        _reason: reversalReason,
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      toast.success("Credit note reversed — a new offsetting accounting entry was recorded");
+      setReverseTarget(null);
+      setReverseReason("");
+      invalidateDerivedQueries();
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -344,6 +373,11 @@ export function ArCreditNotesPanel({
                       Posted {format(new Date(cn.updated_at), "yyyy-MM-dd")}
                     </span>
                   )}
+                  {cn.status === "void" && (
+                    <span className="text-[10px] text-destructive">
+                      Reversed {cn.reversed_at ? format(new Date(cn.reversed_at), "yyyy-MM-dd") : ""}
+                    </span>
+                  )}
                 </div>
                 <div className="truncate text-sm">
                   {cn.invoice?.bill_to_name ?? "—"}
@@ -353,6 +387,11 @@ export function ArCreditNotesPanel({
                   </span>
                 </div>
                 <div className="truncate text-xs text-muted-foreground">{cn.reason}</div>
+                {cn.status === "void" && cn.reversal_reason && (
+                  <div className="truncate text-xs text-destructive">
+                    Reversal reason: {cn.reversal_reason}
+                  </div>
+                )}
               </div>
               <div className="flex items-center gap-3 shrink-0">
                 <div className="text-right text-xs">
@@ -374,6 +413,19 @@ export function ArCreditNotesPanel({
                     onClick={() => setPostTarget(cn)}
                   >
                     <FileMinus2 className="h-3 w-3 mr-1" /> Post
+                  </Button>
+                )}
+                {cn.status === "posted" && canManage.allowed && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7"
+                    onClick={() => {
+                      setReverseReason("");
+                      setReverseTarget(cn);
+                    }}
+                  >
+                    <Undo2 className="h-3 w-3 mr-1" /> Reverse
                   </Button>
                 )}
               </div>
@@ -607,8 +659,9 @@ export function ArCreditNotesPanel({
               </div>
               <p className="text-xs text-destructive">
                 Posting creates a new accounting entry (debiting revenue and tax, crediting accounts
-                receivable) against this invoice and cannot be edited afterward. There is currently
-                no reversal for a posted credit note.
+                receivable) against this invoice and cannot be edited directly — a posted credit
+                note can only be undone afterward by reversing it, which posts a further,
+                separate offsetting entry.
               </p>
             </div>
           )}
@@ -621,6 +674,69 @@ export function ArCreditNotesPanel({
               onClick={() => postTarget && post.mutate(postTarget.id)}
             >
               <Send className="h-4 w-4 mr-1" /> Post credit note
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!reverseTarget} onOpenChange={(v) => !v && setReverseTarget(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Reverse credit note</DialogTitle>
+          </DialogHeader>
+          {reverseTarget && (
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <div>
+                  <span className="text-muted-foreground">Credit note</span>
+                  <div className="font-mono">{reverseTarget.code}</div>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Invoice</span>
+                  <div className="font-mono">{reverseTarget.invoice?.code ?? "—"}</div>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Customer</span>
+                  <div className="truncate">{reverseTarget.invoice?.bill_to_name ?? "—"}</div>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Total</span>
+                  <div className="font-mono">
+                    {formatMoney(Number(reverseTarget.total), reverseTarget.currency)}
+                  </div>
+                </div>
+              </div>
+              <p className="text-xs text-destructive">
+                This posts a new offsetting accounting entry that exactly reverses the credit
+                note's original posting and restores the invoice's receivable balance. The
+                original credit note and its original journal entry are never edited or deleted.
+                This cannot be undone through the UI.
+              </p>
+              <div>
+                <Label>Reason (required, 5–500 characters)</Label>
+                <Textarea
+                  rows={3}
+                  maxLength={500}
+                  value={reverseReason}
+                  onChange={(e) => setReverseReason(e.target.value)}
+                  placeholder="Why is this credit note being reversed?"
+                />
+                <p className="text-xs text-muted-foreground mt-1">{reverseReason.trim().length}/500</p>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setReverseTarget(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={reverse.isPending || reverseReason.trim().length < 5}
+              onClick={() =>
+                reverseTarget && reverse.mutate({ id: reverseTarget.id, reason: reverseReason.trim() })
+              }
+            >
+              <Undo2 className="h-4 w-4 mr-1" /> Reverse credit note
             </Button>
           </DialogFooter>
         </DialogContent>

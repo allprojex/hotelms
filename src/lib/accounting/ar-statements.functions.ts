@@ -105,7 +105,7 @@ export async function loadArCustomerStatement(
     if (receiptIds.length > 0) {
       const { data: receiptRows, error: receiptError } = await context.supabase
         .from("ar_receipts")
-        .select("id,code,receipt_date,currency")
+        .select("id,code,receipt_date,currency,status")
         .eq("property_id", input.propertyId)
         .in("id", receiptIds)
         .lte("receipt_date", input.to);
@@ -128,6 +128,15 @@ export async function loadArCustomerStatement(
           // to the receipt's own currency only if the invoice was somehow
           // not in our fetched set.
           currency: invoice?.currency ?? receipt.currency,
+          // Carried through so the pure calculator can exclude a reversed
+          // receipt's allocations (see ArStatementAllocationRow's own doc
+          // comment) — this fetch itself is not filtered to status='posted'
+          // at the query level (unlike credit notes below), because a
+          // voided receipt's allocation must still be visible here for the
+          // calculator to make that exclusion decision explicitly, the
+          // same "filter in the pure function, not silently in the query"
+          // posture already used for invoice status via eligibleInvoiceIds.
+          receiptStatus: receipt.status,
         } satisfies ArStatementAllocationRow;
       })
       .filter(
