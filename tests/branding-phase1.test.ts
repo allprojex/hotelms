@@ -30,7 +30,7 @@ const styles = read(resolve(root, "src/styles.css"));
 
 function fn(source: string, name: string): string {
   const match = source.match(
-    new RegExp(`CREATE OR REPLACE FUNCTION public\\.${name}[\\s\\S]*?\\$\\$;`),
+    new RegExp(`CREATE (?:OR REPLACE )?FUNCTION public\\.${name}[\\s\\S]*?\\$\\$;`),
   )?.[0];
   if (!match) throw new Error(`Could not find function ${name} in source`);
   return match;
@@ -61,7 +61,17 @@ describe("Branding Phase 1 — system_settings: secondary_color + validation", (
     expect(migration).toContain("CHECK (secondary_color IS NULL OR btrim(secondary_color) <> '')");
   });
 
-  it("extends get_brand_settings() additively — same 9 prior columns plus secondary_color, still LIMIT 1 from system_settings, still anon-readable", () => {
+  it("get_brand_settings() gains secondary_color via an explicit DROP + recreate (CREATE OR REPLACE cannot change a RETURNS TABLE row type — see PART A's comment) — same prior 9 columns plus secondary_color, still LIMIT 1 from system_settings, still anon-readable", () => {
+    expect(migration).toContain("DROP FUNCTION IF EXISTS public.get_brand_settings();");
+    // The DROP must be immediately followed by the recreate — no gap where
+    // the function doesn't exist beyond this migration's own statements,
+    // and nothing destructive slipped in between the DROP and the CREATE.
+    const dropStatement = "DROP FUNCTION IF EXISTS public.get_brand_settings();";
+    const afterDropIdx = migration.indexOf(dropStatement) + dropStatement.length;
+    const createIdx = migration.indexOf("CREATE FUNCTION public.get_brand_settings()");
+    expect(createIdx).toBeGreaterThan(afterDropIdx);
+    expect(migration.slice(afterDropIdx, createIdx)).not.toMatch(/DROP (TABLE|COLUMN|FUNCTION)/);
+
     const getBrand = fn(migration, "get_brand_settings");
     for (const col of [
       "app_name",
@@ -204,12 +214,16 @@ describe("Branding Phase 1 — get_effective_branding() resolution", () => {
   });
 });
 
-describe("Branding Phase 1 — this migration only adds new objects (beyond the two documented, additive CREATE OR REPLACE extensions)", () => {
-  it("never drops or destructively alters an existing table/column", () => {
-    expect(migration).not.toMatch(/DROP TABLE|DROP COLUMN|DROP FUNCTION/);
+describe("Branding Phase 1 — this migration only adds new objects (beyond the two documented, additive extensions to system_settings/get_brand_settings)", () => {
+  it("never drops or destructively alters a TABLE or COLUMN, and the only DROP FUNCTION is the one documented, immediately-recreated get_brand_settings() signature change", () => {
+    expect(migration).not.toMatch(/DROP TABLE|DROP COLUMN/);
+    // Anchored to line-start so a `-- ... DROP FUNCTION ...` mention inside
+    // an explanatory comment isn't mistaken for a real statement.
+    const dropFunctionCalls = migration.match(/^DROP FUNCTION[^;]*;/gm) ?? [];
+    expect(dropFunctionCalls).toEqual(["DROP FUNCTION IF EXISTS public.get_brand_settings();"]);
   });
 
-  it("system_settings changes are additive: new column + new CHECK constraints + a strict superset function replacement, nothing removed", () => {
+  it("system_settings changes are additive: new column + new CHECK constraints, nothing removed", () => {
     expect(migration).not.toMatch(/ALTER TABLE public\.system_settings\s+DROP COLUMN/);
   });
 });
