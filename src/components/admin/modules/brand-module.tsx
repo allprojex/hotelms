@@ -55,12 +55,19 @@ const BLANK: BrandFormState = {
   support_phone: "",
 };
 
+type BrandAssetScope = { scope: "organisation" } | { scope: "property"; propertyId: string };
+
 /**
  * Shared upload helper for both organisation-wide and property-level brand
- * assets — the private brand-assets bucket, random-UUID path, and signed-URL
- * pattern don't depend on which settings row the result gets saved into.
+ * assets — the private brand-assets bucket, random-UUID filename, and
+ * signed-URL pattern don't depend on which settings row the result gets
+ * saved into. The object PATH prefix does depend on it: storage RLS
+ * (20260820120000_property_branding.sql PART E) derives the write
+ * authorization boundary from `organisation/...` vs `property/<id>/...`,
+ * so scope must be threaded through here rather than left to the caller
+ * to encode informally in `kind`.
  */
-async function uploadBrandAsset(kind: string, file: File): Promise<string> {
+async function uploadBrandAsset(scope: BrandAssetScope, kind: string, file: File): Promise<string> {
   if (!ACCEPT.includes(file.type)) {
     throw new Error("Unsupported file type — use PNG, JPG, SVG, WEBP, or ICO");
   }
@@ -68,7 +75,10 @@ async function uploadBrandAsset(kind: string, file: File): Promise<string> {
     throw new Error("File too large — max 2 MB");
   }
   const ext = file.name.includes(".") ? file.name.split(".").pop() : "bin";
-  const path = `${kind}/${crypto.randomUUID()}.${ext}`;
+  const path =
+    scope.scope === "organisation"
+      ? `organisation/${kind}/${crypto.randomUUID()}.${ext}`
+      : `property/${scope.propertyId}/${kind}/${crypto.randomUUID()}.${ext}`;
   const { error: upErr } = await supabase.storage
     .from("brand-assets")
     .upload(path, file, { cacheControl: "3600", upsert: false, contentType: file.type });
@@ -188,7 +198,7 @@ function OrganisationBrandingEditor() {
   async function upload(kind: "logo" | "logo_dark" | "favicon", file: File) {
     setUploading(kind);
     try {
-      const url = await uploadBrandAsset(kind, file);
+      const url = await uploadBrandAsset({ scope: "organisation" }, kind, file);
       const key: keyof BrandFormState =
         kind === "logo" ? "logo_url" : kind === "logo_dark" ? "logo_dark_url" : "favicon_url";
       setForm((f) => ({ ...f, [key]: url }));
@@ -538,9 +548,10 @@ function PropertyBrandingEditor() {
   });
 
   async function upload(kind: "logo" | "logo_dark", file: File) {
+    if (!propertyId) return;
     setUploading(kind);
     try {
-      const url = await uploadBrandAsset(kind, file);
+      const url = await uploadBrandAsset({ scope: "property", propertyId }, kind, file);
       const key: keyof PropertyBrandingFormState = kind === "logo" ? "logo_url" : "logo_dark_url";
       setForm((f) => ({ ...f, [key]: url }));
       toast.success(

@@ -388,8 +388,30 @@ describe("Branding Phase 1 — storage: private bucket reused, safe cleanup on r
     expect(brandModule).not.toMatch(/getPublicUrl/);
   });
 
-  it("uses a random UUID path, never a user-controlled filename", () => {
-    expect(brandModule).toContain("`${kind}/${crypto.randomUUID()}.${ext}`");
+  it("uses a random UUID filename, never a user-controlled filename", () => {
+    expect(brandModule).toMatch(/\$\{crypto\.randomUUID\(\)\}\.\$\{ext\}/);
+  });
+
+  it("organisation uploads use the organisation/ path prefix; property uploads use the property/<id>/ path prefix", () => {
+    expect(brandModule).toContain("`organisation/${kind}/${crypto.randomUUID()}.${ext}`");
+    expect(brandModule).toContain(
+      "`property/${scope.propertyId}/${kind}/${crypto.randomUUID()}.${ext}`",
+    );
+  });
+
+  it("the organisation editor always uploads with organisation scope; the property editor always uploads with the currently-selected property's scope", () => {
+    expect(brandModule).toContain('uploadBrandAsset({ scope: "organisation" }, kind, file)');
+    expect(brandModule).toContain(
+      'uploadBrandAsset({ scope: "property", propertyId }, kind, file)',
+    );
+  });
+
+  it("the property upload handler refuses to run without a selected property (cannot construct a valid property/<id>/ path otherwise)", () => {
+    const uploadFn = brandModule.match(
+      /async function upload\(kind: "logo" \| "logo_dark", file: File\) \{[\s\S]*?\n {2}\}/,
+    )?.[0];
+    expect(uploadFn).toBeDefined();
+    expect(uploadFn).toContain("if (!propertyId) return;");
   });
 
   it("cleanup is conservative — it never deletes an object still referenced by another field in the same save payload", () => {
@@ -399,6 +421,158 @@ describe("Branding Phase 1 — storage: private bucket reused, safe cleanup on r
   it("both the organisation and property save paths call the cleanup helper only for genuinely replaced assets", () => {
     expect(brandModule).toContain("if (previous?.logo_url !== payload.logo_url)");
     expect(brandModule).toContain("await tryCleanupReplacedAsset(previous?.logo_url, nextValues);");
+  });
+});
+
+describe("Branding Phase 1 — updated_by is server-set, never client-trusted", () => {
+  it("a BEFORE INSERT OR UPDATE trigger unconditionally sets NEW.updated_by from auth.uid()", () => {
+    expect(migration).toContain("NEW.updated_by := auth.uid();");
+    expect(migration).toContain(
+      "BEFORE INSERT OR UPDATE ON public.property_branding\n  FOR EACH ROW EXECUTE FUNCTION public.tg_property_branding_set_updated_by();",
+    );
+  });
+
+  it("the attribution function is a plain trigger (not SECURITY DEFINER) — auth.uid() resolves from the request-scoped JWT claim, not the trigger's executing role", () => {
+    const trigFn = fn(migration, "tg_property_branding_set_updated_by");
+    expect(trigFn).not.toContain("SECURITY DEFINER");
+    expect(trigFn).toContain("LANGUAGE plpgsql");
+  });
+
+  it("the client-side upsert payload never includes updated_by — nothing for a malicious client to spoof even before the trigger overwrites it", () => {
+    const savePayload = brandModule.match(
+      /const payload = \{\s*property_id: propertyId,[\s\S]*?\};/,
+    )?.[0];
+    expect(savePayload).toBeDefined();
+    expect(savePayload).not.toContain("updated_by");
+  });
+});
+
+describe("Branding Phase 1 — property-scoped brand-assets storage authorization (structural proof)", () => {
+  // These assertions verify the POLICY TEXT committed to the migration —
+  // they prove the intended predicates exist with the correct role array,
+  // path-prefix guard, and has_any_role() property-id argument. They
+  // cannot execute Postgres RLS (no live database in this test run), so
+  // they cannot themselves prove that e.g. a real hotel_owner JWT is
+  // actually denied on a foreign property's path at the database level.
+  // That live behavioral proof is deferred to the authenticated
+  // production smoke test (release report §F) using two real accounts
+  // with different property assignments.
+
+  it("adds INSERT/UPDATE/DELETE policies scoped to the property/ path prefix, without touching the existing organisation-wide super_admin policies", () => {
+    expect(migration).toContain('CREATE POLICY "brand_assets_property_insert"');
+    expect(migration).toContain('CREATE POLICY "brand_assets_property_update"');
+    expect(migration).toContain('CREATE POLICY "brand_assets_property_delete"');
+    expect(migration).not.toContain('DROP POLICY IF EXISTS "brand_assets_insert"');
+    expect(migration).not.toContain('DROP POLICY IF EXISTS "brand_assets_update"');
+    expect(migration).not.toContain('DROP POLICY IF EXISTS "brand_assets_delete"');
+  });
+
+  it("every property-scoped policy requires bucket_id = 'brand-assets' AND the first path segment to be exactly 'property'", () => {
+    for (const name of [
+      "brand_assets_property_insert",
+      "brand_assets_property_update",
+      "brand_assets_property_delete",
+    ]) {
+      const block = migration.match(new RegExp(`CREATE POLICY "${name}"[\\s\\S]*?\\);`))?.[0];
+      expect(block, `policy ${name} not found`).toBeDefined();
+      expect(block).toContain("bucket_id = 'brand-assets'");
+      expect(block).toContain("(storage.foldername(name))[1] = 'property'");
+    }
+  });
+
+  it("the authorization boundary is has_any_role(auth.uid(), [super_admin, hotel_owner, general_manager], <property id from the path>) — the identical boundary used by property_branding's own RLS, and by the existing 'uploads' bucket precedent", () => {
+    expect(migration).toContain(
+      "public.has_any_role(\n          auth.uid(),\n          ARRAY['super_admin','hotel_owner','general_manager']::app_role[],\n          ((storage.foldername(name))[2])::uuid\n        )",
+    );
+  });
+
+  it("accountant and front_desk are absent from the property-scoped role array (mirroring property_branding's own write policy)", () => {
+    const insertPolicy =
+      migration.match(/CREATE POLICY "brand_assets_property_insert"[\s\S]*?\);/)?.[0] ?? "";
+    expect(insertPolicy).not.toMatch(/accountant|front_desk/);
+  });
+
+  it("anon has no grant path to the property-scoped policies (TO authenticated only)", () => {
+    for (const name of [
+      "brand_assets_property_insert",
+      "brand_assets_property_update",
+      "brand_assets_property_delete",
+    ]) {
+      const block = migration.match(
+        new RegExp(`CREATE POLICY "${name}"[\\s\\S]*?TO authenticated`),
+      )?.[0];
+      expect(block, `policy ${name} not scoped TO authenticated`).toBeDefined();
+    }
+  });
+
+  it("the property id is derived from the object path itself, not from any client-supplied header/claim/parameter — the same object write is authorized or denied purely by where it is being written", () => {
+    // storage.foldername(name)[2] reads the SECOND path SEGMENT of the object
+    // being written — there is no alternate source of "which property" fed
+    // into has_any_role() here, so the caller cannot claim authorization for
+    // property A while writing into property B's path.
+    const block =
+      migration.match(/CREATE POLICY "brand_assets_property_insert"[\s\S]*?\);/)?.[0] ?? "";
+    expect(block).toContain("((storage.foldername(name))[2])::uuid");
+  });
+
+  it("organisation-scoped uploads (organisation/<kind>/<file>) do not match the property/ prefix check, so property_branding write access can never be used to touch organisation assets", () => {
+    const block =
+      migration.match(/CREATE POLICY "brand_assets_property_insert"[\s\S]*?\);/)?.[0] ?? "";
+    // The policy's own prefix guard is the enforcement; assert it's exactly
+    // 'property', not e.g. a prefix match that could also match 'organisation'.
+    expect(block).toMatch(/\[1\] = 'property'/);
+    expect(block).not.toMatch(/\[1\] = 'organisation'/);
+  });
+
+  it("the pre-existing organisation-wide super_admin storage policies remain present and unmodified, still covering the new organisation/ path and legacy flat-path objects", () => {
+    const orgPolicyFile = read(
+      resolve(root, "supabase/migrations/20260706182349_aba0b86c-9a8e-44f3-ba88-46e777428582.sql"),
+    );
+    expect(orgPolicyFile).toContain('CREATE POLICY "brand_assets_insert"');
+    expect(orgPolicyFile).toContain(
+      "public.has_role(auth.uid(), 'super_admin'::app_role, NULL::uuid)",
+    );
+  });
+});
+
+describe("Branding Phase 1 — replacement/cleanup ordering and safety (property scope)", () => {
+  it("the property save mutation upserts property_branding BEFORE running cleanup of the replaced asset — a failed save never triggers cleanup of the still-current asset", () => {
+    const saveFn = brandModule.match(
+      /const save = useMutation\(\{\s*mutationFn: async \(values: PropertyBrandingFormState\)[\s\S]*?\n {2}\}\);/,
+    )?.[0];
+    expect(saveFn).toBeDefined();
+    const upsertIdx = saveFn!.indexOf(".upsert(payload");
+    const cleanupIdx = saveFn!.indexOf("tryCleanupReplacedAsset(previous?.logo_url");
+    expect(upsertIdx).toBeGreaterThan(-1);
+    expect(cleanupIdx).toBeGreaterThan(-1);
+    expect(upsertIdx).toBeLessThan(cleanupIdx);
+  });
+
+  it("cleanup only ever targets the URL previously stored on THIS property's own row (existing.data, itself scoped by .eq(\"property_id\", propertyId)) — it has no path to another property's stored URL", () => {
+    expect(brandModule).toContain('.eq("property_id", propertyId as string)');
+    expect(brandModule).toContain("const previous = existing.data;");
+  });
+
+  it("even if application logic were ever wrong, DELETE is still gated by the storage RLS policy re-deriving the property id from the object's own path — cleanup cannot cross a property boundary at the database layer", () => {
+    const block =
+      migration.match(/CREATE POLICY "brand_assets_property_delete"[\s\S]*?\);/)?.[0] ?? "";
+    expect(block).toContain("(storage.foldername(name))[1] = 'property'");
+    expect(block).toContain("((storage.foldername(name))[2])::uuid");
+  });
+
+  it("clearing a property override (blank field -> nullify() -> NULL) falls back to the inherited global value, it does not delete the global asset", () => {
+    expect(brandModule).toContain(
+      "function nullify(v: string | null | undefined): string | null {",
+    );
+    // tryCleanupReplacedAsset only ever removes the PROPERTY's own previous
+    // object (see test above) — the organisation's system_settings logo is
+    // never in `previous` for the property editor's mutation, so clearing a
+    // property override cannot delete or touch it.
+    const propertySaveFn =
+      brandModule.match(
+        /const save = useMutation\(\{\s*mutationFn: async \(values: PropertyBrandingFormState\)[\s\S]*?\n {2}\}\);/,
+      )?.[0] ?? "";
+    expect(propertySaveFn).not.toContain("system_settings");
   });
 });
 

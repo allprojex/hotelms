@@ -29,6 +29,15 @@
 --      client-side, post-authentication, via localStorage — src/lib/
 --      property-store.ts — never before sign-in). get_effective_branding()
 --      is for the authenticated, property-aware application and documents.
+--   6. property_branding.updated_by is set server-side by a BEFORE
+--      trigger (PART D) — never trusted from the client payload.
+--   7. brand-assets uploads use a property-scoped path
+--      (`property/<property_id>/<kind>/<file>`) for property overrides
+--      and an organisation-scoped path (`organisation/<kind>/<file>`)
+--      for global branding, with storage RLS (PART E) deriving the
+--      authorization boundary from the path itself — not from client
+--      intent — mirroring the existing 'uploads' bucket's own
+--      per-property RLS precedent.
 
 -- ============================================================
 -- PART A0 — pre-existing bug fix: system_settings has never had an
@@ -223,3 +232,106 @@ $$;
 
 REVOKE ALL ON FUNCTION public.get_effective_branding(uuid) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.get_effective_branding(uuid) TO authenticated, service_role;
+
+-- ============================================================
+-- PART D — updated_by: server-set audit attribution
+-- ============================================================
+-- The client must never be trusted to self-report who made a change.
+-- auth.uid() resolves the actual calling user from the request-scoped
+-- JWT claim GUC that PostgREST sets for the duration of the request —
+-- this is the same mechanism every RLS policy in this codebase already
+-- relies on, and it works identically inside a plain (non-SECURITY
+-- DEFINER) BEFORE trigger, since it reads the request's GUC rather than
+-- anything about the trigger's own executing role. This trigger
+-- unconditionally overwrites NEW.updated_by, so any client-supplied
+-- value in the upsert payload is discarded rather than trusted.
+CREATE OR REPLACE FUNCTION public.tg_property_branding_set_updated_by()
+RETURNS TRIGGER LANGUAGE plpgsql SET search_path = public AS $$
+BEGIN
+  NEW.updated_by := auth.uid();
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_property_branding_updated_by ON public.property_branding;
+CREATE TRIGGER trg_property_branding_updated_by
+  BEFORE INSERT OR UPDATE ON public.property_branding
+  FOR EACH ROW EXECUTE FUNCTION public.tg_property_branding_set_updated_by();
+
+-- ============================================================
+-- PART E — property-scoped brand-assets storage authorization
+-- ============================================================
+-- Prior state (20260706182349): brand_assets_insert/_update/_delete
+-- restrict ALL writes to the whole bucket to super_admin, with no path
+-- structure. That's correct for organisation-wide branding but left
+-- hotel_owner/general_manager unable to upload a property logo, even
+-- though property_branding's own RLS (PART B above) already authorizes
+-- them to edit that property's row — a real gap found during release
+-- review. Fixed here with a new `property/<property_id>/<kind>/<file>`
+-- path convention and additive, narrowly-scoped policies, mirroring the
+-- exact precedent already shipped for the 'uploads' bucket
+-- (20260705230448_scope_uploads_storage_rls.sql: same
+-- storage.foldername()-derived property id, same
+-- has_any_role(..., ARRAY['super_admin','hotel_owner','general_manager'], _property_id)
+-- boundary used by property_branding itself) rather than inventing a
+-- new authorization pattern.
+--
+-- This section does NOT touch, replace, or weaken the existing
+-- bucket-wide super_admin policies — they continue to cover both the
+-- legacy flat-path objects (`logo/...`, `favicon/...`) and the new
+-- `organisation/<kind>/<file>` convention the organisation editor now
+-- uses for new uploads, so organisation branding stays exactly as
+-- super_admin-only as before, and a hotel_owner/general_manager's new
+-- property-scoped grant below only ever matches paths starting with
+-- `property/`, structurally excluding it from ever touching an
+-- `organisation/...` or legacy-path object. No existing object needs to
+-- move and no signed URL is invalidated: signed-URL validity does not
+-- depend on the INSERT/UPDATE/DELETE policies changed here, and the
+-- read policy (`brand_assets_read`) is untouched.
+CREATE POLICY "brand_assets_property_insert"
+  ON storage.objects FOR INSERT
+  TO authenticated
+  WITH CHECK (
+    bucket_id = 'brand-assets'
+    AND (storage.foldername(name))[1] = 'property'
+    AND public.has_any_role(
+          auth.uid(),
+          ARRAY['super_admin','hotel_owner','general_manager']::app_role[],
+          ((storage.foldername(name))[2])::uuid
+        )
+  );
+
+CREATE POLICY "brand_assets_property_update"
+  ON storage.objects FOR UPDATE
+  TO authenticated
+  USING (
+    bucket_id = 'brand-assets'
+    AND (storage.foldername(name))[1] = 'property'
+    AND public.has_any_role(
+          auth.uid(),
+          ARRAY['super_admin','hotel_owner','general_manager']::app_role[],
+          ((storage.foldername(name))[2])::uuid
+        )
+  )
+  WITH CHECK (
+    bucket_id = 'brand-assets'
+    AND (storage.foldername(name))[1] = 'property'
+    AND public.has_any_role(
+          auth.uid(),
+          ARRAY['super_admin','hotel_owner','general_manager']::app_role[],
+          ((storage.foldername(name))[2])::uuid
+        )
+  );
+
+CREATE POLICY "brand_assets_property_delete"
+  ON storage.objects FOR DELETE
+  TO authenticated
+  USING (
+    bucket_id = 'brand-assets'
+    AND (storage.foldername(name))[1] = 'property'
+    AND public.has_any_role(
+          auth.uid(),
+          ARRAY['super_admin','hotel_owner','general_manager']::app_role[],
+          ((storage.foldername(name))[2])::uuid
+        )
+  );
