@@ -291,6 +291,14 @@ export function ArCreditNotesPanel({
       toast.success("Credit note posted — a new accounting entry was recorded");
       setPostTarget(null);
       qc.invalidateQueries({ queryKey: ["ar-credit-notes", propertyId] });
+      // Posting consumes remaining per-line capacity and changes the
+      // invoice's net balance — explicitly invalidate every derived query
+      // that depends on that, rather than relying only on the create
+      // dialog's enabled/staleTime transition to happen to refetch them
+      // when reopened.
+      qc.invalidateQueries({ queryKey: ["ar-invoice-balance"] });
+      qc.invalidateQueries({ queryKey: ["ar-credit-note-lines"] });
+      qc.invalidateQueries({ queryKey: ["ar-credit-notes-posted-ids"] });
       onPosted();
     },
     onError: (e: Error) => toast.error(e.message),

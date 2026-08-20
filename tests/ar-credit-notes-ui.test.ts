@@ -350,10 +350,25 @@ describe("AR Credit Note UI — query invalidation / refresh after create and po
     expect(createOnSuccess).not.toContain('"ar-aging"');
   });
 
-  it("post invalidates ar-credit-notes locally and delegates ar-invoices/ar-aging invalidation to the parent via onPosted() — posting changes invoice status/balance, matching how reverse_ar_invoice's own onSuccess behaves in this file", () => {
-    expect(panel).toContain(
-      'qc.invalidateQueries({ queryKey: ["ar-credit-notes", propertyId] });\n      onPosted();',
+  it("post invalidates ar-credit-notes plus every derived per-invoice query (balance, remaining-capacity lines, posted-ids) explicitly — not relying only on the create dialog's enabled/staleTime transition to refetch them", () => {
+    const postOnSuccess =
+      panel.match(
+        /const post = useMutation\(\{[\s\S]*?onError: \(e: Error\) => toast\.error\(e\.message\),\n {2}\}\);/,
+      )?.[0] ?? "";
+    expect(postOnSuccess).toContain(
+      'qc.invalidateQueries({ queryKey: ["ar-credit-notes", propertyId] });',
     );
+    expect(postOnSuccess).toContain('qc.invalidateQueries({ queryKey: ["ar-invoice-balance"] });');
+    expect(postOnSuccess).toContain(
+      'qc.invalidateQueries({ queryKey: ["ar-credit-note-lines"] });',
+    );
+    expect(postOnSuccess).toContain(
+      'qc.invalidateQueries({ queryKey: ["ar-credit-notes-posted-ids"] });',
+    );
+    expect(postOnSuccess).toContain("onPosted();");
+  });
+
+  it("post delegates ar-invoices/ar-aging invalidation to the parent via onPosted() — posting changes invoice status/balance, matching how reverse_ar_invoice's own onSuccess behaves in this file", () => {
     expect(arPage).toContain(
       'qc.invalidateQueries({ queryKey: ["ar-invoices", propertyId] });\n          qc.invalidateQueries({ queryKey: ["ar-aging", propertyId] });',
     );
