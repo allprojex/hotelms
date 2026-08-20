@@ -122,7 +122,9 @@ describe("Branding Phase 1 — property_branding schema", () => {
     expect(migration).toContain(
       "GRANT SELECT, INSERT, UPDATE ON public.property_branding TO authenticated;",
     );
-    expect(migration).not.toMatch(/GRANT[^;]*DELETE[^;]*ON public\.property_branding TO authenticated/);
+    expect(migration).not.toMatch(
+      /GRANT[^;]*DELETE[^;]*ON public\.property_branding TO authenticated/,
+    );
   });
 
   it("read policy scopes to can_access_property", () => {
