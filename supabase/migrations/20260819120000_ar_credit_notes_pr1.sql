@@ -1,4 +1,7 @@
--- AR Credit Notes — PR 1: schema + create/post + receipt net-balance fix.
+-- AR Credit Notes — PR 1: schema + create/post + receipt net-balance fix,
+-- plus the reverse_ar_invoice() posted-credit-note guard, the duplicate-
+-- source-line structural fix, and RLS-safe (security_invoker) views —
+-- see points 10-14 below, added in response to PR #36 review.
 --
 -- Architecture decisions, made after auditing ar_invoices/ar_invoice_lines,
 -- post_ar_invoice(), post_ar_receipt(), reverse_ar_invoice(), post_journal(),
@@ -84,23 +87,89 @@
 --    reasoning). This guarantees every eligible role produces exactly one
 --    audit row per successful post, with zero change to admin_log() itself.
 --
--- 10. Ageing release safety: this migration is the first time a posted
---    credit note becomes reachable at all (via the new RPCs — there is no
---    UI wired to them in this PR, but the RPCs themselves are a new API
---    surface any authenticated accountant/GM-equivalent client can call
---    directly once deployed). ar_aging's `balance` column is therefore
---    updated in this same migration to read from ar_invoice_balances
---    (net_balance) instead of the old `total - amount_paid`, so production
---    ageing cannot silently misstate receivables the moment a credit note
---    is posted. This is a minimal, mechanical view redefinition — it is not
---    the full PR 3 ageing/dashboard integration. ar-statement-calc.ts (the
---    AR customer statement generator) is NOT changed here: it does not
---    render a credit-note transaction line yet, so a posted credit note
---    will not appear in a customer statement in this PR. That is a real,
---    intentionally-scoped gap for the follow-up statement/PDF work — not a
---    receivables-total misstatement (ar_aging, the balance-of-record view,
---    is corrected), so it does not block merging PR 1. See the PR
---    description / final report for this call spelled out explicitly.
+-- 10. Ageing AND customer-statement release safety: this migration is the
+--    first time a posted credit note becomes reachable at all (via the new
+--    RPCs — there is no UI wired to them in this PR, but the RPCs
+--    themselves are a new API surface any authenticated accountant/GM-
+--    equivalent client can call directly once deployed). Two separate
+--    balance-of-record surfaces existed before this PR, and BOTH are now
+--    corrected in this same migration/PR rather than one being deferred:
+--      - ar_aging's `balance` column now reads from ar_invoice_balances
+--        (net_balance) instead of the old `total - amount_paid`.
+--      - ar-statement-calc.ts's computeArCustomerStatement() (and its
+--        server-side data loader, loadArCustomerStatement in
+--        ar-statements.functions.ts) now also treat a posted credit note
+--        as a CREDIT transaction, the same as a receipt allocation —
+--        included in opening balance, period transactions, running
+--        balance, and closing balance, per currency, with draft/void
+--        credit notes excluded at both the DB query level (status='posted'
+--        filter) and, defensively, inside the pure calculator itself
+--        (mirroring the existing AR_STATEMENT_INCLUDED_STATUSES pattern
+--        for invoice status). This was originally scoped out of PR 1 as a
+--        "display gap, not a misstatement" — that reasoning was wrong: a
+--        customer statement's closing balance is itself an authoritative
+--        financial total, and once post_ar_credit_note() is reachable
+--        through the authenticated RPC surface, leaving it out is a real
+--        receivables misstatement on that surface, not merely a missing
+--        row. It is fixed here, not deferred.
+--    This remains a minimal, mechanical extension of the existing pure
+--    calculator/loader — not the full credit-note UI/PDF feature (no
+--    credit-note-specific PDF section, no dedicated credit-note management
+--    UI). That remains out of scope for PR 1/2 as originally directed.
+--
+-- 11. reverse_ar_invoice() posted-credit-note guard (mandatory, shipped
+--    atomically with post_ar_credit_note() in this same migration — not
+--    deferred to the later credit-note-reversal PR): the original function
+--    (20260818090000) predates credit notes entirely and would otherwise
+--    let a sent, unpaid, zero-receipt-allocation invoice be reversed while
+--    a posted credit note against it remains economically active, leaving
+--    the credit note's DR revenue/DR tax/CR AR journal permanently
+--    unreconciled against a reversed-out original posting. Redeclared here
+--    via CREATE OR REPLACE FUNCTION under the identical signature (this
+--    migration only adds new objects and never edits a historical
+--    migration file in place — the same pattern already used above for
+--    post_ar_receipt()); every other guard/behavior is copied verbatim
+--    from the original, with exactly one new EXISTS check against
+--    ar_credit_notes (status='posted') added alongside the existing
+--    amount_paid/ar_receipt_allocations guards, under the same invoice row
+--    lock. Draft and void credit notes never block reversal — they carry
+--    no journal entry and never affected the invoice.
+--
+-- 12. ar_credit_note_lines_note_source_uniq: UNIQUE (credit_note_id,
+--    source_invoice_line_id) closes a duplicate-source-line bypass in
+--    post_ar_credit_note()'s remaining-quantity check. That check only
+--    sums quantity from OTHER credit notes already status='posted' — two
+--    sibling lines within the SAME draft credit note referencing the same
+--    source line (e.g. qty 6 + qty 6 against a source line of qty 10)
+--    would each independently see the full remaining quantity and both
+--    pass, since the note being posted is still 'draft' throughout its own
+--    posting loop. This is closed structurally with a table constraint,
+--    not an aggregation workaround in the function, and not by relying on
+--    the (weaker, invoice-wide) net-balance cap to catch it indirectly.
+--
+-- 13. View security: security_invoker = true is now declared explicitly on
+--    both ar_invoice_balances (new) and ar_aging (redefined) in their own
+--    CREATE OR REPLACE VIEW statements, plus a defensive ALTER VIEW ... SET
+--    (security_invoker = true) immediately after each. Without it, a plain
+--    view checks RLS against the VIEW OWNER (the migration-running role,
+--    exempt from RLS as table owner/superuser), not the querying client —
+--    GRANT SELECT ... TO authenticated would then let any authenticated
+--    user of any property read every other property's balances straight
+--    through the view. This project has hit exactly this bug before on
+--    ar_aging itself and fixed it the same way twice: see
+--    20260705040652_ca91242d-63f8-4436-aa72-3c3d68f10a95.sql ("Aging
+--    views: honor caller's RLS instead of view-owner permissions") and
+--    20260706002151_e5d271a3-0dc5-464a-bd70-f020a231e8ae.sql. This PR's own
+--    CREATE OR REPLACE VIEW of ar_aging would otherwise have silently
+--    reintroduced that exact cross-property leak a third time.
+--
+-- 14. create_ar_credit_note() now requires the linked invoice to be
+--    'sent', not 'sent' or 'paid'. post_ar_credit_note() has always
+--    rejected a 'paid' invoice (V1 does not support crediting a fully
+--    paid invoice), so allowing a draft to be created against one only
+--    produced a permanently unpostable draft with no cleanup path. There
+--    is no workflow reason for that draft to exist; create-time now
+--    matches post-time exactly.
 
 -- ============================================================
 -- PART A — SUPPORTING UNIQUE CONSTRAINTS ON ar_invoice_lines
@@ -189,7 +258,18 @@ CREATE TABLE public.ar_credit_note_lines (
   subtotal NUMERIC(18,4) NOT NULL DEFAULT 0 CHECK (subtotal >= 0),
   tax NUMERIC(18,4) NOT NULL DEFAULT 0 CHECK (tax >= 0),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  CONSTRAINT ar_credit_note_lines_property_id_uniq UNIQUE (property_id, id)
+  CONSTRAINT ar_credit_note_lines_property_id_uniq UNIQUE (property_id, id),
+  -- One row per source invoice line per credit note. Without this, two
+  -- lines in the SAME draft credit note referencing the same source line
+  -- (e.g. qty 6 + qty 6 against a source line of qty 10) would each pass
+  -- post_ar_credit_note()'s remaining-quantity check independently — that
+  -- check only sums quantities from OTHER credit notes already
+  -- status='posted', so two sibling lines within the note being posted
+  -- right now are invisible to each other until after the loop. A
+  -- structural uniqueness constraint closes this regardless of loop
+  -- ordering; the invoice-level net-balance cap is not relied on to catch
+  -- it, since that cap is a weaker, invoice-wide bound, not a per-line one.
+  CONSTRAINT ar_credit_note_lines_note_source_uniq UNIQUE (credit_note_id, source_invoice_line_id)
 );
 
 -- Property isolation, declarative.
@@ -240,7 +320,24 @@ GRANT EXECUTE ON FUNCTION public.ar_invoice_credited_total(uuid) TO authenticate
 -- Consistent read model for consumption (UI/reporting). NOT used to gate
 -- any posting decision — post_ar_credit_note()/post_ar_receipt() always
 -- recompute credited_total fresh under their own row lock instead.
-CREATE OR REPLACE VIEW public.ar_invoice_balances AS
+--
+-- SECURITY: a plain view (security_invoker = false, the CREATE VIEW
+-- default) checks permissions AND row-level security policies against the
+-- VIEW OWNER — typically the migration-running role, which is exempt from
+-- RLS as the table owner or via BYPASSRLS — not against the querying
+-- client. Without security_invoker = true here, GRANT SELECT ... TO
+-- authenticated would let any authenticated user of any property read
+-- every other property's invoice balances straight through this view,
+-- regardless of ar_invoices'/ar_credit_notes' own RLS policies. This
+-- project has hit exactly this class of bug before and fixed it the same
+-- way — see ALTER VIEW public.ar_aging SET (security_invoker = true) in
+-- 20260705040652_ca91242d-63f8-4436-aa72-3c3d68f10a95.sql ("Aging views:
+-- honor caller's RLS instead of view-owner permissions"), reapplied again
+-- in 20260706002151_e5d271a3-0dc5-464a-bd70-f020a231e8ae.sql. Declaring it
+-- explicitly on every CREATE OR REPLACE VIEW (rather than trusting a prior
+-- ALTER VIEW to survive a later replace) is the safe, defensive form.
+CREATE OR REPLACE VIEW public.ar_invoice_balances
+WITH (security_invoker = true) AS
 SELECT
   i.property_id,
   i.id AS invoice_id,
@@ -250,13 +347,26 @@ SELECT
   i.total - i.amount_paid - public.ar_invoice_credited_total(i.id) AS net_balance
 FROM public.ar_invoices i;
 
+-- Defensive redundancy: guarantees the option is set even if some future
+-- CREATE OR REPLACE of this view ever drops the WITH clause, exactly the
+-- failure mode ar_aging has hit twice in this repo's history.
+ALTER VIEW public.ar_invoice_balances SET (security_invoker = true);
+
 GRANT SELECT ON public.ar_invoice_balances TO authenticated;
 
 -- Ageing release safety (see header note 10): balance/bucket now reflect
 -- net_balance (which subtracts posted credit notes), not the old
 -- total - amount_paid. Column list/order/types are unchanged from the
 -- prior definition, so no dependent object needs to change.
-CREATE OR REPLACE VIEW public.ar_aging AS
+--
+-- SECURITY: security_invoker = true is REQUIRED here, same reasoning as
+-- ar_invoice_balances above — this CREATE OR REPLACE VIEW supersedes the
+-- original ar_aging definition (20260705040642), which did not carry this
+-- option; only the two later ALTER VIEW migrations added it. Re-declaring
+-- it explicitly here prevents this PR from silently reintroducing the
+-- exact cross-property leak already fixed twice before.
+CREATE OR REPLACE VIEW public.ar_aging
+WITH (security_invoker = true) AS
 SELECT i.property_id, i.id, i.code, i.bill_to_name, i.due_date, i.total, i.amount_paid,
   (i.total - i.amount_paid - public.ar_invoice_credited_total(i.id)) AS balance,
   GREATEST(0, (CURRENT_DATE - i.due_date))::int AS days_overdue,
@@ -269,6 +379,9 @@ SELECT i.property_id, i.id, i.code, i.bill_to_name, i.due_date, i.total, i.amoun
     ELSE '90+'
   END AS bucket
 FROM public.ar_invoices i WHERE i.status <> 'void';
+
+ALTER VIEW public.ar_aging SET (security_invoker = true);
+
 GRANT SELECT ON public.ar_aging TO authenticated;
 
 -- ============================================================
@@ -313,12 +426,29 @@ BEGIN
 
   SELECT * INTO _inv FROM public.ar_invoices WHERE id = _invoice_id AND property_id = _property_id;
   IF _inv IS NULL THEN RAISE EXCEPTION 'Invoice not found for this property'; END IF;
-  IF _inv.status NOT IN ('sent','paid') THEN
-    RAISE EXCEPTION 'Credit notes can only be created against a sent or paid invoice (status: %)', _inv.status;
+  -- Only 'sent' is eligible, matching post_ar_credit_note()'s own
+  -- eligibility exactly (V1 does not support crediting a fully paid
+  -- invoice at all) — a draft created against a 'paid' invoice here would
+  -- otherwise be permanently unpostable and never able to be cleaned up
+  -- automatically, so create-time rejects it up front instead of letting
+  -- users accumulate dead drafts.
+  IF _inv.status <> 'sent' THEN
+    RAISE EXCEPTION 'Credit notes can only be created against a sent invoice (status: %)', _inv.status;
   END IF;
 
   IF _lines IS NULL OR jsonb_typeof(_lines) <> 'array' OR jsonb_array_length(_lines) = 0 THEN
     RAISE EXCEPTION 'At least one credit note line is required';
+  END IF;
+
+  -- Reject a duplicate source_invoice_line_id within the same submission
+  -- up front, with a clear error — the ar_credit_note_lines_note_source_uniq
+  -- constraint below is the authoritative structural backstop regardless,
+  -- but this gives an explicit rejection reason instead of a raw
+  -- unique_violation, mirroring post_ar_receipt()'s identical
+  -- duplicate-invoice-per-submission guard.
+  IF (SELECT COUNT(DISTINCT value->>'source_invoice_line_id') FROM jsonb_array_elements(_lines)) <>
+     jsonb_array_length(_lines) THEN
+    RAISE EXCEPTION 'Each source invoice line may only appear once per credit note';
   END IF;
 
   _code := public.short_code('CN');
@@ -697,3 +827,152 @@ END; $$;
 
 REVOKE EXECUTE ON FUNCTION public.post_ar_receipt(uuid, date, payment_method, text, text, text, jsonb) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.post_ar_receipt(uuid, date, payment_method, text, text, text, jsonb) TO authenticated;
+
+-- ============================================================
+-- PART H — reverse_ar_invoice(): posted credit-note guard (mandatory,
+-- shipped atomically with post_ar_credit_note(), not deferred)
+-- ============================================================
+-- reverse_ar_invoice() (20260818090000) predates credit notes and knows
+-- nothing about them. Its existing eligibility guards (status='sent',
+-- amount_paid=0, zero ar_receipt_allocations rows) do not cover a sent,
+-- unpaid invoice that has a POSTED credit note against it — that invoice
+-- would sail through every existing check and get reversed while the
+-- credit note's own journal entry (which reduced revenue/tax/AR computed
+-- against THIS invoice's lines) remains posted and economically active.
+-- That leaves a permanently unreconciled journal: the credit note's DR
+-- revenue/DR tax/CR AR lines have no corresponding invoice revenue left to
+-- offset once the original invoice posting is reversed out from under it.
+--
+-- This is identical in shape to the amount_paid/ar_receipt_allocations
+-- guards already in reverse_ar_invoice() — same function, same invoice
+-- row lock, same "reject outright rather than attempt a combined
+-- reversal" posture (a combined invoice+credit-note reversal is out of
+-- scope for this version, same as receipt-aware reversal already is).
+--
+-- Implemented as a full CREATE OR REPLACE FUNCTION here (not an ALTER) —
+-- this migration only adds new objects and never edits a historical
+-- migration file in place, so the corrected body is redeclared under the
+-- same signature, exactly as post_ar_receipt() is redeclared above. The
+-- later migration timestamp means this definition is what actually runs;
+-- the original file's text (and its own test file, which reads that
+-- file's text) is left untouched and still describes the original,
+-- still-true behavior for every guard other than this new one.
+CREATE OR REPLACE FUNCTION public.reverse_ar_invoice(_id UUID, _reason TEXT)
+RETURNS UUID
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
+DECLARE
+  inv RECORD; jl RECORD; orig_entry RECORD;
+  _reversal_entry UUID; _existing_reversal UUID;
+  _alloc_count INT; _period_id UUID; _trimmed_reason TEXT;
+  _dr NUMERIC; _cr NUMERIC;
+BEGIN
+  _trimmed_reason := btrim(COALESCE(_reason, ''));
+  IF char_length(_trimmed_reason) < 5 THEN
+    RAISE EXCEPTION 'A reversal reason of at least 5 characters is required';
+  END IF;
+  IF char_length(_trimmed_reason) > 500 THEN
+    RAISE EXCEPTION 'Reversal reason must be 500 characters or fewer';
+  END IF;
+
+  -- Row lock: the primary defense against a concurrent double reversal.
+  SELECT * INTO inv FROM public.ar_invoices WHERE id=_id FOR UPDATE;
+  IF inv IS NULL THEN RAISE EXCEPTION 'Invoice not found'; END IF;
+
+  IF NOT public.has_any_role(auth.uid(), ARRAY['super_admin','hotel_owner','general_manager','accountant']::app_role[], inv.property_id) THEN
+    RAISE EXCEPTION 'Not permitted to reverse an AR invoice';
+  END IF;
+
+  IF inv.status = 'void' THEN
+    RAISE EXCEPTION 'Invoice % has already been reversed', inv.code;
+  END IF;
+  IF inv.status = 'draft' THEN
+    RAISE EXCEPTION 'A draft invoice has no posting to reverse';
+  END IF;
+  IF inv.status = 'paid' THEN
+    RAISE EXCEPTION 'Invoice % is fully paid and cannot be reversed in this version', inv.code;
+  END IF;
+  IF inv.status <> 'sent' THEN
+    RAISE EXCEPTION 'Invoice % is not in a reversible state (status: %)', inv.code, inv.status;
+  END IF;
+  IF inv.posted_entry_id IS NULL THEN
+    RAISE EXCEPTION 'Invoice % has no posted journal entry to reverse', inv.code;
+  END IF;
+  IF inv.amount_paid <> 0 THEN
+    RAISE EXCEPTION 'Invoice % has payments applied and cannot be reversed in this version', inv.code;
+  END IF;
+
+  SELECT count(*) INTO _alloc_count FROM public.ar_receipt_allocations WHERE invoice_id = _id;
+  IF _alloc_count > 0 THEN
+    RAISE EXCEPTION 'Invoice % has receipt allocations and cannot be reversed in this version', inv.code;
+  END IF;
+
+  -- New guard (this migration): a posted credit note against this invoice
+  -- blocks reversal outright, the same posture as the amount_paid/
+  -- ar_receipt_allocations guards immediately above. Draft and void credit
+  -- notes never reach this far (they carry no journal entry and never
+  -- affected the invoice), so they do not block reversal.
+  IF EXISTS (
+    SELECT 1 FROM public.ar_credit_notes WHERE invoice_id = inv.id AND status = 'posted'
+  ) THEN
+    RAISE EXCEPTION 'Invoice % has posted credit notes and cannot be reversed in this version', inv.code;
+  END IF;
+
+  SELECT id INTO _existing_reversal FROM public.journal_entries WHERE is_reversal_of = inv.posted_entry_id;
+  IF _existing_reversal IS NOT NULL THEN
+    RAISE EXCEPTION 'Invoice % already has a reversal journal entry', inv.code;
+  END IF;
+
+  SELECT * INTO orig_entry FROM public.journal_entries WHERE id = inv.posted_entry_id;
+  IF orig_entry IS NULL THEN
+    RAISE EXCEPTION 'Original journal entry for invoice % was not found', inv.code;
+  END IF;
+
+  -- Same period-lock rule post_journal() enforces for every other posting.
+  SELECT id INTO _period_id FROM public.accounting_periods
+    WHERE property_id=inv.property_id AND CURRENT_DATE BETWEEN start_date AND end_date AND status IN ('locked','closed')
+    LIMIT 1;
+  IF _period_id IS NOT NULL THEN
+    RAISE EXCEPTION 'Current accounting period is locked';
+  END IF;
+
+  INSERT INTO public.journal_entries(property_id, entry_date, memo, source, source_ref, currency, posted_by, is_reversal_of)
+  VALUES (inv.property_id, CURRENT_DATE, 'Reversal of AR Invoice '||inv.code||' — '||_trimmed_reason, 'ar', inv.id::text, orig_entry.currency, auth.uid(), inv.posted_entry_id)
+  RETURNING id INTO _reversal_entry;
+
+  FOR jl IN SELECT * FROM public.journal_lines WHERE entry_id = inv.posted_entry_id ORDER BY created_at LOOP
+    INSERT INTO public.journal_lines(entry_id, account_id, debit, credit, currency, fx_rate, debit_base, credit_base, memo)
+    VALUES (_reversal_entry, jl.account_id, jl.credit, jl.debit, jl.currency, jl.fx_rate, jl.credit_base, jl.debit_base, 'Reversal of '||COALESCE(jl.memo, inv.code));
+  END LOOP;
+
+  IF NOT EXISTS (SELECT 1 FROM public.journal_lines WHERE entry_id = _reversal_entry) THEN
+    RAISE EXCEPTION 'Original journal entry for invoice % has no lines', inv.code;
+  END IF;
+
+  -- Defensive re-check: the reversal must itself be balanced. Mathematically
+  -- guaranteed by swapping a balanced set's own columns, but asserted
+  -- explicitly rather than assumed.
+  SELECT COALESCE(SUM(debit_base),0), COALESCE(SUM(credit_base),0) INTO _dr, _cr
+    FROM public.journal_lines WHERE entry_id = _reversal_entry;
+  IF ROUND(_dr,2) <> ROUND(_cr,2) THEN
+    RAISE EXCEPTION 'Reversal journal is not balanced (DR %, CR %)', _dr, _cr;
+  END IF;
+
+  UPDATE public.ar_invoices SET status = 'void' WHERE id = _id;
+
+  -- Direct insert, not the admin_log() RPC — see the original migration's
+  -- header comment (point 7) for why: admin_log()'s own role check
+  -- excludes 'accountant'.
+  INSERT INTO public.admin_action_logs(
+    property_id, actor_id, entity_type, entity_id, action, before_snapshot, after_snapshot, memo
+  ) VALUES (
+    inv.property_id, auth.uid(), 'ar_invoice', inv.id::text, 'update',
+    jsonb_build_object('status', inv.status, 'code', inv.code, 'postedEntryId', inv.posted_entry_id),
+    jsonb_build_object('status', 'void', 'code', inv.code, 'postedEntryId', inv.posted_entry_id, 'reversalEntryId', _reversal_entry, 'reason', _trimmed_reason),
+    'AR invoice '||inv.code||' reversed: '||_trimmed_reason
+  );
+
+  RETURN _reversal_entry;
+END; $$;
+
+REVOKE EXECUTE ON FUNCTION public.reverse_ar_invoice(uuid, text) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.reverse_ar_invoice(uuid, text) TO authenticated;

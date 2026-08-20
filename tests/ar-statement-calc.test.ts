@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   computeArCustomerStatement,
   type ArStatementAllocationRow,
+  type ArStatementCreditNoteRow,
   type ArStatementInvoiceRow,
 } from "@/lib/accounting/ar-statement-calc";
 
@@ -26,6 +27,19 @@ function allocation(
     receiptCode: `RCT-${overrides.invoiceId}`,
     receiptDate: "2026-06-16",
     currency: "GHS",
+    ...overrides,
+  };
+}
+
+function creditNote(
+  overrides: Partial<ArStatementCreditNoteRow> & { invoiceId: string },
+): ArStatementCreditNoteRow {
+  return {
+    code: `CN-${overrides.invoiceId}`,
+    total: 50,
+    issueDate: "2026-06-16",
+    currency: "GHS",
+    status: "posted",
     ...overrides,
   };
 }
@@ -330,5 +344,146 @@ describe("computeArCustomerStatement", () => {
     );
     const [section] = computeArCustomerStatement({ ...PERIOD, invoices, allocations: [] });
     expect(section.closingBalance).toBe(2);
+  });
+});
+
+describe("computeArCustomerStatement — posted credit notes (PR #36 blocking fix)", () => {
+  it("a posted credit note reduces the closing balance exactly like a receipt: invoice 1000, credit 200 -> closing 800", () => {
+    const [section] = computeArCustomerStatement({
+      ...PERIOD,
+      invoices: [invoice({ id: "1", issueDate: "2026-06-05", total: 1000 })],
+      allocations: [],
+      creditNotes: [creditNote({ invoiceId: "1", total: 200, issueDate: "2026-06-10" })],
+    });
+    expect(section.transactions).toHaveLength(2);
+    expect(section.transactions[1]).toMatchObject({ type: "credit_note", credit: 200 });
+    expect(section.closingBalance).toBe(800);
+  });
+
+  it("a credit note dated before From reduces the opening balance, not the period", () => {
+    const [section] = computeArCustomerStatement({
+      ...PERIOD,
+      invoices: [invoice({ id: "1", issueDate: "2026-05-01", total: 1000 })],
+      allocations: [],
+      creditNotes: [creditNote({ invoiceId: "1", total: 200, issueDate: "2026-05-20" })],
+    });
+    expect(section.openingBalance).toBe(800);
+    expect(section.transactions).toHaveLength(0);
+    expect(section.closingBalance).toBe(800);
+  });
+
+  it("a credit note dated exactly on From is included in the period (inclusive lower bound)", () => {
+    const [section] = computeArCustomerStatement({
+      ...PERIOD,
+      invoices: [invoice({ id: "1", issueDate: "2026-05-01", total: 1000 })],
+      allocations: [],
+      creditNotes: [creditNote({ invoiceId: "1", total: 200, issueDate: PERIOD.from })],
+    });
+    expect(section.transactions).toHaveLength(1);
+    expect(section.transactions[0]).toMatchObject({
+      type: "credit_note",
+      date: PERIOD.from,
+      credit: 200,
+    });
+  });
+
+  it("a credit note dated exactly on To is included in the period (inclusive upper bound)", () => {
+    const [section] = computeArCustomerStatement({
+      ...PERIOD,
+      invoices: [invoice({ id: "1", issueDate: "2026-05-01", total: 1000 })],
+      allocations: [],
+      creditNotes: [creditNote({ invoiceId: "1", total: 200, issueDate: PERIOD.to })],
+    });
+    expect(section.transactions).toHaveLength(1);
+    expect(section.transactions[0].date).toBe(PERIOD.to);
+  });
+
+  it("a credit note dated after To is excluded entirely", () => {
+    const [section] = computeArCustomerStatement({
+      ...PERIOD,
+      invoices: [invoice({ id: "1", issueDate: "2026-06-05", total: 1000 })],
+      allocations: [],
+      creditNotes: [creditNote({ invoiceId: "1", total: 200, issueDate: "2026-07-15" })],
+    });
+    expect(section.transactions).toHaveLength(1); // only the invoice
+    expect(section.transactions[0].type).toBe("invoice");
+    expect(section.closingBalance).toBe(1000);
+  });
+
+  it("a void credit note is excluded even though it falls within the period", () => {
+    const [section] = computeArCustomerStatement({
+      ...PERIOD,
+      invoices: [invoice({ id: "1", issueDate: "2026-06-05", total: 1000 })],
+      allocations: [],
+      creditNotes: [
+        creditNote({ invoiceId: "1", total: 200, issueDate: "2026-06-10", status: "void" }),
+      ],
+    });
+    expect(section.transactions).toHaveLength(1); // only the invoice
+    expect(section.closingBalance).toBe(1000);
+  });
+
+  it("a draft credit note is excluded even though it falls within the period", () => {
+    const [section] = computeArCustomerStatement({
+      ...PERIOD,
+      invoices: [invoice({ id: "1", issueDate: "2026-06-05", total: 1000 })],
+      allocations: [],
+      creditNotes: [
+        creditNote({ invoiceId: "1", total: 200, issueDate: "2026-06-10", status: "draft" }),
+      ],
+    });
+    expect(section.transactions).toHaveLength(1); // only the invoice
+    expect(section.closingBalance).toBe(1000);
+  });
+
+  it("a credit note against a (hypothetically) void invoice is excluded along with it, same as an allocation", () => {
+    const sections = computeArCustomerStatement({
+      ...PERIOD,
+      invoices: [invoice({ id: "1", issueDate: "2026-05-01", status: "void", total: 500 })],
+      allocations: [],
+      creditNotes: [creditNote({ invoiceId: "1", total: 100, issueDate: "2026-06-10" })],
+    });
+    expect(sections).toEqual([]);
+  });
+
+  it("a credit note lands in its own currency's section, never combined with another currency", () => {
+    const sections = computeArCustomerStatement({
+      ...PERIOD,
+      invoices: [
+        invoice({ id: "1", issueDate: "2026-06-01", total: 1000, currency: "GHS" }),
+        invoice({ id: "2", issueDate: "2026-06-02", total: 500, currency: "USD" }),
+      ],
+      allocations: [],
+      creditNotes: [
+        creditNote({ invoiceId: "1", total: 200, issueDate: "2026-06-10", currency: "GHS" }),
+        creditNote({ invoiceId: "2", total: 100, issueDate: "2026-06-11", currency: "USD" }),
+      ],
+    });
+    const ghs = sections.find((s) => s.currency === "GHS")!;
+    const usd = sections.find((s) => s.currency === "USD")!;
+    expect(ghs.closingBalance).toBe(800);
+    expect(usd.closingBalance).toBe(400);
+  });
+
+  it("a credit note and a receipt against the same invoice both appear as independent credit transactions", () => {
+    const [section] = computeArCustomerStatement({
+      ...PERIOD,
+      invoices: [invoice({ id: "1", issueDate: "2026-06-01", total: 1000 })],
+      allocations: [allocation({ invoiceId: "1", amount: 300, receiptDate: "2026-06-05" })],
+      creditNotes: [creditNote({ invoiceId: "1", total: 200, issueDate: "2026-06-10" })],
+    });
+    expect(section.transactions).toHaveLength(3);
+    expect(section.totalCredits).toBe(500);
+    expect(section.closingBalance).toBe(500);
+  });
+
+  it("omitting creditNotes entirely (pre-existing call sites) behaves exactly as before — no credit-note transactions appear", () => {
+    const [section] = computeArCustomerStatement({
+      ...PERIOD,
+      invoices: [invoice({ id: "1", issueDate: "2026-06-05", total: 1000 })],
+      allocations: [],
+    });
+    expect(section.transactions).toHaveLength(1);
+    expect(section.closingBalance).toBe(1000);
   });
 });

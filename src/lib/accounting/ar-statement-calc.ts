@@ -42,9 +42,31 @@ export type ArStatementAllocationRow = {
   currency: string;
 };
 
+/**
+ * One row per ar_credit_notes entry, already scoped to this customer's
+ * invoices by the caller. A credit note reduces the same net receivable
+ * balance a receipt does, so it is treated as a CREDIT transaction here,
+ * the same as a receipt allocation — it must never be a silent gap between
+ * ar_aging's net_balance (which already subtracts posted credit notes,
+ * see 20260819120000_ar_credit_notes_pr1.sql) and what a customer
+ * statement shows. `status` is carried through and independently filtered
+ * to 'posted' below — the same defensive-redundancy pattern already used
+ * for AR_STATEMENT_INCLUDED_STATUSES on invoices — rather than trusting
+ * the caller's own DB query filter alone.
+ */
+export type ArStatementCreditNoteRow = {
+  invoiceId: string;
+  code: string;
+  total: number;
+  /** ISO date (YYYY-MM-DD) — the credit note's own issue_date, not the invoice's. */
+  issueDate: string;
+  currency: string;
+  status: string;
+};
+
 export type ArStatementTransaction = {
   date: string;
-  type: "invoice" | "receipt";
+  type: "invoice" | "receipt" | "credit_note";
   reference: string;
   description: string;
   debit: number;
@@ -87,6 +109,13 @@ export function computeArCustomerStatement(input: {
   to: string;
   invoices: ArStatementInvoiceRow[];
   allocations: ArStatementAllocationRow[];
+  /**
+   * Optional (defaults to none) purely so every pre-existing call site that
+   * predates credit notes keeps compiling/behaving unchanged — the real
+   * production caller (loadArCustomerStatement) always supplies the
+   * customer's posted credit notes explicitly.
+   */
+  creditNotes?: ArStatementCreditNoteRow[];
 }): ArStatementCurrencySection[] {
   const includedStatuses: readonly string[] = AR_STATEMENT_INCLUDED_STATUSES;
   const eligibleInvoices = input.invoices.filter((inv) => includedStatuses.includes(inv.status));
@@ -97,10 +126,19 @@ export function computeArCustomerStatement(input: {
   // this filter keeps the guarantee explicit and correct even if that
   // invariant ever changes.
   const eligibleAllocations = input.allocations.filter((a) => eligibleInvoiceIds.has(a.invoiceId));
+  // Only POSTED credit notes ever reduce a receivable balance — draft and
+  // void credit notes have no financial effect (post_ar_credit_note()
+  // itself never lets a non-'posted' credit note carry a journal entry),
+  // so they are excluded here even if the caller's own query somehow
+  // included one.
+  const eligibleCreditNotes = (input.creditNotes ?? []).filter(
+    (cn) => cn.status === "posted" && eligibleInvoiceIds.has(cn.invoiceId),
+  );
 
   const currencies = new Set<string>();
   for (const inv of eligibleInvoices) currencies.add(safeCurrencyCode(inv.currency));
   for (const a of eligibleAllocations) currencies.add(safeCurrencyCode(a.currency));
+  for (const cn of eligibleCreditNotes) currencies.add(safeCurrencyCode(cn.currency));
 
   const sections: ArStatementCurrencySection[] = [];
   for (const currency of [...currencies].sort()) {
@@ -109,6 +147,9 @@ export function computeArCustomerStatement(input: {
     );
     const currencyAllocations = eligibleAllocations.filter(
       (a) => safeCurrencyCode(a.currency) === currency,
+    );
+    const currencyCreditNotes = eligibleCreditNotes.filter(
+      (cn) => safeCurrencyCode(cn.currency) === currency,
     );
 
     // Skip a currency entirely if none of its activity is on or before
@@ -120,26 +161,32 @@ export function computeArCustomerStatement(input: {
     // distinct from a currency with no relevant history at all.
     const hasRelevantActivity =
       currencyInvoices.some((inv) => inv.issueDate <= input.to) ||
-      currencyAllocations.some((a) => a.receiptDate <= input.to);
+      currencyAllocations.some((a) => a.receiptDate <= input.to) ||
+      currencyCreditNotes.some((cn) => cn.issueDate <= input.to);
     if (!hasRelevantActivity) continue;
 
     // Opening balance nets every qualifying debit and credit strictly
     // before `from`, each on its own authoritative date — the invoice's
-    // issue_date for debits, the receipt's receipt_date for credits —
-    // independent of which invoice a given receipt happened to be applied
-    // to. This is a snapshot of the account's net position at a point in
-    // time, not a per-invoice reconciliation.
+    // issue_date for debits, the receipt's receipt_date and the credit
+    // note's issue_date for credits — independent of which invoice a given
+    // receipt/credit note happened to be applied to. This is a snapshot of
+    // the account's net position at a point in time, not a per-invoice
+    // reconciliation.
     const openingDebits = currencyInvoices
       .filter((inv) => inv.issueDate < input.from)
       .reduce((sum, inv) => round4(sum + inv.total), 0);
-    const openingCredits = currencyAllocations
+    const openingCreditsFromReceipts = currencyAllocations
       .filter((a) => a.receiptDate < input.from)
       .reduce((sum, a) => round4(sum + a.amount), 0);
+    const openingCreditsFromCreditNotes = currencyCreditNotes
+      .filter((cn) => cn.issueDate < input.from)
+      .reduce((sum, cn) => round4(sum + cn.total), 0);
+    const openingCredits = round4(openingCreditsFromReceipts + openingCreditsFromCreditNotes);
     const openingBalance = round4(openingDebits - openingCredits);
 
     type Draft = {
       date: string;
-      type: "invoice" | "receipt";
+      type: "invoice" | "receipt" | "credit_note";
       reference: string;
       description: string;
       debit: number;
@@ -174,6 +221,22 @@ export function computeArCustomerStatement(input: {
           debit: 0,
           credit: a.amount,
           sortKey: `${a.receiptDate}|1|${a.receiptCode}`,
+        });
+      }
+    }
+    for (const cn of currencyCreditNotes) {
+      if (cn.issueDate >= input.from && cn.issueDate <= input.to) {
+        const inv = invoicesById.get(cn.invoiceId);
+        draftRows.push({
+          date: cn.issueDate,
+          type: "credit_note",
+          reference: cn.code,
+          description: `Credit note ${cn.code} — applied to ${inv?.code ?? "invoice"}`,
+          debit: 0,
+          credit: cn.total,
+          // Same same-day tier as a receipt: both are credits against a
+          // debit that must already exist on or before this date.
+          sortKey: `${cn.issueDate}|1|${cn.code}`,
         });
       }
     }

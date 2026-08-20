@@ -11,6 +11,10 @@ const receiptFoundation = readFileSync(
   resolve(root, "supabase/migrations/20260807120000_ar_ap_payment_integrity.sql"),
   "utf8",
 );
+const reversalFoundation = readFileSync(
+  resolve(root, "supabase/migrations/20260818090000_ar_invoice_reversal.sql"),
+  "utf8",
+);
 
 function fn(source: string, name: string): string {
   const match = source.match(
@@ -24,6 +28,8 @@ const createFn = fn(migration, "create_ar_credit_note");
 const postFn = fn(migration, "post_ar_credit_note");
 const receiptFn = fn(migration, "post_ar_receipt");
 const creditedTotalFn = fn(migration, "ar_invoice_credited_total");
+const reverseFn = fn(migration, "reverse_ar_invoice");
+const originalReverseFn = fn(reversalFoundation, "reverse_ar_invoice");
 
 describe("AR credit notes — schema", () => {
   it("defines a credit-note-specific status enum: draft, posted, void", () => {
@@ -231,9 +237,10 @@ describe("AR credit notes — ACL", () => {
 });
 
 describe("AR credit notes — create_ar_credit_note (draft, no financial effect)", () => {
-  it("validates the linked invoice belongs to the given property and is sent or paid", () => {
+  it("validates the linked invoice belongs to the given property and is sent — matching post_ar_credit_note()'s own eligibility exactly, so a draft can never be created against a 'paid' invoice it could never post against (PR #36 fix)", () => {
     expect(createFn).toContain("WHERE id = _invoice_id AND property_id = _property_id");
-    expect(createFn).toContain("_inv.status NOT IN ('sent','paid')");
+    expect(createFn).toContain("IF _inv.status <> 'sent' THEN");
+    expect(createFn).not.toContain("_inv.status NOT IN ('sent','paid')");
   });
 
   it("derives customer_id and currency from the invoice — never independently supplied", () => {
@@ -422,7 +429,9 @@ describe("AR credit notes — net balance invariant", () => {
   });
 
   it("exposes the read model with the required fields for consistent consumption", () => {
-    expect(migration).toContain("CREATE OR REPLACE VIEW public.ar_invoice_balances AS");
+    expect(migration).toContain(
+      "CREATE OR REPLACE VIEW public.ar_invoice_balances\nWITH (security_invoker = true) AS",
+    );
     for (const field of [
       "i.property_id",
       "i.id AS invoice_id",
@@ -611,7 +620,7 @@ describe("AR credit notes — ageing release safety", () => {
   it("redefines ar_aging to use net balance (subtracting posted credit notes), not the old total - amount_paid", () => {
     const view =
       migration.match(
-        /CREATE OR REPLACE VIEW public\.ar_aging AS[\s\S]*?FROM public\.ar_invoices i WHERE i\.status <> 'void';/,
+        /CREATE OR REPLACE VIEW public\.ar_aging[\s\S]*?FROM public\.ar_invoices i WHERE i\.status <> 'void';/,
       )?.[0] ?? "";
     expect(view).toContain("public.ar_invoice_credited_total(i.id)) AS balance");
     expect(view).not.toMatch(/\(i\.total - i\.amount_paid\) AS balance/);
@@ -619,15 +628,16 @@ describe("AR credit notes — ageing release safety", () => {
 
   it("keeps the same output column list/order/types as the prior ar_aging definition, so no dependent object breaks", () => {
     const view =
-      migration.match(/CREATE OR REPLACE VIEW public\.ar_aging AS[\s\S]*?bucket\n/)?.[0] ?? "";
+      migration.match(/CREATE OR REPLACE VIEW public\.ar_aging[\s\S]*?bucket\n/)?.[0] ?? "";
     expect(view).toMatch(
       /SELECT i\.property_id, i\.id, i\.code, i\.bill_to_name, i\.due_date, i\.total, i\.amount_paid,/,
     );
   });
 
-  it("this migration documents why ar-statement-calc.ts is intentionally NOT changed in PR 1 (a real, scoped gap for the follow-up work, not a receivables misstatement)", () => {
+  it("PR #36 fix: ar-statement-calc.ts / ar-statements.functions.ts ARE changed in this PR to also treat posted credit notes as a customer-statement credit — the original 'display gap, not a misstatement' reasoning is corrected in the migration header", () => {
     expect(migration).toContain("ar-statement-calc.ts");
-    expect(migration).toContain("is NOT changed here");
+    expect(migration).toContain("that reasoning was wrong");
+    expect(migration).toContain("It is fixed here, not deferred.");
   });
 });
 
@@ -652,9 +662,224 @@ describe("AR credit notes — cross-property and cross-invoice isolation", () =>
 });
 
 describe("AR credit notes — this migration only adds new objects", () => {
-  it("never drops or destructively alters a historical migration's tables/functions beyond the documented post_ar_receipt() replacement", () => {
+  it("never drops or destructively alters a historical migration's tables/functions — post_ar_receipt() and reverse_ar_invoice() are both redeclared via CREATE OR REPLACE FUNCTION, never DROP+recreate", () => {
     expect(migration).not.toMatch(/DROP FUNCTION|DROP TABLE|DROP TYPE/);
     expect(migration).not.toMatch(/ALTER TABLE public\.ar_invoices\s+DROP/);
     expect(migration).not.toMatch(/ALTER TABLE public\.ar_invoice_lines\s+DROP/);
+  });
+});
+
+describe("PR #36 fix 1 — reverse_ar_invoice() posted-credit-note guard", () => {
+  it("adds exactly one new guard: an EXISTS check against posted ar_credit_notes, under the same invoice row lock as every other eligibility check", () => {
+    expect(reverseFn).toContain(
+      "SELECT 1 FROM public.ar_credit_notes WHERE invoice_id = inv.id AND status = 'posted'",
+    );
+    expect(reverseFn).toContain("has posted credit notes and cannot be reversed");
+  });
+
+  it("the guard runs after the invoice row lock (FOR UPDATE), same as every other eligibility check in this function", () => {
+    const lockIdx = reverseFn.indexOf("FROM public.ar_invoices WHERE id=_id FOR UPDATE");
+    const guardIdx = reverseFn.indexOf("has posted credit notes and cannot be reversed");
+    expect(lockIdx).toBeGreaterThan(0);
+    expect(guardIdx).toBeGreaterThan(lockIdx);
+  });
+
+  it("the guard runs alongside (after) the existing amount_paid and ar_receipt_allocations guards, not instead of them — no existing guard was removed or weakened", () => {
+    const amountPaidIdx = reverseFn.indexOf("IF inv.amount_paid <> 0 THEN");
+    const allocIdx = reverseFn.indexOf("_alloc_count > 0");
+    const creditGuardIdx = reverseFn.indexOf("has posted credit notes and cannot be reversed");
+    expect(amountPaidIdx).toBeGreaterThan(0);
+    expect(allocIdx).toBeGreaterThan(amountPaidIdx);
+    expect(creditGuardIdx).toBeGreaterThan(allocIdx);
+    // Every other guard from the original function is preserved verbatim.
+    for (const guard of [
+      "IF inv.status = 'void' THEN",
+      "IF inv.status = 'draft' THEN",
+      "IF inv.status = 'paid' THEN",
+      "IF inv.status <> 'sent' THEN",
+      "IF inv.posted_entry_id IS NULL THEN",
+      "IF inv.amount_paid <> 0 THEN",
+      "SELECT count(*) INTO _alloc_count FROM public.ar_receipt_allocations WHERE invoice_id = _id;",
+    ]) {
+      expect(reverseFn).toContain(guard);
+      expect(originalReverseFn).toContain(guard);
+    }
+  });
+
+  it("a sent, unpaid invoice with no credit notes at all remains eligible — the new EXISTS check is false, so reversal proceeds exactly as before", () => {
+    // No new unconditional exception between the credit-note guard and the
+    // existing-reversal check; the EXISTS is the only new gate.
+    const creditGuardBlock = reverseFn.match(
+      /IF EXISTS \(\s*SELECT 1 FROM public\.ar_credit_notes[\s\S]*?END IF;/,
+    )?.[0];
+    expect(creditGuardBlock).toBeDefined();
+    expect(creditGuardBlock).toContain("status = 'posted'");
+  });
+
+  it("a DRAFT credit note against the invoice does not block reversal — the guard filters to status = 'posted' only", () => {
+    expect(reverseFn).toContain("AND status = 'posted'");
+    expect(reverseFn).not.toMatch(
+      /ar_credit_notes WHERE invoice_id = inv\.id AND status IN \('draft'/,
+    );
+  });
+
+  it("a VOID credit note against the invoice does not block reversal — the ar_credit_notes clause filters to status = 'posted' only, with no OR branch for 'void'", () => {
+    // A single EXISTS clause filtered to 'posted' inherently excludes both
+    // 'draft' and 'void' — there is no separate OR branch that would catch
+    // a void credit note.
+    const creditNoteClause =
+      reverseFn.match(/SELECT 1 FROM public\.ar_credit_notes WHERE[^\n]*/)?.[0] ?? "";
+    expect(creditNoteClause).toBe(
+      "SELECT 1 FROM public.ar_credit_notes WHERE invoice_id = inv.id AND status = 'posted'",
+    );
+    expect(creditNoteClause).not.toMatch(/OR|void/);
+  });
+
+  it("a fully credited invoice (net balance reduced to zero by posted credit notes, still status='sent' per point 11 of the migration header) is blocked by the same guard — no separate 'fully credited' branch is needed since ANY posted credit note blocks reversal, not just a partial one", () => {
+    expect(reverseFn).toContain("AND status = 'posted'");
+  });
+
+  it("does not weaken or remove the existing double-reversal / concurrency protections (row lock ordering, is_reversal_of uniqueness, balance re-check)", () => {
+    expect(reverseFn).toContain(
+      "SELECT * INTO inv FROM public.ar_invoices WHERE id=_id FOR UPDATE;",
+    );
+    expect(reverseFn).toContain(
+      "SELECT id INTO _existing_reversal FROM public.journal_entries WHERE is_reversal_of = inv.posted_entry_id;",
+    );
+    expect(reverseFn).toContain("ROUND(_dr,2) <> ROUND(_cr,2)");
+    expect(migration).not.toMatch(/CREATE UNIQUE INDEX journal_entries_reversal_of_uniq/); // unique index already exists from 20260818090000, not redeclared here
+  });
+
+  it("preserves the exact same audit insert shape and permission role set as the original function", () => {
+    expect(reverseFn).toContain(
+      "public.has_any_role(auth.uid(), ARRAY['super_admin','hotel_owner','general_manager','accountant']::app_role[], inv.property_id)",
+    );
+    expect(reverseFn).toContain("INSERT INTO public.admin_action_logs(");
+    const inserts = reverseFn.match(/INSERT INTO public\.admin_action_logs/g) ?? [];
+    expect(inserts).toHaveLength(1);
+  });
+
+  it("is redeclared via CREATE OR REPLACE FUNCTION under the identical signature — the historical migration file itself is never edited", () => {
+    expect(reverseFn).toMatch(/reverse_ar_invoice\(_id UUID, _reason TEXT\)/);
+    expect(reversalFoundation).toContain(
+      "CREATE OR REPLACE FUNCTION public.reverse_ar_invoice(_id UUID, _reason TEXT)",
+    );
+  });
+
+  it("ACL is re-declared for defense-in-depth, matching this migration's own post_ar_receipt() precedent", () => {
+    expect(migration).toContain(
+      "REVOKE EXECUTE ON FUNCTION public.reverse_ar_invoice(uuid, text) FROM PUBLIC, anon;",
+    );
+    expect(migration).toContain(
+      "GRANT EXECUTE ON FUNCTION public.reverse_ar_invoice(uuid, text) TO authenticated;",
+    );
+  });
+
+  it("the original migration file's own regression test suite is untouched and still describes true, unchanged behavior for every guard other than the new one", () => {
+    expect(reversalFoundation).not.toContain("ar_credit_notes");
+  });
+});
+
+describe("PR #36 fix 2 — duplicate source line within one credit note", () => {
+  it("adds a structural UNIQUE (credit_note_id, source_invoice_line_id) constraint — not an aggregation workaround in the function", () => {
+    expect(migration).toContain(
+      "CONSTRAINT ar_credit_note_lines_note_source_uniq UNIQUE (credit_note_id, source_invoice_line_id)",
+    );
+  });
+
+  it("the constraint is declared on the table itself (structural), and the function-level per-line loop is unchanged — the fix is not a new _cum_qty aggregation branch inside post_ar_credit_note()", () => {
+    expect(postFn).not.toContain("credit_note_id = cn.id AND"); // no same-note aggregation hack was added to the remaining-quantity query
+    expect(postFn).toContain(
+      "FROM public.ar_credit_note_lines x\n      JOIN public.ar_credit_notes xc ON xc.id = x.credit_note_id\n      WHERE x.source_invoice_line_id = ln.source_invoice_line_id\n        AND xc.status = 'posted';",
+    );
+  });
+
+  it("create_ar_credit_note() also rejects a duplicate source_invoice_line_id early, with a clear error, before ever reaching the structural constraint", () => {
+    expect(createFn).toContain(
+      "SELECT COUNT(DISTINCT value->>'source_invoice_line_id') FROM jsonb_array_elements(_lines)",
+    );
+    expect(createFn).toContain("Each source invoice line may only appear once per credit note");
+  });
+
+  it("the early application-level check runs before any line INSERT, so a duplicate submission never partially writes lines before being rejected", () => {
+    const checkIdx = createFn.indexOf(
+      "Each source invoice line may only appear once per credit note",
+    );
+    const firstInsertIdx = createFn.indexOf("INSERT INTO public.ar_credit_note_lines(");
+    expect(checkIdx).toBeGreaterThan(0);
+    expect(checkIdx).toBeLessThan(firstInsertIdx);
+  });
+});
+
+describe("PR #36 fix 3 — ar_invoice_balances / ar_aging view security (security_invoker)", () => {
+  it("declares security_invoker = true directly in the CREATE OR REPLACE VIEW statement for ar_invoice_balances — not left to default (false)", () => {
+    expect(migration).toMatch(
+      /CREATE OR REPLACE VIEW public\.ar_invoice_balances\s*\nWITH \(security_invoker = true\) AS/,
+    );
+  });
+
+  it("declares security_invoker = true directly in the CREATE OR REPLACE VIEW statement for ar_aging — this PR's own redefinition would otherwise silently reset it to the default (false), reintroducing the exact cross-property leak this repo already fixed twice before", () => {
+    expect(migration).toMatch(
+      /CREATE OR REPLACE VIEW public\.ar_aging\s*\nWITH \(security_invoker = true\) AS/,
+    );
+  });
+
+  it("also applies a defensive ALTER VIEW ... SET (security_invoker = true) immediately after each CREATE OR REPLACE VIEW, for both views", () => {
+    expect(migration).toContain(
+      "ALTER VIEW public.ar_invoice_balances SET (security_invoker = true);",
+    );
+    expect(migration).toContain("ALTER VIEW public.ar_aging SET (security_invoker = true);");
+  });
+
+  it("the ALTER VIEW for each view appears after that view's own CREATE OR REPLACE VIEW", () => {
+    const balancesCreateIdx = migration.indexOf(
+      "CREATE OR REPLACE VIEW public.ar_invoice_balances",
+    );
+    const balancesAlterIdx = migration.indexOf(
+      "ALTER VIEW public.ar_invoice_balances SET (security_invoker = true);",
+    );
+    const agingCreateIdx = migration.indexOf("CREATE OR REPLACE VIEW public.ar_aging");
+    const agingAlterIdx = migration.indexOf(
+      "ALTER VIEW public.ar_aging SET (security_invoker = true);",
+    );
+    expect(balancesAlterIdx).toBeGreaterThan(balancesCreateIdx);
+    expect(agingAlterIdx).toBeGreaterThan(agingCreateIdx);
+  });
+
+  it("documents the established project precedent for this exact bug class (ar_aging security_invoker fixed twice before) rather than asserting it from scratch", () => {
+    expect(migration).toContain("20260705040652_ca91242d-63f8-4436-aa72-3c3d68f10a95.sql");
+    expect(migration).toContain("20260706002151_e5d271a3-0dc5-464a-bd70-f020a231e8ae.sql");
+  });
+
+  it("the referenced historical migrations really do contain the security_invoker fix this migration's comment describes — the citation is not fabricated", () => {
+    const fix1 = readFileSync(
+      resolve(root, "supabase/migrations/20260705040652_ca91242d-63f8-4436-aa72-3c3d68f10a95.sql"),
+      "utf8",
+    );
+    const fix2 = readFileSync(
+      resolve(root, "supabase/migrations/20260706002151_e5d271a3-0dc5-464a-bd70-f020a231e8ae.sql"),
+      "utf8",
+    );
+    expect(fix1).toContain("ALTER VIEW public.ar_aging SET (security_invoker = true);");
+    expect(fix2).toContain("ALTER VIEW public.ar_aging SET (security_invoker = true);");
+  });
+
+  it("both views still GRANT SELECT to authenticated only (no broader grant introduced while fixing security_invoker)", () => {
+    expect(migration).toContain("GRANT SELECT ON public.ar_invoice_balances TO authenticated;");
+    expect(migration).toContain("GRANT SELECT ON public.ar_aging TO authenticated;");
+    expect(migration).not.toMatch(/GRANT SELECT ON public\.ar_invoice_balances TO (PUBLIC|anon)/);
+    expect(migration).not.toMatch(/GRANT SELECT ON public\.ar_aging TO (PUBLIC|anon)/);
+  });
+});
+
+describe("PR #36 fix 4 — create_ar_credit_note() rejects a paid invoice at create time", () => {
+  it("requires status = 'sent' exactly, matching post_ar_credit_note()'s own eligibility — 'paid' is no longer accepted at create time", () => {
+    expect(createFn).toContain("IF _inv.status <> 'sent' THEN");
+    expect(createFn).not.toContain("NOT IN ('sent','paid')");
+  });
+
+  it("the V1 rule that a fully paid invoice cannot be credited at all is unchanged — post_ar_credit_note() still rejects 'paid' independently, under its own invoice lock", () => {
+    expect(postFn).toContain("IF inv.status = 'paid' THEN");
+    expect(postFn).toContain("cannot be credited in this version");
   });
 });
