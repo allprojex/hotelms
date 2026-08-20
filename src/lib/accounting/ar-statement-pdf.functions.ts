@@ -36,6 +36,33 @@ function isoDate(value: unknown): string {
   return text;
 }
 
+/**
+ * Best-effort effective branding lookup (property override -> global
+ * default). Never throws — a branding failure must never block printing
+ * the actual statement; buildStatementPdf falls back to its prior
+ * hardcoded behavior when `brand` is undefined.
+ */
+async function fetchDocBranding(
+  context: any,
+  propertyId: string,
+): Promise<import("@/lib/admin/pdf-render.server").DocBranding | undefined> {
+  try {
+    const { data, error } = await context.supabase.rpc("get_effective_branding", {
+      _property_id: propertyId,
+    });
+    if (error || !data) return undefined;
+    const row = Array.isArray(data) ? data[0] : data;
+    if (!row) return undefined;
+    return {
+      name: row.effective_name || row.org_app_name || undefined,
+      logoUrl: row.logo_url ?? null,
+      primaryColor: row.primary_color ?? null,
+    };
+  } catch {
+    return undefined;
+  }
+}
+
 export const renderArCustomerStatementPdf = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: { propertyId: string; customerId: string; from: string; to: string }) => ({
@@ -61,6 +88,7 @@ export const renderArCustomerStatementPdf = createServerFn({ method: "POST" })
     const anyP = property as any;
 
     const { buildStatementPdf, toBase64 } = await import("@/lib/admin/pdf-render.server");
+    const brand = await fetchDocBranding(context, data.propertyId);
     const bytes = await buildStatementPdf({
       filename: `statement-${statement.customer.accountCode}-${data.from}-to-${data.to}.pdf`,
       title: "Customer Statement",
@@ -77,6 +105,7 @@ export const renderArCustomerStatementPdf = createServerFn({ method: "POST" })
         { label: "Customer", value: statement.customer.accountCode },
       ],
       sections: statement.sections,
+      brand,
     });
     const base64 = toBase64(bytes);
 

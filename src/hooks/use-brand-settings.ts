@@ -9,6 +9,7 @@ export type BrandSettings = {
   logo_dark_url: string | null;
   favicon_url: string | null;
   primary_color: string | null;
+  secondary_color: string | null;
   support_email: string | null;
   support_phone: string | null;
 };
@@ -21,6 +22,7 @@ const DEFAULTS: BrandSettings = {
   logo_dark_url: null,
   favicon_url: null,
   primary_color: null,
+  secondary_color: null,
   support_email: null,
   support_phone: null,
 };

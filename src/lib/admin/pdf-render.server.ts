@@ -1,12 +1,36 @@
 // Server-only PDF builder. Never import from client bundles.
 // pdf-lib is safe in the Cloudflare Worker SSR runtime.
-import { PDFDocument, StandardFonts, rgb, type PDFPage, type PDFFont } from "pdf-lib";
+import {
+  PDFDocument,
+  StandardFonts,
+  rgb,
+  type PDFPage,
+  type PDFFont,
+  type PDFImage,
+} from "pdf-lib";
 
 export interface LineItem {
   description: string;
   qty?: number;
   unitPrice?: number;
   amount: number;
+}
+
+/**
+ * Optional effective branding (property override -> organisation-wide
+ * default -> undefined) for a single document. Every field is optional
+ * and every consumer below degrades to the prior hardcoded behavior when
+ * a field — or `brand` itself — is absent, so documents render correctly
+ * with no property override, no logo, or only global branding configured
+ * (unchanged callers that don't pass `brand` at all keep working exactly
+ * as before this was added).
+ */
+export interface DocBranding {
+  name?: string | null;
+  /** Must be a directly-fetchable URL (the existing brand-assets upload flow already stores a long-lived signed URL for private-bucket logos, so no separate signing step is needed here). */
+  logoUrl?: string | null;
+  /** Only applied when it matches strict #rrggbb — other CSS color values (e.g. oklch(...), still permitted in system_settings for backward compatibility) are safely ignored rather than mis-parsed. */
+  primaryColor?: string | null;
 }
 
 export interface DocData {
@@ -23,17 +47,76 @@ export interface DocData {
   total: number;
   currency?: string;
   notes?: string;
+  brand?: DocBranding;
 }
 
 const M = 40;
 const W = 595;
 const H = 842;
+const DEFAULT_BRAND_NAME = "ThesKwoff Hotel";
+const DEFAULT_TITLE_COLOR = rgb(0.05, 0.09, 0.16);
+
+function hexToRgbColor(hex: string | null | undefined): ReturnType<typeof rgb> | null {
+  if (!hex) return null;
+  const m = /^#([0-9a-fA-F]{6})$/.exec(hex.trim());
+  if (!m) return null;
+  const n = parseInt(m[1], 16);
+  return rgb(((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255);
+}
+
+/**
+ * Fetches and embeds a logo image into the top-right of the given page.
+ * Best-effort only: any failure (network, unsupported format such as SVG/
+ * ICO which pdf-lib cannot embed, expired URL) is swallowed and the
+ * document still renders with its text-only header — a logo is a visual
+ * enhancement, never a requirement for a document to be usable.
+ */
+async function tryEmbedLogo(
+  pdf: PDFDocument,
+  page: PDFPage,
+  logoUrl: string,
+  topRightX: number,
+  topY: number,
+): Promise<void> {
+  try {
+    const res = await fetch(logoUrl);
+    if (!res.ok) return;
+    const contentType = res.headers.get("content-type") ?? "";
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    let image: PDFImage;
+    if (contentType.includes("png") || logoUrl.toLowerCase().endsWith(".png")) {
+      image = await pdf.embedPng(bytes);
+    } else if (
+      contentType.includes("jpeg") ||
+      contentType.includes("jpg") ||
+      logoUrl.toLowerCase().endsWith(".jpg") ||
+      logoUrl.toLowerCase().endsWith(".jpeg")
+    ) {
+      image = await pdf.embedJpg(bytes);
+    } else {
+      // SVG, ICO, WEBP, etc. — pdf-lib only embeds PNG/JPEG. Skip
+      // gracefully rather than throwing.
+      return;
+    }
+    const maxH = 32;
+    const maxW = 90;
+    const scale = Math.min(maxH / image.height, maxW / image.width, 1);
+    const w = image.width * scale;
+    const h = image.height * scale;
+    page.drawImage(image, { x: topRightX - w, y: topY - h, width: w, height: h });
+  } catch {
+    // Best-effort — never let a logo failure break document generation.
+  }
+}
 
 export async function buildDocPdf(data: DocData): Promise<Uint8Array> {
+  const brandName = data.brand?.name || DEFAULT_BRAND_NAME;
+  const titleColor = hexToRgbColor(data.brand?.primaryColor) ?? DEFAULT_TITLE_COLOR;
+
   const pdf = await PDFDocument.create();
   pdf.setTitle(data.title);
-  pdf.setProducer("ThesKwoff Hotel");
-  pdf.setCreator("ThesKwoff Hotel");
+  pdf.setProducer(brandName);
+  pdf.setCreator(brandName);
   pdf.setCreationDate(new Date());
 
   const font = await pdf.embedFont(StandardFonts.Helvetica);
@@ -41,13 +124,21 @@ export async function buildDocPdf(data: DocData): Promise<Uint8Array> {
   let page = pdf.addPage([W, H]);
   let y = H - M;
 
+  // Logo reserves vertical space above the title only when configured —
+  // with no logo, y stays H - M and the rest of the layout is byte-for-byte
+  // unchanged from before branding support was added.
+  if (data.brand?.logoUrl) {
+    await tryEmbedLogo(pdf, page, data.brand.logoUrl, W - M, y);
+    y -= 40;
+  }
+
   // Header
   page.drawText(data.title, {
     x: M,
     y: y - 18,
     size: 20,
     font: bold,
-    color: rgb(0.05, 0.09, 0.16),
+    color: titleColor,
   });
   if (data.code) {
     const codeW = bold.widthOfTextAtSize(data.code, 12);
@@ -174,7 +265,7 @@ export async function buildDocPdf(data: DocData): Promise<Uint8Array> {
     }
   }
 
-  page.drawText(`Generated ${new Date().toISOString()} · ThesKwoff Hotel`, {
+  page.drawText(`Generated ${new Date().toISOString()} · ${brandName}`, {
     x: M,
     y: M / 2,
     size: 8,
@@ -266,6 +357,7 @@ export interface StatementDocData {
   toBlock?: string[];
   meta?: { label: string; value: string }[];
   sections: StatementSection[];
+  brand?: DocBranding;
 }
 
 /**
@@ -277,10 +369,13 @@ export interface StatementDocData {
  * wrap helpers rather than a second PDF framework.
  */
 export async function buildStatementPdf(data: StatementDocData): Promise<Uint8Array> {
+  const brandName = data.brand?.name || DEFAULT_BRAND_NAME;
+  const titleColor = hexToRgbColor(data.brand?.primaryColor) ?? DEFAULT_TITLE_COLOR;
+
   const pdf = await PDFDocument.create();
   pdf.setTitle(data.title);
-  pdf.setProducer("ThesKwoff Hotel");
-  pdf.setCreator("ThesKwoff Hotel");
+  pdf.setProducer(brandName);
+  pdf.setCreator(brandName);
   pdf.setCreationDate(new Date());
 
   const font = await pdf.embedFont(StandardFonts.Helvetica);
@@ -288,12 +383,17 @@ export async function buildStatementPdf(data: StatementDocData): Promise<Uint8Ar
   let page = pdf.addPage([W, H]);
   let y = H - M;
 
+  if (data.brand?.logoUrl) {
+    await tryEmbedLogo(pdf, page, data.brand.logoUrl, W - M, y);
+    y -= 40;
+  }
+
   page.drawText(data.title, {
     x: M,
     y: y - 18,
     size: 20,
     font: bold,
-    color: rgb(0.05, 0.09, 0.16),
+    color: titleColor,
   });
   if (data.code) {
     const codeW = bold.widthOfTextAtSize(data.code, 12);
@@ -446,7 +546,7 @@ export async function buildStatementPdf(data: StatementDocData): Promise<Uint8Ar
     });
   }
 
-  page.drawText(`Generated ${new Date().toISOString()} · ThesKwoff Hotel`, {
+  page.drawText(`Generated ${new Date().toISOString()} · ${brandName}`, {
     x: M,
     y: M / 2,
     size: 8,

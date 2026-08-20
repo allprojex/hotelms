@@ -14,6 +14,35 @@ async function assertAdmin(context: any, propertyId: string) {
   if (!data) throw new Error("Not authorized to print documents for this property");
 }
 
+/**
+ * Resolves this document's effective branding (property override -> global
+ * default) for embedding into the PDF. Best-effort: any failure returns
+ * undefined rather than throwing, so a branding lookup problem never blocks
+ * printing the actual financial document — buildDocPdf/buildStatementPdf
+ * already fall back to their prior hardcoded behavior when `brand` is
+ * undefined.
+ */
+async function fetchDocBranding(
+  context: any,
+  propertyId: string,
+): Promise<import("./pdf-render.server").DocBranding | undefined> {
+  try {
+    const { data, error } = await context.supabase.rpc("get_effective_branding", {
+      _property_id: propertyId,
+    });
+    if (error || !data) return undefined;
+    const row = Array.isArray(data) ? data[0] : data;
+    if (!row) return undefined;
+    return {
+      name: row.effective_name || row.org_app_name || undefined,
+      logoUrl: row.logo_url ?? null,
+      primaryColor: row.primary_color ?? null,
+    };
+  } catch {
+    return undefined;
+  }
+}
+
 async function logPrint(
   context: any,
   propertyId: string,
@@ -66,29 +95,55 @@ export const renderAdminPdf = createServerFn({ method: "POST" })
 
     const { buildDocPdf, toBase64 } = await import("./pdf-render.server");
     const supabase = context.supabase;
+    const brand = await fetchDocBranding(context, data.propertyId);
 
     let doc: import("./pdf-render.server").DocData;
     let entityCode = "";
 
     if (data.kind === "folio") {
-      const [{ data: r, error: rErr }, { data: p }, { data: charges }, { data: payments }] = await Promise.all([
-        supabase.from("reservations").select("*, guest:guests(*), room_type:room_types(name), room:rooms(number)").eq("id", data.id).eq("property_id", data.propertyId).maybeSingle(),
-        supabase.from("properties").select("name,address,phone,email,base_currency").eq("id", data.propertyId).maybeSingle(),
-        supabase.from("reservation_charges").select("*").eq("reservation_id", data.id),
-        supabase.from("payments").select("*").eq("reservation_id", data.id),
-      ]);
+      const [{ data: r, error: rErr }, { data: p }, { data: charges }, { data: payments }] =
+        await Promise.all([
+          supabase
+            .from("reservations")
+            .select("*, guest:guests(*), room_type:room_types(name), room:rooms(number)")
+            .eq("id", data.id)
+            .eq("property_id", data.propertyId)
+            .maybeSingle(),
+          supabase
+            .from("properties")
+            .select("name,address,phone,email,base_currency")
+            .eq("id", data.propertyId)
+            .maybeSingle(),
+          supabase.from("reservation_charges").select("*").eq("reservation_id", data.id),
+          supabase.from("payments").select("*").eq("reservation_id", data.id),
+        ]);
       if (rErr) throw new Error(rErr.message);
       if (!r) throw new Error("Reservation not found for this property");
       const anyR = r as any;
       const anyP = p as any;
       const lines: import("./pdf-render.server").LineItem[] = [];
-      const nights = Math.max(1, Math.round((new Date(anyR.check_out).getTime() - new Date(anyR.check_in).getTime()) / 86400000));
+      const nights = Math.max(
+        1,
+        Math.round(
+          (new Date(anyR.check_out).getTime() - new Date(anyR.check_in).getTime()) / 86400000,
+        ),
+      );
       const perNight = Number(anyR.rate_total ?? 0) / nights;
-      lines.push({ description: `${anyR.room_type?.name ?? "Room"} · ${anyR.check_in} → ${anyR.check_out}`, qty: nights, unitPrice: perNight, amount: Number(anyR.rate_total ?? 0) });
-      for (const c of (charges as any[] ?? [])) lines.push({ description: c.description, amount: Number(c.amount) });
+      lines.push({
+        description: `${anyR.room_type?.name ?? "Room"} · ${anyR.check_in} → ${anyR.check_out}`,
+        qty: nights,
+        unitPrice: perNight,
+        amount: Number(anyR.rate_total ?? 0),
+      });
+      for (const c of (charges as any[]) ?? [])
+        lines.push({ description: c.description, amount: Number(c.amount) });
       const totalCharges = lines.reduce((s, l) => s + l.amount, 0);
-      const totalPaid = (payments as any[] ?? []).reduce((s: number, x: any) => s + Number(x.amount), 0);
-      for (const x of (payments as any[] ?? [])) lines.push({ description: `Payment received — ${x.method}`, amount: -Number(x.amount) });
+      const totalPaid = ((payments as any[]) ?? []).reduce(
+        (s: number, x: any) => s + Number(x.amount),
+        0,
+      );
+      for (const x of (payments as any[]) ?? [])
+        lines.push({ description: `Payment received — ${x.method}`, amount: -Number(x.amount) });
       entityCode = anyR.code;
       doc = {
         filename: `folio-${anyR.code}.pdf`,
@@ -116,8 +171,17 @@ export const renderAdminPdf = createServerFn({ method: "POST" })
       };
     } else if (data.kind === "bill") {
       const [{ data: b, error: bErr }, { data: p }, { data: lines }] = await Promise.all([
-        supabase.from("ap_bills").select("*").eq("id", data.id).eq("property_id", data.propertyId).maybeSingle(),
-        supabase.from("properties").select("name,address,phone,email").eq("id", data.propertyId).maybeSingle(),
+        supabase
+          .from("ap_bills")
+          .select("*")
+          .eq("id", data.id)
+          .eq("property_id", data.propertyId)
+          .maybeSingle(),
+        supabase
+          .from("properties")
+          .select("name,address,phone,email")
+          .eq("id", data.propertyId)
+          .maybeSingle(),
         supabase.from("ap_bill_lines").select("*").eq("bill_id", data.id),
       ]);
       if (bErr) throw new Error(bErr.message);
@@ -126,7 +190,11 @@ export const renderAdminPdf = createServerFn({ method: "POST" })
       const anyP = p as any;
       let sup: any = null;
       if (anyB.supplier_id) {
-        const { data: s } = await supabase.from("suppliers").select("name,address,email").eq("id", anyB.supplier_id).maybeSingle();
+        const { data: s } = await supabase
+          .from("suppliers")
+          .select("name,address,email")
+          .eq("id", anyB.supplier_id)
+          .maybeSingle();
         sup = s;
       }
       entityCode = anyB.code;
@@ -141,7 +209,7 @@ export const renderAdminPdf = createServerFn({ method: "POST" })
           { label: "Due", value: anyB.due_date ?? "—" },
           { label: "Status", value: anyB.status },
         ],
-        lines: (lines as any[] ?? []).map((l: any) => ({
+        lines: ((lines as any[]) ?? []).map((l: any) => ({
           description: l.description,
           qty: Number(l.quantity),
           unitPrice: Number(l.unit_price),
@@ -154,8 +222,17 @@ export const renderAdminPdf = createServerFn({ method: "POST" })
       };
     } else if (data.kind === "invoice") {
       const [{ data: inv, error: iErr }, { data: p }, { data: lines }] = await Promise.all([
-        supabase.from("ar_invoices").select("*").eq("id", data.id).eq("property_id", data.propertyId).maybeSingle(),
-        supabase.from("properties").select("name,address,phone,email").eq("id", data.propertyId).maybeSingle(),
+        supabase
+          .from("ar_invoices")
+          .select("*")
+          .eq("id", data.id)
+          .eq("property_id", data.propertyId)
+          .maybeSingle(),
+        supabase
+          .from("properties")
+          .select("name,address,phone,email")
+          .eq("id", data.propertyId)
+          .maybeSingle(),
         supabase.from("ar_invoice_lines").select("*").eq("invoice_id", data.id),
       ]);
       if (iErr) throw new Error(iErr.message);
@@ -174,7 +251,7 @@ export const renderAdminPdf = createServerFn({ method: "POST" })
           { label: "Due", value: anyI.due_date ?? "—" },
           { label: "Status", value: anyI.status },
         ],
-        lines: (lines as any[] ?? []).map((l: any) => ({
+        lines: ((lines as any[]) ?? []).map((l: any) => ({
           description: l.description,
           qty: Number(l.quantity),
           unitPrice: Number(l.unit_price),
@@ -194,14 +271,18 @@ export const renderAdminPdf = createServerFn({ method: "POST" })
       // join client-side.
       const [{ data: rec, error: recErr }, { data: p }, { data: allocs }] = await Promise.all([
         (supabase as any).from("ar_receipts").select("*").eq("id", data.id).eq("property_id", data.propertyId).maybeSingle(),
-        supabase.from("properties").select("name,address,phone,email").eq("id", data.propertyId).maybeSingle(),
+        supabase
+          .from("properties")
+          .select("name,address,phone,email")
+          .eq("id", data.propertyId)
+          .maybeSingle(),
         (supabase as any).from("ar_receipt_allocations").select("invoice_id,amount").eq("receipt_id", data.id).eq("property_id", data.propertyId),
       ]);
       if (recErr) throw new Error(recErr.message);
       if (!rec) throw new Error("Receipt not found for this property");
       const anyRec = rec as any;
       const anyP = p as any;
-      const allocRows = (allocs as any[] ?? []);
+      const allocRows = (allocs as any[]) ?? [];
       const invoiceIds = [...new Set(allocRows.map((a) => a.invoice_id))];
       let invoicesById = new Map<string, any>();
       if (invoiceIds.length > 0) {
@@ -210,14 +291,18 @@ export const renderAdminPdf = createServerFn({ method: "POST" })
           .select("id,code,bill_to_name,bill_to_email")
           .in("id", invoiceIds)
           .eq("property_id", data.propertyId);
-        invoicesById = new Map((invs as any[] ?? []).map((inv: any) => [inv.id, inv]));
+        invoicesById = new Map(((invs as any[]) ?? []).map((inv: any) => [inv.id, inv]));
       }
-      const customerNames = [...new Set(
-        allocRows.map((a) => invoicesById.get(a.invoice_id)?.bill_to_name).filter(Boolean),
-      )];
-      const customerEmails = [...new Set(
-        allocRows.map((a) => invoicesById.get(a.invoice_id)?.bill_to_email).filter(Boolean),
-      )];
+      const customerNames = [
+        ...new Set(
+          allocRows.map((a) => invoicesById.get(a.invoice_id)?.bill_to_name).filter(Boolean),
+        ),
+      ];
+      const customerEmails = [
+        ...new Set(
+          allocRows.map((a) => invoicesById.get(a.invoice_id)?.bill_to_email).filter(Boolean),
+        ),
+      ];
       entityCode = anyRec.code;
       doc = {
         filename: `receipt-${anyRec.code}.pdf`,
@@ -241,9 +326,21 @@ export const renderAdminPdf = createServerFn({ method: "POST" })
     } else {
       // po
       const [{ data: po, error: pErr }, { data: p }, { data: lines }] = await Promise.all([
-        supabase.from("purchase_orders").select("*").eq("id", data.id).eq("property_id", data.propertyId).maybeSingle(),
-        supabase.from("properties").select("name,address,phone,email,base_currency").eq("id", data.propertyId).maybeSingle(),
-        supabase.from("purchase_order_lines").select("*, item:inventory_items(name,unit)").eq("po_id", data.id),
+        supabase
+          .from("purchase_orders")
+          .select("*")
+          .eq("id", data.id)
+          .eq("property_id", data.propertyId)
+          .maybeSingle(),
+        supabase
+          .from("properties")
+          .select("name,address,phone,email,base_currency")
+          .eq("id", data.propertyId)
+          .maybeSingle(),
+        supabase
+          .from("purchase_order_lines")
+          .select("*, item:inventory_items(name,unit)")
+          .eq("po_id", data.id),
       ]);
       if (pErr) throw new Error(pErr.message);
       if (!po) throw new Error("Purchase order not found for this property");
@@ -251,7 +348,11 @@ export const renderAdminPdf = createServerFn({ method: "POST" })
       const anyP = p as any;
       let sup: any = null;
       if (anyPo.supplier_id) {
-        const { data: s } = await supabase.from("suppliers").select("name,address,email,phone").eq("id", anyPo.supplier_id).maybeSingle();
+        const { data: s } = await supabase
+          .from("suppliers")
+          .select("name,address,email,phone")
+          .eq("id", anyPo.supplier_id)
+          .maybeSingle();
         sup = s;
       }
       entityCode = anyPo.code;
@@ -266,7 +367,7 @@ export const renderAdminPdf = createServerFn({ method: "POST" })
           { label: "Status", value: anyPo.status },
           { label: "Expected", value: anyPo.expected_at ?? "—" },
         ],
-        lines: (lines as any[] ?? []).map((l: any) => ({
+        lines: ((lines as any[]) ?? []).map((l: any) => ({
           description: `${l.item?.name ?? "Item"} (${l.item?.unit ?? "ea"})`,
           qty: Number(l.quantity),
           unitPrice: Number(l.unit_cost),
@@ -278,6 +379,7 @@ export const renderAdminPdf = createServerFn({ method: "POST" })
       };
     }
 
+    doc.brand = brand;
     const bytes = await buildDocPdf(doc);
     const base64 = toBase64(bytes);
     await logPrint(context, data.propertyId, ENTITY_TYPE_BY_KIND[data.kind], data.id, entityCode);

@@ -3,6 +3,7 @@ import {
   Outlet,
   createRootRouteWithContext,
   useRouter,
+  useRouterState,
   HeadContent,
   Scripts,
 } from "@tanstack/react-router";
@@ -14,6 +15,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Toaster } from "@/components/ui/sonner";
 import { ThemeProvider } from "@/components/theme-provider";
 import { useBrandSettings } from "@/hooks/use-brand-settings";
+import { BrandColorVars } from "@/components/brand-color-vars";
 
 const FALLBACK_FAVICON =
   "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%230b2d22'/%3E%3Ctext x='32' y='42' text-anchor='middle' font-family='Arial,sans-serif' font-size='30' font-weight='700' fill='%23f4d58d'%3ETS%3C/text%3E%3C/svg%3E";
@@ -37,6 +39,38 @@ function BrandFavicon() {
   return null;
 }
 
+// Browser/document title is deliberately sourced from the organisation-wide
+// app_name only (useBrandSettings, not the property-aware effective-branding
+// hook) — per the approved Branding Phase 1 scope, the browser tab identity
+// never switches when the active property changes. This mirrors BrandFavicon's
+// existing client-side-only pattern rather than restructuring the root
+// route's static head() into a data-dependent loader (deferred to Branding
+// Phase 2 — see the implementation report). The static head() meta on each
+// route remains the pre-hydration/crawler-facing fallback and is otherwise
+// untouched; this effect only overwrites the live document.title once
+// branding has loaded, and re-applies on every client-side navigation
+// (TanStack Router's own HeadContent re-asserts each route's static title on
+// navigate, so this must re-run afterward rather than only once on mount).
+// Known Phase 1 limitation, documented rather than half-fixed: this
+// replaces the whole tab title with the org app_name, so a route-specific
+// suffix like "Staff & Admin Sign In —" is not preserved once JS has
+// hydrated. Full per-route dynamic titles need the head()-loader
+// restructuring deferred above.
+function BrandTitle() {
+  const { data: brandSettings } = useBrandSettings();
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+
+  useEffect(() => {
+    if (!brandSettings?.app_name) return;
+    document.title = brandSettings.app_name;
+
+    // re-run trigger only (re-apply after HeadContent resets the title on
+    // navigate), not a value read inside the effect.
+  }, [brandSettings?.app_name, pathname]);
+
+  return null;
+}
+
 function NotFoundComponent() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
@@ -46,7 +80,10 @@ function NotFoundComponent() {
         <p className="mt-2 text-sm text-muted-foreground">
           The page you're looking for doesn't exist.
         </p>
-        <a href="/" className="mt-6 inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground">
+        <a
+          href="/"
+          className="mt-6 inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
+        >
           Go home
         </a>
       </div>
@@ -56,16 +93,23 @@ function NotFoundComponent() {
 
 function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   const router = useRouter();
-  useEffect(() => { reportLovableError(error, { boundary: "root" }); }, [error]);
+  useEffect(() => {
+    reportLovableError(error, { boundary: "root" });
+  }, [error]);
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="max-w-md text-center">
         <h1 className="text-xl font-semibold">This page didn't load</h1>
         <p className="mt-2 text-sm text-muted-foreground">Something went wrong.</p>
         <button
-          onClick={() => { router.invalidate(); reset(); }}
+          onClick={() => {
+            router.invalidate();
+            reset();
+          }}
           className="mt-6 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
-        >Try again</button>
+        >
+          Try again
+        </button>
       </div>
     </div>
   );
@@ -77,15 +121,32 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       { title: "ThesKwoff Hotel" },
-      { name: "description", content: "Enterprise cloud hotel property management system by ThesKwoff Hotel." },
+      {
+        name: "description",
+        content: "Enterprise cloud hotel property management system by ThesKwoff Hotel.",
+      },
       { property: "og:title", content: "ThesKwoff Hotel" },
-      { property: "og:description", content: "Enterprise cloud hotel property management system by ThesKwoff Hotel." },
+      {
+        property: "og:description",
+        content: "Enterprise cloud hotel property management system by ThesKwoff Hotel.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
       { name: "twitter:title", content: "ThesKwoff Hotel" },
-      { name: "twitter:description", content: "Enterprise cloud hotel property management system by ThesKwoff Hotel." },
-      { property: "og:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/1d025826-7eba-4bfe-8b5d-2a9435361e4f" },
-      { name: "twitter:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/1d025826-7eba-4bfe-8b5d-2a9435361e4f" },
+      {
+        name: "twitter:description",
+        content: "Enterprise cloud hotel property management system by ThesKwoff Hotel.",
+      },
+      {
+        property: "og:image",
+        content:
+          "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/1d025826-7eba-4bfe-8b5d-2a9435361e4f",
+      },
+      {
+        name: "twitter:image",
+        content:
+          "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/1d025826-7eba-4bfe-8b5d-2a9435361e4f",
+      },
     ],
     links: [
       { rel: "stylesheet", href: appCss },
@@ -101,8 +162,13 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 function RootShell({ children }: { children: ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <head><HeadContent /></head>
-      <body>{children}<Scripts /></body>
+      <head>
+        <HeadContent />
+      </head>
+      <body>
+        {children}
+        <Scripts />
+      </body>
     </html>
   );
 }
@@ -124,6 +190,8 @@ function RootComponent() {
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
         <BrandFavicon />
+        <BrandTitle />
+        <BrandColorVars />
         <Outlet />
         <Toaster richColors position="top-right" />
       </ThemeProvider>
