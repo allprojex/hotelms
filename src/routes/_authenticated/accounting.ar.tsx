@@ -11,6 +11,8 @@ import { ArCreditNotesPanel } from "@/components/accounting/ar-credit-notes-pane
 import { renderAdminPdf } from "@/lib/admin/pdf.functions";
 import { downloadServerPdf } from "@/lib/admin/pdf-docs";
 import { useActiveProperty } from "@/hooks/use-active-property";
+import { useHasAnyRole } from "@/hooks/use-user-roles";
+import { ACCOUNTING_ADMIN_ROLES } from "@/lib/accounting/permissions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -56,6 +58,14 @@ function ARPage() {
   const [payIdempotencyKey, setPayIdempotencyKey] = useState("");
   const [reverseTarget, setReverseTarget] = useState<any>(null);
   const [reverseReason, setReverseReason] = useState("");
+  const [reverseReceiptTarget, setReverseReceiptTarget] = useState<any>(null);
+  const [reverseReceiptReason, setReverseReceiptReason] = useState("");
+  // Reversing a posted receipt/credit note is a correction action, held to
+  // the same accounting-admin bar as reverse_ar_invoice() itself
+  // (super_admin/hotel_owner/general_manager/accountant) — deliberately
+  // NOT the broader set that can receive a payment in the first place
+  // (post_ar_receipt() itself also allows front_desk).
+  const canReverse = useHasAnyRole([...ACCOUNTING_ADMIN_ROLES], propertyId);
   const [form, setForm] = useState({
     bill_to_name: "", bill_to_email: "", bill_to_address: "",
     issue_date: format(new Date(), "yyyy-MM-dd"),
@@ -159,6 +169,32 @@ function ARPage() {
       toast.success("Invoice reversed — a new offsetting journal entry was posted");
       setReverseTarget(null);
       setReverseReason("");
+      qc.invalidateQueries({ queryKey: ["ar-invoices", propertyId] });
+      qc.invalidateQueries({ queryKey: ["ar-aging", propertyId] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const reverseReceipt = useMutation({
+    mutationFn: async ({ id, reason }: { id: string; reason: string }) => {
+      // reverse_ar_receipt is not yet in the generated Database types
+      // (20260821120000_ar_credit_note_receipt_reversal.sql) — same
+      // untyped-RPC precedent already used elsewhere in this file.
+      const { error } = await (supabase.rpc as any)("reverse_ar_receipt", {
+        _id: id,
+        _reason: reason,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Receipt reversed — a new offsetting journal entry was posted");
+      setReverseReceiptTarget(null);
+      setReverseReceiptReason("");
+      // A receipt reversal can touch every invoice it was allocated to
+      // (post_ar_receipt supports multi-invoice allocation) — invalidate
+      // the same broad set invoice reversal already does, plus the
+      // receipts list itself.
+      qc.invalidateQueries({ queryKey: ["ar-receipts", propertyId] });
       qc.invalidateQueries({ queryKey: ["ar-invoices", propertyId] });
       qc.invalidateQueries({ queryKey: ["ar-aging", propertyId] });
     },
@@ -336,12 +372,39 @@ function ARPage() {
                 <span className="font-mono text-xs text-muted-foreground w-24">{r.code}</span>
                 <span className="text-xs text-muted-foreground">{r.receipt_date}</span>
                 <Badge variant="outline" className="text-[10px] uppercase">{r.method}</Badge>
+                {r.status === "void" && (
+                  <Badge variant="secondary" className="text-[10px] uppercase">
+                    void
+                  </Badge>
+                )}
+                {r.status === "void" && r.reversal_reason && (
+                  <span
+                    className="text-[10px] text-destructive truncate max-w-[220px]"
+                    title={r.reversal_reason}
+                  >
+                    Reversed {r.reversed_at ? format(new Date(r.reversed_at), "yyyy-MM-dd") : ""}:{" "}
+                    {r.reversal_reason}
+                  </span>
+                )}
               </div>
               <div className="flex items-center gap-3">
                 <span className="font-mono text-sm" title={!isValidCurrencyCode(r.currency) ? `Stored currency '${r.currency ?? ""}' is invalid; showing GHS` : undefined}>{formatMoney(Number(r.amount), r.currency)}</span>
                 <Button size="sm" variant="ghost" className="h-7" title="Print receipt" onClick={() => printReceipt(r.id)}>
                   <ReceiptIcon className="h-3.5 w-3.5" />
                 </Button>
+                {r.status !== "void" && canReverse.allowed && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7"
+                    onClick={() => {
+                      setReverseReceiptReason("");
+                      setReverseReceiptTarget(r);
+                    }}
+                  >
+                    <Undo2 className="h-3 w-3 mr-1" /> Reverse
+                  </Button>
+                )}
               </div>
             </div>
           ))}
@@ -352,7 +415,7 @@ function ARPage() {
       <ArCreditNotesPanel
         propertyId={propertyId}
         invoices={invoices.data ?? []}
-        onPosted={() => {
+        onLedgerChanged={() => {
           qc.invalidateQueries({ queryKey: ["ar-invoices", propertyId] });
           qc.invalidateQueries({ queryKey: ["ar-aging", propertyId] });
         }}
@@ -452,6 +515,82 @@ function ARPage() {
               onClick={() => reverseTarget && reverse.mutate({ id: reverseTarget.id, reason: reverseReason.trim() })}
             >
               <Undo2 className="h-4 w-4 mr-1" /> Reverse invoice
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={!!reverseReceiptTarget}
+        onOpenChange={(v) => {
+          if (!v) setReverseReceiptTarget(null);
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Reverse receipt</DialogTitle>
+          </DialogHeader>
+          {reverseReceiptTarget && (
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <div>
+                  <span className="text-muted-foreground">Receipt</span>
+                  <div className="font-mono">{reverseReceiptTarget.code}</div>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Method</span>
+                  <div className="truncate">{reverseReceiptTarget.method}</div>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Amount</span>
+                  <div className="font-mono">
+                    {formatMoney(
+                      Number(reverseReceiptTarget.amount),
+                      reverseReceiptTarget.currency,
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Currency</span>
+                  <div>{reverseReceiptTarget.currency}</div>
+                </div>
+              </div>
+              <p className="text-xs text-destructive">
+                This posts a new offsetting journal entry that exactly reverses this receipt's
+                original posting and restores every invoice it was allocated to. The receipt, its
+                allocations, and its original journal entry are never edited or deleted. This cannot
+                be undone through the UI.
+              </p>
+              <div>
+                <Label>Reason (required, 5–500 characters)</Label>
+                <Textarea
+                  rows={3}
+                  maxLength={500}
+                  value={reverseReceiptReason}
+                  onChange={(e) => setReverseReceiptReason(e.target.value)}
+                  placeholder="Why is this receipt being reversed?"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  {reverseReceiptReason.trim().length}/500
+                </p>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setReverseReceiptTarget(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={reverseReceipt.isPending || reverseReceiptReason.trim().length < 5}
+              onClick={() =>
+                reverseReceiptTarget &&
+                reverseReceipt.mutate({
+                  id: reverseReceiptTarget.id,
+                  reason: reverseReceiptReason.trim(),
+                })
+              }
+            >
+              <Undo2 className="h-4 w-4 mr-1" /> Reverse receipt
             </Button>
           </DialogFooter>
         </DialogContent>

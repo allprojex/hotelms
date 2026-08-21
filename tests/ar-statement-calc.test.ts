@@ -27,6 +27,7 @@ function allocation(
     receiptCode: `RCT-${overrides.invoiceId}`,
     receiptDate: "2026-06-16",
     currency: "GHS",
+    receiptStatus: "posted",
     ...overrides,
   };
 }
@@ -475,6 +476,31 @@ describe("computeArCustomerStatement — posted credit notes (PR #36 blocking fi
     expect(section.transactions).toHaveLength(3);
     expect(section.totalCredits).toBe(500);
     expect(section.closingBalance).toBe(500);
+  });
+
+  it("a voided (reversed) receipt's allocation is excluded — PR B: it must never misstate a statement as if the payment were still in effect", () => {
+    const [section] = computeArCustomerStatement({
+      ...PERIOD,
+      invoices: [invoice({ id: "1", issueDate: "2026-06-01", total: 1000 })],
+      allocations: [
+        allocation({
+          invoiceId: "1",
+          amount: 300,
+          receiptDate: "2026-06-05",
+          receiptStatus: "posted",
+        }),
+        allocation({
+          invoiceId: "1",
+          amount: 400,
+          receiptDate: "2026-06-06",
+          receiptStatus: "void",
+        }),
+      ],
+    });
+    // Only the posted allocation counts — the voided one contributes nothing.
+    expect(section.transactions).toHaveLength(2);
+    expect(section.totalCredits).toBe(300);
+    expect(section.closingBalance).toBe(700);
   });
 
   it("omitting creditNotes entirely (pre-existing call sites) behaves exactly as before — no credit-note transactions appear", () => {

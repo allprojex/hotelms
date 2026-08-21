@@ -40,6 +40,18 @@ export type ArStatementAllocationRow = {
   receiptDate: string;
   /** The allocation's currency — always equal to its invoice's currency (enforced by post_ar_receipt). */
   currency: string;
+  /**
+   * The PARENT receipt's status ('posted' or 'void' —
+   * 20260821120000_ar_credit_note_receipt_reversal.sql). ar_receipt_allocations
+   * itself is never modified/deleted on reversal (see that migration's own
+   * header note 6) — a voided receipt's allocations remain in the table
+   * exactly as originally posted, so this status must be carried through
+   * and filtered here, the same defensive-redundancy pattern already used
+   * for ArStatementCreditNoteRow.status below, or a reversed receipt would
+   * still misstate a customer's statement as if the payment were still in
+   * effect.
+   */
+  receiptStatus: string;
 };
 
 /**
@@ -124,8 +136,13 @@ export function computeArCustomerStatement(input: {
   // An allocation against a draft/void invoice never happens in practice
   // (post_ar_receipt only allows allocating against status='sent'), but
   // this filter keeps the guarantee explicit and correct even if that
-  // invariant ever changes.
-  const eligibleAllocations = input.allocations.filter((a) => eligibleInvoiceIds.has(a.invoiceId));
+  // invariant ever changes. Also excludes allocations whose parent
+  // receipt has been reversed (status <> 'posted') — a voided receipt's
+  // allocation rows are never deleted (see ArStatementAllocationRow's own
+  // doc comment), so this exclusion is required, not defensive.
+  const eligibleAllocations = input.allocations.filter(
+    (a) => eligibleInvoiceIds.has(a.invoiceId) && a.receiptStatus === "posted",
+  );
   // Only POSTED credit notes ever reduce a receivable balance — draft and
   // void credit notes have no financial effect (post_ar_credit_note()
   // itself never lets a non-'posted' credit note carry a journal entry),
