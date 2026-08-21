@@ -1,0 +1,26 @@
+{
+  "_comment": "Template for a per-release plan. Copy to scripts/prod/releases/<date>-<slug>.json, fill in the real values for the release you've reviewed, and pass its path to scripts/prod-release.sh. Every guarded script cross-checks reality against this file and refuses on any mismatch — this file IS the human approval record.",
+
+  "release_id": "2026-08-21-example-release",
+  "operator": "your-name-here",
+
+  "approved_git_sha": "REPLACE_WITH_APPROVED_40_CHAR_COMMIT_SHA",
+
+  "migration": {
+    "_comment": "Omit this whole block (set to null) for a release with no new migration.",
+    "relPath": "supabase/migrations/00000000000000_example.sql",
+    "approvedSha256": "REPLACE_WITH_APPROVED_64_CHAR_SHA256_FROM_THE_PRISTINE_GIT_BLOB"
+  },
+
+  "preflight_sql": "supabase/preflight/00000000_example_preflight.sql",
+  "postflight_sql": "supabase/postflight/00000000_example_postflight.sql",
+
+  "postgrest_reload_required": false,
+
+  "ui_smoke": {
+    "tags": ["@prod-readonly"],
+    "authorize_write_tests": false,
+    "authorize_financial_tests": false,
+    "storage_state_path": null
+  }
+}

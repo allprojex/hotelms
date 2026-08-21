@@ -46,3 +46,11 @@ supabase/.temp/
 *.sw?
 
 supabase/.branches/
+
+# Production release run artifacts. Release PLANS
+# (scripts/prod/releases/*.json — the human-authored approval record, no
+# secrets) are meant to be committed; the timestamped run directories each
+# release generates (raw stage logs + report.md) are not auto-committed —
+# a human chooses which report.md to keep as a permanent audit record via
+# `git add -f`.
+scripts/prod/releases/*/
