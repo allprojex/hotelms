@@ -350,7 +350,7 @@ describe("AR Credit Note UI — query invalidation / refresh after create and po
 
   it("post and reverse both delegate to the same shared invalidateDerivedQueries() helper — every derived per-invoice query (credit notes, balance, remaining-capacity lines, posted-ids) explicitly, not relying only on the create dialog's enabled/staleTime transition to refetch them", () => {
     const helperBody =
-      panel.match(/function invalidateDerivedQueries\(\) \{[\s\S]*?\n  \}/)?.[0] ?? "";
+      panel.match(/function invalidateDerivedQueries\(\) \{[\s\S]*?\n {2}\}/)?.[0] ?? "";
     expect(helperBody).toContain(
       'qc.invalidateQueries({ queryKey: ["ar-credit-notes", propertyId] });',
     );

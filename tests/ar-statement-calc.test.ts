@@ -483,8 +483,18 @@ describe("computeArCustomerStatement — posted credit notes (PR #36 blocking fi
       ...PERIOD,
       invoices: [invoice({ id: "1", issueDate: "2026-06-01", total: 1000 })],
       allocations: [
-        allocation({ invoiceId: "1", amount: 300, receiptDate: "2026-06-05", receiptStatus: "posted" }),
-        allocation({ invoiceId: "1", amount: 400, receiptDate: "2026-06-06", receiptStatus: "void" }),
+        allocation({
+          invoiceId: "1",
+          amount: 300,
+          receiptDate: "2026-06-05",
+          receiptStatus: "posted",
+        }),
+        allocation({
+          invoiceId: "1",
+          amount: 400,
+          receiptDate: "2026-06-06",
+          receiptStatus: "void",
+        }),
       ],
     });
     // Only the posted allocation counts — the voided one contributes nothing.

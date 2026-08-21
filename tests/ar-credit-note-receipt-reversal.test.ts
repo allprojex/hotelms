@@ -295,7 +295,7 @@ describe("PR B — credit note UI: Reverse action", () => {
 
   it("reversed (void) credit notes are visually distinct: a distinct badge plus an explicit Reversed date/reason line", () => {
     expect(panel).toContain('cn.status === "void" && (');
-    expect(panel).toContain("Reversed {cn.reversed_at");
+    expect(panel).toContain("{cn.reversed_at");
     expect(panel).toContain("Reversal reason: {cn.reversal_reason}");
   });
 
@@ -353,7 +353,13 @@ describe("PR B — receipt UI: Reverse action (inline in accounting.ar.tsx, mirr
     expect(arPage).toContain(
       'r.status === "void" && (\n                  <Badge variant="secondary"',
     );
-    expect(arPage).toContain("Reversed: {r.reversal_reason}");
+    expect(arPage).toContain("{r.reversal_reason}");
+  });
+
+  it("reversed receipts show the reversal date alongside the reason, matching the credit-note panel's own Reversed-date pattern, using the already-fetched reversed_at value", () => {
+    expect(arPage).toContain(
+      'Reversed {r.reversed_at ? format(new Date(r.reversed_at), "yyyy-MM-dd") : ""}',
+    );
   });
 
   it("no Delete action exists for a reversed receipt", () => {

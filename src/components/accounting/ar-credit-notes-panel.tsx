@@ -375,7 +375,8 @@ export function ArCreditNotesPanel({
                   )}
                   {cn.status === "void" && (
                     <span className="text-[10px] text-destructive">
-                      Reversed {cn.reversed_at ? format(new Date(cn.reversed_at), "yyyy-MM-dd") : ""}
+                      Reversed{" "}
+                      {cn.reversed_at ? format(new Date(cn.reversed_at), "yyyy-MM-dd") : ""}
                     </span>
                   )}
                 </div>
@@ -660,8 +661,8 @@ export function ArCreditNotesPanel({
               <p className="text-xs text-destructive">
                 Posting creates a new accounting entry (debiting revenue and tax, crediting accounts
                 receivable) against this invoice and cannot be edited directly — a posted credit
-                note can only be undone afterward by reversing it, which posts a further,
-                separate offsetting entry.
+                note can only be undone afterward by reversing it, which posts a further, separate
+                offsetting entry.
               </p>
             </div>
           )}
@@ -707,10 +708,10 @@ export function ArCreditNotesPanel({
                 </div>
               </div>
               <p className="text-xs text-destructive">
-                This posts a new offsetting accounting entry that exactly reverses the credit
-                note's original posting and restores the invoice's receivable balance. The
-                original credit note and its original journal entry are never edited or deleted.
-                This cannot be undone through the UI.
+                This posts a new offsetting accounting entry that exactly reverses the credit note's
+                original posting and restores the invoice's receivable balance. The original credit
+                note and its original journal entry are never edited or deleted. This cannot be
+                undone through the UI.
               </p>
               <div>
                 <Label>Reason (required, 5–500 characters)</Label>
@@ -721,7 +722,9 @@ export function ArCreditNotesPanel({
                   onChange={(e) => setReverseReason(e.target.value)}
                   placeholder="Why is this credit note being reversed?"
                 />
-                <p className="text-xs text-muted-foreground mt-1">{reverseReason.trim().length}/500</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {reverseReason.trim().length}/500
+                </p>
               </div>
             </div>
           )}
@@ -733,7 +736,8 @@ export function ArCreditNotesPanel({
               variant="destructive"
               disabled={reverse.isPending || reverseReason.trim().length < 5}
               onClick={() =>
-                reverseTarget && reverse.mutate({ id: reverseTarget.id, reason: reverseReason.trim() })
+                reverseTarget &&
+                reverse.mutate({ id: reverseTarget.id, reason: reverseReason.trim() })
               }
             >
               <Undo2 className="h-4 w-4 mr-1" /> Reverse credit note
