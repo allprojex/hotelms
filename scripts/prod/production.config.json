@@ -1,0 +1,25 @@
+{
+  "_comment": "Canonical production identity for Infinity PMS (ThesKwoff Hotel). Every guarded script in scripts/prod/ loads this file and refuses to proceed if the live target it discovers (Supabase project ref, VPS hostname, git remote, systemd service) doesn't match what's recorded here. This file contains no secrets — only identifiers safe to commit (project refs and hostnames are not credentials).",
+
+  "github_repo": "allprojex/hotelms",
+
+  "supabase_project_ref": "texhuavnrdhaohqzlyqw",
+  "supabase_project_name_expected": "Theskwoff Hotel",
+
+  "production_domain": "theskwoffhotel.com",
+  "vps_app_path": "/opt/infinity-pms",
+  "systemd_service": "infinity-pms",
+
+  "ssh_host_alias": "hotel-pms-vps",
+  "vps_expected_hostname": "srv1760881",
+  "vps_ssh_user": "claude-deploy",
+  "vps_deploy_wrapper": "/usr/local/sbin/deploy-infinity-pms",
+  "vps_local_health_port": 3100,
+
+  "human_confirmation": {
+    "confirmed": true,
+    "confirmed_by": "Akwaah",
+    "confirmed_at": "2026-08-21",
+    "note": "Confirmed: supabase_project_ref/production_domain identify the live production tenant (not 'Demo Hotel'); hotel-pms-vps SSH alias set up with a dedicated claude-deploy user/key (C:\\Users\\wwmit\\.ssh\\claude_infinity_deploy), PermitRootLogin no, Fail2Ban enabled; server-side deploy is a root-owned wrapper (/usr/local/sbin/deploy-infinity-pms, 750) invoked via 'sudo -n' under a NOPASSWD sudoers entry scoped to exactly that one command. Flip back to false immediately if any identifier above, the wrapper path, or the sudoers scope ever changes, and repeat this confirmation. See docs/prod-release-runbook.md section 'One-time human setup'."
+  }
+}
