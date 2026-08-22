@@ -8,6 +8,10 @@
 // nothing was silently skipped). Kept as a separate script from preflight
 // (rather than one script with a --phase flag) so its permission grant can
 // never accidentally be invoked before a migration has actually run.
+//
+// Executes statement-by-statement via lib/sql-runner.mjs — same reasoning
+// as supabase-preflight.mjs: `supabase db query --file` rejects any
+// multi-statement file outright at the Postgres protocol level.
 
 import path from "node:path";
 import {
@@ -15,12 +19,12 @@ import {
   resolveProductionDbUrl,
   assertProjectRefKnownToCli,
   assertReadOnlySqlFile,
-  runCliMasked,
   REPO_ROOT,
   log,
   pass,
   fail,
 } from "./lib/guard.mjs";
+import { runReadOnlySqlStatements } from "./lib/sql-runner.mjs";
 import { loadReleasePlan } from "./lib/release-plan.mjs";
 
 const LABEL = "supabase-verify";
@@ -56,21 +60,15 @@ async function main() {
   pass(LABEL, `PROD_SUPABASE_DB_URL matches expected project ref (${masked})`);
 
   const sqlPath = path.isAbsolute(sqlFileRel) ? sqlFileRel : path.join(REPO_ROOT, sqlFileRel);
-  assertReadOnlySqlFile(sqlPath);
-  pass(LABEL, `${sqlFileRel} contains no write/DDL keywords outside comments`);
+  const sqlText = assertReadOnlySqlFile(sqlPath);
+  pass(LABEL, `${sqlFileRel} contains no write/DDL keywords outside comments (whole-file check)`);
 
-  log(LABEL, `Running ${sqlFileRel} (read-only verification) ...`);
-  // runCliMasked, not execFileAsync directly — see supabase-preflight.mjs's
-  // comment: the supabase CLI has been observed to echo the plaintext
-  // --db-url argument into its own error output on failure.
-  const { stdout, stderr } = await runCliMasked(
-    "supabase",
-    ["db", "query", "--db-url", url, "--file", sqlPath, "--output", "json"],
-    { maxBuffer: 20 * 1024 * 1024, shell: true },
+  log(LABEL, `Running ${sqlFileRel} (read-only verification, statement by statement) ...`);
+  const results = await runReadOnlySqlStatements(url, sqlText, { label: LABEL });
+  pass(
+    LABEL,
+    `verification completed — all ${results.length} statement(s) ran; confirm the expected rows/values are present above`,
   );
-  if (stderr?.trim()) log(LABEL, `stderr: ${stderr.trim()}`);
-  process.stdout.write(stdout);
-  pass(LABEL, "verification query completed — confirm the expected rows/values are present above");
 }
 
 main().catch((e) => {

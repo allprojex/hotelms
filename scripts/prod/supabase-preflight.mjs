@@ -8,14 +8,23 @@
 // comments, and this script never accepts inline SQL from argv — only a file
 // path.
 //
+// Executes statement-by-statement via lib/sql-runner.mjs, not as one whole
+// file — `supabase db query --file` submits the whole file as a single
+// prepared statement, which Postgres rejects outright for any file with
+// more than one SQL statement (discovered against the real production
+// pooler; see sql-runner.mjs's header for the full story). Every file under
+// supabase/preflight/ has always had multiple statements, so this isn't an
+// edge case — it's how every real preflight file here is actually shaped.
+//
 // Usage:
 //   PROD_SUPABASE_DB_URL=... node scripts/prod/supabase-preflight.mjs --plan <release-plan.json>
 //   PROD_SUPABASE_DB_URL=... node scripts/prod/supabase-preflight.mjs --file <path-to-sql>
 //
-// Exit code 0 = ran and produced output (inspect it yourself — this script
-// does not judge the *content* of preflight findings, only that the file was
-// safe to run and that it ran against the right project). Non-zero = a guard
-// failed or the query itself errored.
+// Exit code 0 = every statement ran and produced output (inspect it
+// yourself — this script does not judge the *content* of preflight
+// findings, only that the file was safe to run and that it ran against the
+// right project). Non-zero = a guard failed, or any statement errored (all
+// statements after the failing one are skipped — see runReadOnlySqlStatements).
 
 import path from "node:path";
 import {
@@ -23,12 +32,12 @@ import {
   resolveProductionDbUrl,
   assertProjectRefKnownToCli,
   assertReadOnlySqlFile,
-  runCliMasked,
   REPO_ROOT,
   log,
   pass,
   fail,
 } from "./lib/guard.mjs";
+import { runReadOnlySqlStatements } from "./lib/sql-runner.mjs";
 import { loadReleasePlan } from "./lib/release-plan.mjs";
 
 const LABEL = "supabase-preflight";
@@ -64,26 +73,15 @@ async function main() {
   pass(LABEL, `PROD_SUPABASE_DB_URL matches expected project ref (${masked})`);
 
   const sqlPath = path.isAbsolute(sqlFileRel) ? sqlFileRel : path.join(REPO_ROOT, sqlFileRel);
-  assertReadOnlySqlFile(sqlPath);
-  pass(LABEL, `${sqlFileRel} contains no write/DDL keywords outside comments`);
+  const sqlText = assertReadOnlySqlFile(sqlPath);
+  pass(LABEL, `${sqlFileRel} contains no write/DDL keywords outside comments (whole-file check)`);
 
-  log(LABEL, `Running ${sqlFileRel} (read-only) ...`);
-  // runCliMasked, not execFileAsync directly: the supabase CLI has been
-  // observed to echo the full --db-url argument (including the plaintext
-  // password) into its OWN error output on failure (e.g. a connection
-  // error) — see redactSecretsFromText's comment in lib/guard.mjs. Every
-  // error path here is scrubbed before it can reach a log line.
-  // shell: true — Windows npm-installed `supabase` is a .cmd shim execFile
-  // can't spawn without it; array arguments (including the connection
-  // string) are still safely quoted.
-  const { stdout, stderr } = await runCliMasked(
-    "supabase",
-    ["db", "query", "--db-url", url, "--file", sqlPath, "--output", "json"],
-    { maxBuffer: 20 * 1024 * 1024, shell: true },
+  log(LABEL, `Running ${sqlFileRel} (read-only, statement by statement) ...`);
+  const results = await runReadOnlySqlStatements(url, sqlText, { label: LABEL });
+  pass(
+    LABEL,
+    `preflight completed — all ${results.length} statement(s) ran; review the output above for any non-empty result sets`,
   );
-  if (stderr?.trim()) log(LABEL, `stderr: ${stderr.trim()}`);
-  process.stdout.write(stdout);
-  pass(LABEL, "preflight query completed — review the output above for any non-empty result sets");
 }
 
 main().catch((e) => {

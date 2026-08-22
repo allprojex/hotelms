@@ -28,6 +28,11 @@ import {
 } from "../scripts/prod/lib/guard.mjs";
 import { loadReleasePlan } from "../scripts/prod/lib/release-plan.mjs";
 import { parsePendingMigrations } from "../scripts/prod/supabase-migrate.mjs";
+import {
+  splitSqlStatements,
+  assertStatementReadOnly,
+  runReadOnlySqlStatements,
+} from "../scripts/prod/lib/sql-runner.mjs";
 
 // A real, already-merged migration from this repo's own history — reviewed
 // and merged earlier in this project (see git log). Its SHA256 was computed
@@ -479,5 +484,191 @@ describe("parsePendingMigrations — verified against real `supabase db push --d
     ].join("\n");
     const pending = parsePendingMigrations(realOutput);
     expect(pending.size).toBe(1);
+  });
+});
+
+describe("splitSqlStatements — real incident fix (2026-08-22): supabase db query --file rejects multi-statement files at the Postgres protocol level (SQLSTATE 42601), discovered against the real production pooler", () => {
+  it("splits two simple SELECT statements", () => {
+    const stmts = splitSqlStatements("SELECT 1; SELECT 2;");
+    expect(stmts).toEqual(["SELECT 1", "SELECT 2"]);
+  });
+
+  it("does not split on a semicolon inside a single-quoted string", () => {
+    const stmts = splitSqlStatements("SELECT 'a;b' AS x; SELECT 2;");
+    expect(stmts).toHaveLength(2);
+    expect(stmts[0]).toBe("SELECT 'a;b' AS x");
+  });
+
+  it("does not split on a semicolon inside a dollar-quoted block (untagged $$ and tagged $tag$)", () => {
+    const untagged = splitSqlStatements("SELECT $$a;b$$ AS x; SELECT 2;");
+    expect(untagged).toHaveLength(2);
+    expect(untagged[0]).toBe("SELECT $$a;b$$ AS x");
+
+    const tagged = splitSqlStatements("SELECT $tag$a;b$tag$ AS x; SELECT 2;");
+    expect(tagged).toHaveLength(2);
+    expect(tagged[0]).toBe("SELECT $tag$a;b$tag$ AS x");
+  });
+
+  it("does not split on a semicolon inside a line comment", () => {
+    const stmts = splitSqlStatements("SELECT 1; -- a comment; with a semicolon\nSELECT 2;");
+    expect(stmts).toHaveLength(2);
+    expect(stmts[0]).toBe("SELECT 1");
+  });
+
+  it("does not split on a semicolon inside a block comment, including a nested one", () => {
+    const stmts = splitSqlStatements("SELECT 1; /* c; omment */ SELECT 2;");
+    expect(stmts).toHaveLength(2);
+
+    const nested = splitSqlStatements("SELECT 1; /* outer /* inner; */ still outer; */ SELECT 2;");
+    expect(nested).toHaveLength(2);
+    expect(nested[1]).toContain("SELECT 2");
+  });
+
+  it("drops empty statements produced by repeated/trailing semicolons", () => {
+    const stmts = splitSqlStatements("SELECT 1;;;   SELECT 2;");
+    expect(stmts).toEqual(["SELECT 1", "SELECT 2"]);
+  });
+
+  it("drops a comment-only fragment entirely (not a phantom empty statement)", () => {
+    const stmts = splitSqlStatements("SELECT 1; -- just a trailing comment, nothing after it\n");
+    expect(stmts).toEqual(["SELECT 1"]);
+  });
+
+  it("does NOT naive-split(';') — this is the specific case a naive split would get wrong", () => {
+    const naive = "SELECT 'a;b;c' AS x; SELECT 'd;e' AS y;".split(";");
+    expect(naive.length).not.toBe(2); // proves the naive approach breaks on this input
+    const correct = splitSqlStatements("SELECT 'a;b;c' AS x; SELECT 'd;e' AS y;");
+    expect(correct).toHaveLength(2);
+  });
+});
+
+describe("assertStatementReadOnly — per-statement guard, independent of guard.mjs's whole-file check", () => {
+  it("passes a genuinely read-only statement", () => {
+    expect(() => assertStatementReadOnly("SELECT 1 FROM public.ar_invoices", 1)).not.toThrow();
+  });
+
+  it("rejects a write statement hidden after a valid SELECT (by statement position, not just presence anywhere in the file)", () => {
+    const stmts = splitSqlStatements("SELECT 1; UPDATE public.ar_invoices SET total = 0;");
+    expect(stmts).toHaveLength(2);
+    expect(() => assertStatementReadOnly(stmts[0], 1)).not.toThrow();
+    expect(() => assertStatementReadOnly(stmts[1], 2)).toThrow(/non-read-only keyword/);
+  });
+
+  it("a word like UPDATE/DELETE inside a line comment does not false-trigger", () => {
+    const stmts = splitSqlStatements(
+      "SELECT 1; -- UPDATE foo SET x=1 (this is just a comment)\nSELECT 2;",
+    );
+    expect(stmts).toHaveLength(2);
+    expect(() => stmts.forEach((s, i) => assertStatementReadOnly(s, i + 1))).not.toThrow();
+  });
+
+  it("a word like UPDATE/DELETE inside a block comment does not false-trigger", () => {
+    const stmts = splitSqlStatements(
+      "SELECT 1; /* DELETE FROM foo -- old approach, kept for reference */ SELECT 2;",
+    );
+    expect(() => stmts.forEach((s, i) => assertStatementReadOnly(s, i + 1))).not.toThrow();
+  });
+
+  it("a word like UPDATE/DELETE inside a string literal does not false-trigger (stricter than the whole-file regex check)", () => {
+    expect(() =>
+      assertStatementReadOnly("SELECT 'UPDATE via the admin API' AS description", 1),
+    ).not.toThrow();
+  });
+
+  it("never includes the statement's own SQL text in its error message", () => {
+    try {
+      assertStatementReadOnly("DROP TABLE public.super_secret_table_name", 1);
+      expect.unreachable("expected assertStatementReadOnly to throw");
+    } catch (e) {
+      const err = e as Error;
+      expect(err.message).not.toContain("super_secret_table_name");
+      expect(err.message).toContain("Statement 1");
+    }
+  });
+});
+
+describe("runReadOnlySqlStatements — orchestration: order, stop-on-first-failure, redaction preserved through error wrapping", () => {
+  it("executes every statement in order when all succeed", async () => {
+    const calls: string[] = [];
+    const fakeExec = async (_url: string, stmt: string) => {
+      calls.push(stmt);
+      return { stdout: `ok`, stderr: "" };
+    };
+    const results = await runReadOnlySqlStatements(
+      "postgresql://fake",
+      "SELECT 1; SELECT 2; SELECT 3;",
+      {
+        label: "test",
+        execStatement: fakeExec,
+      },
+    );
+    expect(calls).toEqual(["SELECT 1", "SELECT 2", "SELECT 3"]);
+    expect(results).toHaveLength(3);
+    expect(results.map((r) => r.index)).toEqual([1, 2, 3]);
+  });
+
+  it("stops immediately on the first failure — later statements never run", async () => {
+    const calls: string[] = [];
+    const fakeExec = async (_url: string, stmt: string) => {
+      calls.push(stmt);
+      if (calls.length === 2) throw new Error("simulated failure on statement 2");
+      return { stdout: "ok", stderr: "" };
+    };
+    await expect(
+      runReadOnlySqlStatements("postgresql://fake", "SELECT 1; SELECT 2; SELECT 3;", {
+        label: "test",
+        execStatement: fakeExec,
+      }),
+    ).rejects.toThrow(/Statement 2\/3 failed/);
+    // Only statements 1 and 2 were ever attempted — statement 3 never ran.
+    expect(calls).toEqual(["SELECT 1", "SELECT 2"]);
+  });
+
+  it("a write statement as the 2nd of 3 is rejected before execution — the 1st already ran, the 3rd never does", async () => {
+    const calls: string[] = [];
+    const fakeExec = async (_url: string, stmt: string) => {
+      calls.push(stmt);
+      return { stdout: "ok", stderr: "" };
+    };
+    await expect(
+      runReadOnlySqlStatements(
+        "postgresql://fake",
+        "SELECT 1; UPDATE public.ar_invoices SET total = 0; SELECT 3;",
+        { label: "test", execStatement: fakeExec },
+      ),
+    ).rejects.toThrow(/non-read-only keyword/);
+    expect(calls).toEqual(["SELECT 1"]);
+  });
+
+  it("throws a clear error rather than executing anything when the file has no real statements", async () => {
+    await expect(
+      runReadOnlySqlStatements("postgresql://fake", "-- just a comment, nothing else\n", {
+        label: "test",
+        execStatement: async () => ({ stdout: "", stderr: "" }),
+      }),
+    ).rejects.toThrow(/No executable SQL statements/);
+  });
+
+  it("error wrapping (adding the 'Statement N/M failed' prefix) never reintroduces a secret that was already redacted upstream", async () => {
+    // Simulates exactly what a real failure looks like after passing through
+    // runCliMasked (guard.mjs) — already redacted by the time it reaches
+    // this layer. Confirms the "Statement N/M failed: " prefix this file
+    // adds is purely textual and can't undo that redaction.
+    const fakeExec = async () => {
+      throw new GuardError(
+        "Command failed: supabase db query --db-url postgresql://***REDACTED*** ...",
+      );
+    };
+    try {
+      await runReadOnlySqlStatements("postgresql://fake", "SELECT 1;", {
+        label: "test",
+        execStatement: fakeExec,
+      });
+      expect.unreachable("expected runReadOnlySqlStatements to throw");
+    } catch (e) {
+      const err = e as Error;
+      expect(err.message).toContain("***REDACTED***");
+      expect(err.message).not.toMatch(/postgresql:\/\/[^*]/); // no unredacted connection string slipped in
+    }
   });
 });
