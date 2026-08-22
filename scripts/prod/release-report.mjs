@@ -13,7 +13,7 @@ import { readFileSync, writeFileSync, existsSync, readdirSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { loadReleasePlan } from "./lib/release-plan.mjs";
-import { REPO_ROOT } from "./lib/guard.mjs";
+import { REPO_ROOT, redactSecretsFromText } from "./lib/guard.mjs";
 
 function parseArgs(argv) {
   const out = {};
@@ -25,11 +25,11 @@ function parseArgs(argv) {
   return out;
 }
 
-function redact(text) {
-  return text
-    .replace(/postgresql:\/\/[^\s"']+/gi, "postgresql://***REDACTED***")
-    .replace(/(bearer|secret|token|password)[=:]\s*\S+/gi, "$1=***REDACTED***");
-}
+// Single source of truth: the exact same scrubbing guard.mjs's
+// runCliMasked() applies to every CLI call's error output (connection
+// strings, bearer tokens, token/secret/password-shaped text) — no separate
+// pattern maintained here, so there's only one place to get this right.
+const redact = redactSecretsFromText;
 
 function readStages(rundir) {
   const tsvPath = path.join(rundir, "stages.tsv");

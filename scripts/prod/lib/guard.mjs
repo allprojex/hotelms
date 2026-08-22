@@ -96,6 +96,64 @@ export function maskConnectionString(url) {
   }
 }
 
+/** Scrubs credential-shaped text out of arbitrary text — e.g. a child
+ * process's stderr/error message, which the `supabase` CLI itself has been
+ * observed to echo VERBATIM (including the plaintext password) when a
+ * command fails, such as a connection error. Discovered the hard way: a
+ * DNS-resolution failure on `supabase db query --db-url ...` caused the CLI
+ * to print the full command line, unredacted, into its own error output —
+ * and this toolkit's own error handling then logged that raw message.
+ * Every execFile* call in this toolkit that can touch PROD_SUPABASE_DB_URL
+ * now routes its error handling through redactSecretsFromText() (see
+ * runCliMasked below) specifically because of that incident — this is not
+ * a hypothetical defense.
+ *
+ * Covers: postgres(ql):// connection strings in either direct
+ * (db.<ref>.supabase.co) or pooler (aws-0-<region>.pooler.supabase.com,
+ * user postgres.<ref>) form — the pooler form's password sits after the
+ * SAME `:` before `@` as the direct form, so no separate pattern is needed;
+ * and bearer/access/secret-token-shaped text (`Authorization: Bearer ...`,
+ * `SUPABASE_ACCESS_TOKEN=...`, etc.), as defense in depth even though none
+ * of this toolkit's own execFile calls currently pass a token via argv —
+ * a future error path echoing one should still be caught here, once,
+ * rather than requiring every caller to remember its own pattern (which is
+ * exactly how the connection-string leak happened in the first place). */
+export function redactSecretsFromText(text) {
+  if (typeof text !== "string") return text;
+  return text
+    .replace(/postgresql:\/\/[^\s"'`]+/gi, "postgresql://***REDACTED***")
+    .replace(/postgres:\/\/[^\s"'`]+/gi, "postgres://***REDACTED***")
+    .replace(/(bearer\s+)[\w.\-]+/gi, "$1***REDACTED***")
+    .replace(
+      /((?:access[_-]?|api[_-]?)?(?:token|secret|password|passwd|pwd)[=:]\s*)\S+/gi,
+      "$1***REDACTED***",
+    );
+}
+
+/** Runs an external CLI command (execFile semantics) with every error path
+ * — message, stdout, stderr — passed through redactSecretsFromText() before
+ * it can reach a log line, a thrown Error, or a report file. Callers in
+ * this toolkit that invoke `supabase` with `--db-url` MUST use this instead
+ * of calling execFile/execFileAsync directly, precisely because the
+ * underlying CLI's own error output is not trustworthy to log verbatim —
+ * see redactSecretsFromText's comment for the incident that proved this. */
+export async function runCliMasked(cmd, args, opts = {}) {
+  try {
+    const result = await execFileAsync(cmd, args, opts);
+    return {
+      stdout: redactSecretsFromText(result.stdout ?? ""),
+      stderr: redactSecretsFromText(result.stderr ?? ""),
+    };
+  } catch (e) {
+    const safeMessage = redactSecretsFromText(e.message ?? String(e));
+    const err = new GuardError(safeMessage);
+    err.stdout = redactSecretsFromText(e.stdout ?? "");
+    err.stderr = redactSecretsFromText(e.stderr ?? "");
+    err.code = e.code;
+    throw err;
+  }
+}
+
 /** Extracts the Supabase project ref embedded in a connection string's
  * hostname or username, supporting both the direct (db.<ref>.supabase.co)
  * and pooler (aws-0-<region>.pooler.supabase.com, user postgres.<ref>) forms. */
@@ -144,12 +202,17 @@ export function resolveProductionDbUrl(config) {
 export async function assertProjectRefKnownToCli(config) {
   let stdout;
   try {
+    // runCliMasked, not execFileAsync directly — this call never touches
+    // --db-url or any credential argument today, but every `supabase` CLI
+    // invocation in this toolkit routes through the same masking layer
+    // uniformly, so there is exactly one way a supabase command is ever run
+    // here and no unmasked call site left to copy-paste from by accident.
     // shell: true — on Windows, a plain (npm-installed) `supabase` is a
     // .cmd shim that execFile can't resolve without going through a shell;
     // discovered and fixed while rehearsing this script for real (see
     // docs/prod-release-runbook.md). Safe here: every argument is a fixed
     // literal, never caller-supplied input.
-    ({ stdout } = await execFileAsync("supabase", ["projects", "list", "--output", "json"], {
+    ({ stdout } = await runCliMasked("supabase", ["projects", "list", "--output", "json"], {
       maxBuffer: 10 * 1024 * 1024,
       shell: true,
     }));

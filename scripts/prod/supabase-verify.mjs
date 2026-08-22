@@ -8,9 +8,11 @@
 // nothing was silently skipped). Kept as a separate script from preflight
 // (rather than one script with a --phase flag) so its permission grant can
 // never accidentally be invoked before a migration has actually run.
+//
+// Executes statement-by-statement via lib/sql-runner.mjs — same reasoning
+// as supabase-preflight.mjs: `supabase db query --file` rejects any
+// multi-statement file outright at the Postgres protocol level.
 
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import path from "node:path";
 import {
   loadProductionConfig,
@@ -22,9 +24,9 @@ import {
   pass,
   fail,
 } from "./lib/guard.mjs";
+import { runReadOnlySqlStatements } from "./lib/sql-runner.mjs";
 import { loadReleasePlan } from "./lib/release-plan.mjs";
 
-const execFileAsync = promisify(execFile);
 const LABEL = "supabase-verify";
 
 function parseArgs(argv) {
@@ -58,21 +60,15 @@ async function main() {
   pass(LABEL, `PROD_SUPABASE_DB_URL matches expected project ref (${masked})`);
 
   const sqlPath = path.isAbsolute(sqlFileRel) ? sqlFileRel : path.join(REPO_ROOT, sqlFileRel);
-  assertReadOnlySqlFile(sqlPath);
-  pass(LABEL, `${sqlFileRel} contains no write/DDL keywords outside comments`);
+  const sqlText = assertReadOnlySqlFile(sqlPath);
+  pass(LABEL, `${sqlFileRel} contains no write/DDL keywords outside comments (whole-file check)`);
 
-  log(LABEL, `Running ${sqlFileRel} (read-only verification) ...`);
-  // shell: true — see supabase-migrate.mjs's comment: Windows npm-installed
-  // `supabase` is a .cmd shim execFile can't spawn without it; array
-  // arguments (including the connection string) are still safely quoted.
-  const { stdout, stderr } = await execFileAsync(
-    "supabase",
-    ["db", "query", "--db-url", url, "--file", sqlPath, "--output", "json"],
-    { maxBuffer: 20 * 1024 * 1024, shell: true },
+  log(LABEL, `Running ${sqlFileRel} (read-only verification, statement by statement) ...`);
+  const results = await runReadOnlySqlStatements(url, sqlText, { label: LABEL });
+  pass(
+    LABEL,
+    `verification completed — all ${results.length} statement(s) ran; confirm the expected rows/values are present above`,
   );
-  if (stderr?.trim()) log(LABEL, `stderr: ${stderr.trim()}`);
-  process.stdout.write(stdout);
-  pass(LABEL, "verification query completed — confirm the expected rows/values are present above");
 }
 
 main().catch((e) => {

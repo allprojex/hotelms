@@ -8,19 +8,17 @@
 // schema')` — never anything else. This is not a general "run write SQL"
 // tool: the statement is fixed in this file's source, not accepted as input.
 
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import {
   loadProductionConfig,
   assertHumanConfirmed,
   resolveProductionDbUrl,
   assertProjectRefKnownToCli,
+  runCliMasked,
   log,
   pass,
   fail,
 } from "./lib/guard.mjs";
 
-const execFileAsync = promisify(execFile);
 const LABEL = "supabase-reload-postgrest";
 const RELOAD_STATEMENT = "select pg_notify('pgrst', 'reload schema');";
 
@@ -37,10 +35,10 @@ async function main() {
   pass(LABEL, `PROD_SUPABASE_DB_URL matches expected project ref (${masked})`);
 
   log(LABEL, "Sending PostgREST schema reload notification ...");
-  // shell: true — see supabase-migrate.mjs's comment: Windows npm-installed
-  // `supabase` is a .cmd shim execFile can't spawn without it; array
-  // arguments (including the connection string) are still safely quoted.
-  const { stdout, stderr } = await execFileAsync(
+  // runCliMasked, not execFileAsync directly — see supabase-preflight.mjs's
+  // comment: the supabase CLI has been observed to echo the plaintext
+  // --db-url argument into its own error output on failure.
+  const { stdout, stderr } = await runCliMasked(
     "supabase",
     ["db", "query", "--db-url", url, RELOAD_STATEMENT],
     { maxBuffer: 1024 * 1024, shell: true },
