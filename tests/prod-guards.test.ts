@@ -22,6 +22,8 @@ import {
   assertMigrationApproved,
   assertReadOnlySqlFile,
   assertGitRemoteMatches,
+  redactSecretsFromText,
+  runCliMasked,
   REPO_ROOT,
 } from "../scripts/prod/lib/guard.mjs";
 import { loadReleasePlan } from "../scripts/prod/lib/release-plan.mjs";
@@ -100,6 +102,96 @@ describe("maskConnectionString", () => {
     );
     expect(masked).not.toContain("supersecret");
     expect(masked).toContain("db.abcxyz.supabase.co");
+  });
+});
+
+describe("redactSecretsFromText / runCliMasked — regression test for a real incident (2026-08-22)", () => {
+  // Real incident: `supabase db query --db-url <url> ...` failed (DNS
+  // resolution error) and the CLI itself echoed the full, unredacted
+  // command line — including the plaintext password — into its own error
+  // output, which this toolkit's error handling then logged verbatim. Every
+  // execFile* call in the four supabase-*.mjs scripts that can touch
+  // PROD_SUPABASE_DB_URL was moved to runCliMasked() specifically because
+  // of this. These tests reproduce the exact shape of that failure using a
+  // throwaway fake credential (never a real one) and a plain `node -e`
+  // child process standing in for the `supabase` CLI, so this is a genuine
+  // exercise of the child-process error path, not just the regex in
+  // isolation.
+  const FAKE_URL =
+    "postgresql://postgres:FAKESECRET_do_not_use@db.example.supabase.co:5432/postgres";
+
+  it("redactSecretsFromText scrubs a postgres URL out of arbitrary text", () => {
+    const text = `Command failed: supabase db query --db-url ${FAKE_URL} --file x.sql\nhostname resolving error`;
+    const scrubbed = redactSecretsFromText(text);
+    expect(scrubbed).not.toContain("FAKESECRET_do_not_use");
+    expect(scrubbed).not.toContain(FAKE_URL);
+    expect(scrubbed).toContain("hostname resolving error");
+  });
+
+  it("redactSecretsFromText scrubs a pooler-form connection string (user postgres.<ref>) the same way as the direct form", () => {
+    const poolerUrl =
+      "postgresql://postgres.texhuavnrdhaohqzlyqw:FAKESECRET_pooler@aws-0-eu-west-1.pooler.supabase.com:6543/postgres";
+    const scrubbed = redactSecretsFromText(`error connecting: ${poolerUrl}`);
+    expect(scrubbed).not.toContain("FAKESECRET_pooler");
+    expect(scrubbed).not.toContain(poolerUrl);
+  });
+
+  it("redactSecretsFromText scrubs a bearer token", () => {
+    const scrubbed = redactSecretsFromText(
+      "Authorization: Bearer sbp_fake1234567890abcdefFAKETOKEN",
+    );
+    expect(scrubbed).not.toContain("sbp_fake1234567890abcdefFAKETOKEN");
+    expect(scrubbed).toContain("Bearer ***REDACTED***");
+  });
+
+  it("redactSecretsFromText scrubs generic token/secret/password-shaped assignments (defense in depth, even outside connection strings)", () => {
+    const scrubbed = redactSecretsFromText(
+      "SUPABASE_ACCESS_TOKEN=sbp_fake_leaked_value_here and password: hunter2fake",
+    );
+    expect(scrubbed).not.toContain("sbp_fake_leaked_value_here");
+    expect(scrubbed).not.toContain("hunter2fake");
+  });
+
+  it("redactSecretsFromText leaves ordinary non-secret text untouched", () => {
+    const text =
+      "Applying migration 20260821120000_ar_credit_note_receipt_reversal.sql...\nFinished supabase db push.";
+    expect(redactSecretsFromText(text)).toBe(text);
+  });
+
+  it("runCliMasked scrubs the credential from a real child-process failure that echoes its own argv (reproduces the actual incident shape)", async () => {
+    await expect(
+      runCliMasked("node", [
+        "-e",
+        "process.stderr.write('Command failed: supabase db query --db-url ' + process.argv[1]); process.exit(1);",
+        FAKE_URL,
+      ]),
+    ).rejects.toMatchObject({
+      message: expect.not.stringContaining("FAKESECRET_do_not_use"),
+    });
+  });
+
+  it("runCliMasked's rejected error also has stdout/stderr redacted, not just .message", async () => {
+    try {
+      await runCliMasked("node", [
+        "-e",
+        "process.stderr.write('leaked: ' + process.argv[1]); process.exit(3);",
+        FAKE_URL,
+      ]);
+      expect.unreachable("expected runCliMasked to throw");
+    } catch (e) {
+      const err = e as Error & { stderr?: string };
+      expect(err.message).not.toContain("FAKESECRET_do_not_use");
+      expect(err.stderr ?? "").not.toContain("FAKESECRET_do_not_use");
+    }
+  });
+
+  it("runCliMasked redacts stdout/stderr on the success path too (defense in depth)", async () => {
+    const { stdout } = await runCliMasked("node", [
+      "-e",
+      "process.stdout.write('connecting to ' + process.argv[1]);",
+      FAKE_URL,
+    ]);
+    expect(stdout).not.toContain("FAKESECRET_do_not_use");
   });
 });
 

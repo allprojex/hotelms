@@ -9,14 +9,13 @@
 // (rather than one script with a --phase flag) so its permission grant can
 // never accidentally be invoked before a migration has actually run.
 
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import path from "node:path";
 import {
   loadProductionConfig,
   resolveProductionDbUrl,
   assertProjectRefKnownToCli,
   assertReadOnlySqlFile,
+  runCliMasked,
   REPO_ROOT,
   log,
   pass,
@@ -24,7 +23,6 @@ import {
 } from "./lib/guard.mjs";
 import { loadReleasePlan } from "./lib/release-plan.mjs";
 
-const execFileAsync = promisify(execFile);
 const LABEL = "supabase-verify";
 
 function parseArgs(argv) {
@@ -62,10 +60,10 @@ async function main() {
   pass(LABEL, `${sqlFileRel} contains no write/DDL keywords outside comments`);
 
   log(LABEL, `Running ${sqlFileRel} (read-only verification) ...`);
-  // shell: true — see supabase-migrate.mjs's comment: Windows npm-installed
-  // `supabase` is a .cmd shim execFile can't spawn without it; array
-  // arguments (including the connection string) are still safely quoted.
-  const { stdout, stderr } = await execFileAsync(
+  // runCliMasked, not execFileAsync directly — see supabase-preflight.mjs's
+  // comment: the supabase CLI has been observed to echo the plaintext
+  // --db-url argument into its own error output on failure.
+  const { stdout, stderr } = await runCliMasked(
     "supabase",
     ["db", "query", "--db-url", url, "--file", sqlPath, "--output", "json"],
     { maxBuffer: 20 * 1024 * 1024, shell: true },

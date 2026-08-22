@@ -32,8 +32,6 @@
 // exactly-one-pending case and the nothing-pending ("up to date") case are
 // handled explicitly; anything else still aborts rather than guessing.
 
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import {
@@ -43,13 +41,13 @@ import {
   assertProjectRefKnownToCli,
   assertMigrationApproved,
   assertGitRemoteMatches,
+  runCliMasked,
   log,
   pass,
   fail,
 } from "./lib/guard.mjs";
 import { loadReleasePlan, assertHeadMatchesPlan } from "./lib/release-plan.mjs";
 
-const execFileAsync = promisify(execFile);
 const LABEL = "supabase-migrate";
 
 function parseArgs(argv) {
@@ -132,12 +130,17 @@ async function main() {
   const expectedFilename = path.basename(plan.migration.relPath);
 
   log(LABEL, "Running `supabase db push --dry-run` ...");
+  // runCliMasked, not execFileAsync directly: the supabase CLI has been
+  // observed to echo the full --db-url argument (including the plaintext
+  // password) into its OWN error output on failure (e.g. a connection
+  // error) — see redactSecretsFromText's comment in lib/guard.mjs. This is
+  // the single most important call site in this toolkit to get that right.
   // shell: true — Windows npm-installed `supabase` is a .cmd shim execFile
   // can't spawn directly; Node still safely quotes each array argument
   // (verified against a connection-string-shaped argument containing
   // ://, @, : before relying on this in a script that handles real
   // credentials).
-  const dryRun = await execFileAsync("supabase", ["db", "push", "--db-url", url, "--dry-run"], {
+  const dryRun = await runCliMasked("supabase", ["db", "push", "--db-url", url, "--dry-run"], {
     maxBuffer: 10 * 1024 * 1024,
     shell: true,
   });
@@ -173,7 +176,7 @@ async function main() {
   // exactly-one-pending dry-run check, human_confirmation, this script's
   // own --yes) — the CLI's own prompt would be redundant, not a missing
   // safety check.
-  const applied = await execFileAsync("supabase", ["db", "push", "--db-url", url, "--yes"], {
+  const applied = await runCliMasked("supabase", ["db", "push", "--db-url", url, "--yes"], {
     maxBuffer: 10 * 1024 * 1024,
     shell: true,
   });

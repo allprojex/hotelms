@@ -17,14 +17,13 @@
 // safe to run and that it ran against the right project). Non-zero = a guard
 // failed or the query itself errored.
 
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import path from "node:path";
 import {
   loadProductionConfig,
   resolveProductionDbUrl,
   assertProjectRefKnownToCli,
   assertReadOnlySqlFile,
+  runCliMasked,
   REPO_ROOT,
   log,
   pass,
@@ -32,7 +31,6 @@ import {
 } from "./lib/guard.mjs";
 import { loadReleasePlan } from "./lib/release-plan.mjs";
 
-const execFileAsync = promisify(execFile);
 const LABEL = "supabase-preflight";
 
 function parseArgs(argv) {
@@ -70,10 +68,15 @@ async function main() {
   pass(LABEL, `${sqlFileRel} contains no write/DDL keywords outside comments`);
 
   log(LABEL, `Running ${sqlFileRel} (read-only) ...`);
-  // shell: true — see supabase-migrate.mjs's comment: Windows npm-installed
-  // `supabase` is a .cmd shim execFile can't spawn without it; array
-  // arguments (including the connection string) are still safely quoted.
-  const { stdout, stderr } = await execFileAsync(
+  // runCliMasked, not execFileAsync directly: the supabase CLI has been
+  // observed to echo the full --db-url argument (including the plaintext
+  // password) into its OWN error output on failure (e.g. a connection
+  // error) — see redactSecretsFromText's comment in lib/guard.mjs. Every
+  // error path here is scrubbed before it can reach a log line.
+  // shell: true — Windows npm-installed `supabase` is a .cmd shim execFile
+  // can't spawn without it; array arguments (including the connection
+  // string) are still safely quoted.
+  const { stdout, stderr } = await runCliMasked(
     "supabase",
     ["db", "query", "--db-url", url, "--file", sqlPath, "--output", "json"],
     { maxBuffer: 20 * 1024 * 1024, shell: true },
