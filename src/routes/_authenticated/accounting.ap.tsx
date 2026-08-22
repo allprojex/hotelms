@@ -6,6 +6,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { recordApPayment } from "@/lib/accounting/ap-payments.functions";
 import { ApHistoricalBillMapping } from "@/components/accounting/ap-historical-bill-mapping";
 import { useActiveProperty } from "@/hooks/use-active-property";
+import { useHasAnyRole } from "@/hooks/use-user-roles";
+import { ACCOUNTING_AP_ROLES } from "@/lib/accounting/permissions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -14,7 +16,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Plus, Trash2, Truck, Send, DollarSign, Link2 } from "lucide-react";
+import { Plus, Trash2, Truck, Send, DollarSign, Link2, Undo2 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { AccountingWorkspaceShell } from "@/components/accounting/accounting-workspace-nav";
@@ -40,6 +42,16 @@ function APPage() {
   const [payFor, setPayFor] = useState<any | null>(null);
   const [payAmount, setPayAmount] = useState("");
   const [payMethod, setPayMethod] = useState<"cash" | "card" | "bank_transfer">("bank_transfer");
+  const [reverseTarget, setReverseTarget] = useState<any>(null);
+  const [reverseReason, setReverseReason] = useState("");
+  const [reversePaymentTarget, setReversePaymentTarget] = useState<any>(null);
+  const [reversePaymentReason, setReversePaymentReason] = useState("");
+  // Reversing a posted bill/payment is a correction action, held to the
+  // same accounting-admin bar as reverse_ap_bill()/reverse_ap_payment()
+  // themselves — the same role set AP has always used for every write
+  // (bill creation, posting, payment) since AP has never included
+  // front_desk anywhere, unlike AR.
+  const canReverse = useHasAnyRole([...ACCOUNTING_AP_ROLES], propertyId);
   const [form, setForm] = useState({
     supplier_id: null as string | null, supplier_name: "", reference: "",
     bill_date: format(new Date(), "yyyy-MM-dd"),
@@ -77,24 +89,45 @@ function APPage() {
     enabled: !!propertyId,
   });
 
+  const payments = useQuery({
+    queryKey: ["ap-payments", propertyId],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any).from("ap_payments").select("*")
+        .eq("property_id", propertyId!).order("paid_at", { ascending: false }).limit(200);
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: !!propertyId,
+  });
+
   const create = useMutation({
     mutationFn: async () => {
       const valid = lines.filter((l) => l.description);
       if (valid.length === 0) throw new Error("Add at least one line");
-      const sub = valid.reduce((s, l) => s + parseFloat(l.quantity) * parseFloat(l.unit_price), 0);
-      const tax = valid.reduce((s, l) => s + parseFloat(l.quantity) * parseFloat(l.unit_price) * parseFloat(l.tax_rate) / 100, 0);
-      const { data: bill, error } = await supabase.from("ap_bills").insert({
-        property_id: propertyId!, ...form,
-        subtotal: sub, tax, total: sub + tax, status: "draft",
-      } as any).select().single();
+      // create_ap_bill() creates the bill and every line atomically in one
+      // SECURITY DEFINER transaction — replaces the previous two-step raw
+      // insert (ap_bills, then ap_bill_lines), which could leave a
+      // zero-line bill behind if the second insert failed. Direct client
+      // writes to ap_bills/ap_bill_lines are no longer permitted (grants
+      // revoked in 20260822120000), so this RPC is now the only way to
+      // create a bill.
+      const { error } = await (supabase.rpc as any)("create_ap_bill", {
+        _property_id: propertyId!,
+        _supplier_id: form.supplier_id,
+        _supplier_name: form.supplier_name,
+        _reference: form.reference || null,
+        _bill_date: form.bill_date,
+        _due_date: form.due_date,
+        _currency: form.currency,
+        _notes: form.notes || null,
+        _lines: valid.map((l) => ({
+          description: l.description,
+          quantity: parseFloat(l.quantity),
+          unit_price: parseFloat(l.unit_price),
+          tax_rate: parseFloat(l.tax_rate),
+        })),
+      });
       if (error) throw error;
-      const { error: lerr } = await supabase.from("ap_bill_lines").insert(
-        valid.map((l) => ({
-          bill_id: bill.id, description: l.description,
-          quantity: parseFloat(l.quantity), unit_price: parseFloat(l.unit_price), tax_rate: parseFloat(l.tax_rate),
-        }))
-      );
-      if (lerr) throw lerr;
     },
     onSuccess: () => {
       toast.success("Bill created as draft");
@@ -132,6 +165,38 @@ function APPage() {
     onSuccess: () => {
       toast.success("Payment recorded");
       setPayFor(null); setPayAmount("");
+      qc.invalidateQueries({ queryKey: ["ap-bills", propertyId] });
+      qc.invalidateQueries({ queryKey: ["ap-aging", propertyId] });
+      qc.invalidateQueries({ queryKey: ["ap-payments", propertyId] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const reverseBill = useMutation({
+    mutationFn: async ({ id, reason }: { id: string; reason: string }) => {
+      const { error } = await (supabase.rpc as any)("reverse_ap_bill", { _id: id, _reason: reason });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Bill reversed — a new offsetting journal entry was posted");
+      setReverseTarget(null);
+      setReverseReason("");
+      qc.invalidateQueries({ queryKey: ["ap-bills", propertyId] });
+      qc.invalidateQueries({ queryKey: ["ap-aging", propertyId] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const reversePayment = useMutation({
+    mutationFn: async ({ id, reason }: { id: string; reason: string }) => {
+      const { error } = await (supabase.rpc as any)("reverse_ap_payment", { _id: id, _reason: reason });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Payment reversed — a new offsetting journal entry was posted");
+      setReversePaymentTarget(null);
+      setReversePaymentReason("");
+      qc.invalidateQueries({ queryKey: ["ap-payments", propertyId] });
       qc.invalidateQueries({ queryKey: ["ap-bills", propertyId] });
       qc.invalidateQueries({ queryKey: ["ap-aging", propertyId] });
     },
@@ -227,6 +292,11 @@ function APPage() {
                   <span className="font-mono text-xs text-muted-foreground w-24">{b.code}</span>
                   <span className="truncate">{b.supplier_name}</span>
                   <Badge variant="outline" className="text-[10px] uppercase">{b.status}</Badge>
+                  {b.status === "void" && b.reversal_reason && (
+                    <span className="text-[10px] text-destructive truncate max-w-[220px]" title={b.reversal_reason}>
+                      Reversed {b.reversed_at ? format(new Date(b.reversed_at), "yyyy-MM-dd") : ""}: {b.reversal_reason}
+                    </span>
+                  )}
                 </div>
                 <div className="flex items-center gap-3">
                   <span className="text-xs text-muted-foreground">Due {b.due_date}</span>
@@ -237,11 +307,49 @@ function APPage() {
                   {b.status === "open" && balance > 0 && (
                     <Button size="sm" variant="outline" className="h-7" onClick={() => { setPayFor(b); setPayAmount(balance.toFixed(2)); }}><DollarSign className="h-3 w-3 mr-1" /> Pay</Button>
                   )}
+                  {b.status === "open" && Number(b.amount_paid) === 0 && canReverse.allowed && (
+                    <Button size="sm" variant="outline" className="h-7" onClick={() => { setReverseReason(""); setReverseTarget(b); }}>
+                      <Undo2 className="h-3 w-3 mr-1" /> Reverse
+                    </Button>
+                  )}
                 </div>
               </div>
             );
           })}
           {(bills.data ?? []).length === 0 && <div className="p-6 text-center text-sm text-muted-foreground">No bills yet.</div>}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="py-3"><CardTitle className="text-sm">Payments</CardTitle></CardHeader>
+        <CardContent className="p-0">
+          {(payments.data ?? []).map((p: any) => {
+            const bill = (bills.data ?? []).find((b: any) => b.id === p.bill_id);
+            return (
+              <div key={p.id} className="flex items-center justify-between px-4 py-2 border-b last:border-0 hover:bg-muted/30">
+                <div className="flex items-center gap-3 min-w-0">
+                  <span className="font-mono text-xs text-muted-foreground w-24">{bill?.code ?? p.bill_id}</span>
+                  <span className="text-xs text-muted-foreground">{p.paid_at ? format(new Date(p.paid_at), "yyyy-MM-dd") : ""}</span>
+                  <Badge variant="outline" className="text-[10px] uppercase">{p.method}</Badge>
+                  {p.status === "void" && <Badge variant="secondary" className="text-[10px] uppercase">void</Badge>}
+                  {p.status === "void" && p.reversal_reason && (
+                    <span className="text-[10px] text-destructive truncate max-w-[220px]" title={p.reversal_reason}>
+                      Reversed {p.reversed_at ? format(new Date(p.reversed_at), "yyyy-MM-dd") : ""}: {p.reversal_reason}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="font-mono text-sm">{fmt(Number(p.amount), bill?.currency)}</span>
+                  {p.status === "posted" && canReverse.allowed && (
+                    <Button size="sm" variant="outline" className="h-7" onClick={() => { setReversePaymentReason(""); setReversePaymentTarget({ ...p, bill }); }}>
+                      <Undo2 className="h-3 w-3 mr-1" /> Reverse
+                    </Button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+          {(payments.data ?? []).length === 0 && <div className="p-6 text-center text-sm text-muted-foreground">No payments yet.</div>}
         </CardContent>
       </Card>
 
@@ -264,6 +372,72 @@ function APPage() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setPayFor(null)}>Cancel</Button>
             <Button disabled={pay.isPending || !payAmount} onClick={() => pay.mutate()}>Record payment</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={!!reverseTarget} onOpenChange={(v) => { if (!v) setReverseTarget(null); }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader><DialogTitle>Reverse bill</DialogTitle></DialogHeader>
+          {reverseTarget && (
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <div><span className="text-muted-foreground">Bill</span><div className="font-mono">{reverseTarget.code}</div></div>
+                <div><span className="text-muted-foreground">Supplier</span><div className="truncate">{reverseTarget.supplier_name}</div></div>
+                <div><span className="text-muted-foreground">Total</span><div className="font-mono">{fmt(Number(reverseTarget.total), reverseTarget.currency)}</div></div>
+                <div><span className="text-muted-foreground">Currency</span><div>{reverseTarget.currency}</div></div>
+              </div>
+              <p className="text-xs text-destructive">
+                This posts a new offsetting journal entry that exactly reverses the original posting and sets the bill to void. The original bill and journal entry are never edited or deleted. This cannot be undone through the UI.
+              </p>
+              <div>
+                <Label>Reason (required, 5–500 characters)</Label>
+                <Textarea rows={3} maxLength={500} value={reverseReason} onChange={(e) => setReverseReason(e.target.value)} placeholder="Why is this bill being reversed?" />
+                <p className="text-xs text-muted-foreground mt-1">{reverseReason.trim().length}/500</p>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setReverseTarget(null)}>Cancel</Button>
+            <Button
+              variant="destructive"
+              disabled={reverseBill.isPending || reverseReason.trim().length < 5}
+              onClick={() => reverseTarget && reverseBill.mutate({ id: reverseTarget.id, reason: reverseReason.trim() })}
+            >
+              <Undo2 className="h-4 w-4 mr-1" /> Reverse bill
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={!!reversePaymentTarget} onOpenChange={(v) => { if (!v) setReversePaymentTarget(null); }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader><DialogTitle>Reverse payment</DialogTitle></DialogHeader>
+          {reversePaymentTarget && (
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <div><span className="text-muted-foreground">Bill</span><div className="font-mono">{reversePaymentTarget.bill?.code ?? reversePaymentTarget.bill_id}</div></div>
+                <div><span className="text-muted-foreground">Method</span><div className="truncate">{reversePaymentTarget.method}</div></div>
+                <div><span className="text-muted-foreground">Amount</span><div className="font-mono">{fmt(Number(reversePaymentTarget.amount), reversePaymentTarget.bill?.currency)}</div></div>
+                <div><span className="text-muted-foreground">Paid</span><div>{reversePaymentTarget.paid_at ? format(new Date(reversePaymentTarget.paid_at), "yyyy-MM-dd") : ""}</div></div>
+              </div>
+              <p className="text-xs text-destructive">
+                This posts a new offsetting journal entry that exactly reverses this payment's original posting and restores the bill's balance. The payment and its original journal entry are never edited or deleted. This cannot be undone through the UI.
+              </p>
+              <div>
+                <Label>Reason (required, 5–500 characters)</Label>
+                <Textarea rows={3} maxLength={500} value={reversePaymentReason} onChange={(e) => setReversePaymentReason(e.target.value)} placeholder="Why is this payment being reversed?" />
+                <p className="text-xs text-muted-foreground mt-1">{reversePaymentReason.trim().length}/500</p>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setReversePaymentTarget(null)}>Cancel</Button>
+            <Button
+              variant="destructive"
+              disabled={reversePayment.isPending || reversePaymentReason.trim().length < 5}
+              onClick={() => reversePaymentTarget && reversePayment.mutate({ id: reversePaymentTarget.id, reason: reversePaymentReason.trim() })}
+            >
+              <Undo2 className="h-4 w-4 mr-1" /> Reverse payment
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
