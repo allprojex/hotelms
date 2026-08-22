@@ -147,6 +147,38 @@ ALTER TABLE public.ap_payments
 CREATE INDEX IF NOT EXISTS ap_payments_property_status ON public.ap_payments(property_id, status);
 CREATE INDEX IF NOT EXISTS ap_bills_property_status_void ON public.ap_bills(property_id, status);
 
+-- ap_payments write-grant hardening (post-review fix). The original
+-- foundation migration granted authenticated INSERT/UPDATE/DELETE on
+-- ap_payments, gated only by a FOR ALL role-check RLS policy — nothing
+-- about *how* the row is written. That left a real bypass of
+-- reverse_ap_payment(): any of the four privileged roles could call
+-- `supabase.from("ap_payments").update({status:'void'})` or
+-- `.delete()` directly from the client, producing no compensating
+-- journal entry, no audit row, and (for DELETE) physically destroying a
+-- posted financial record — exactly what this whole migration exists to
+-- prevent. Confirmed live against a disposable local database: as a
+-- genuine accountant-role actor under real RLS, both statements
+-- succeeded before this fix and left the affected bill in a stale
+-- 'paid'/amount_paid state with the payment gone and zero audit trail.
+--
+-- UPDATE and DELETE are revoked; INSERT is deliberately kept — the
+-- existing payment-recording path (ap-payments.functions.ts:
+-- recordApPayment) still does a raw `supabase.from("ap_payments").insert()`,
+-- relying on the AFTER INSERT trg_ap_payment_autopost trigger to validate
+-- and post synchronously in the same transaction (a rejected payment
+-- fails the insert itself, so nothing partial is ever persisted).
+-- Converting payment creation to a SECURITY DEFINER RPC is a separate,
+-- larger change and out of scope here; INSERT does not enable bypassing
+-- reverse_ap_payment() the way UPDATE/DELETE did, so revoking it is not
+-- required for this fix. SELECT is untouched — every existing list/
+-- statement query still reads normally.
+--
+-- post_ap_payment() and reverse_ap_payment() are both SECURITY DEFINER
+-- and execute as their owner, so this revoke on the *invoking* role
+-- (authenticated) does not affect either function's own internal
+-- UPDATE of ap_payments.
+REVOKE UPDATE, DELETE ON public.ap_payments FROM authenticated;
+
 -- ============================================================
 -- PART D — create_ap_bill(): atomic draft creation
 -- ============================================================

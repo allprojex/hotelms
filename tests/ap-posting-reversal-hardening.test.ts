@@ -186,6 +186,44 @@ describe("AP hardening — no direct client writes to ap_bills/ap_bill_lines", (
   });
 });
 
+describe("AP hardening — ap_payments write-grant hardening (post-review fix)", () => {
+  it("revokes UPDATE and DELETE from authenticated on ap_payments — the confirmed reverse_ap_payment() bypass", () => {
+    expect(migration).toContain("REVOKE UPDATE, DELETE ON public.ap_payments FROM authenticated;");
+  });
+
+  it("does NOT revoke INSERT — the existing raw-insert payment-creation path (recordApPayment) still needs it and is out of scope here", () => {
+    const revokeStmt =
+      migration.match(/REVOKE [^;]*ON public\.ap_payments FROM authenticated;/)?.[0] ?? "";
+    expect(revokeStmt).not.toMatch(/\bINSERT\b/);
+    expect(paymentIntegrity).not.toMatch(/REVOKE[^;]*INSERT[^;]*ap_payments/);
+  });
+
+  it("does NOT revoke SELECT — every existing list/statement/aging query still reads ap_payments normally", () => {
+    expect(migration).not.toMatch(/REVOKE[^;]*SELECT[^;]*ap_payments/);
+  });
+
+  it("the revoke is scoped to ap_payments only — does not touch ap_bills/ap_bill_lines/ap_payments' own trigger function grants", () => {
+    const revokeStmt =
+      migration.match(/REVOKE UPDATE, DELETE ON public\.ap_payments FROM authenticated;/)?.[0] ??
+      "";
+    expect(revokeStmt).toContain("ap_payments");
+    expect(revokeStmt).not.toContain("ap_bills");
+    expect(revokeStmt).not.toContain("ap_bill_lines");
+  });
+
+  it("reverse_ap_payment() and post_ap_payment() remain callable — both are SECURITY DEFINER, unaffected by revoking the invoking role's own grant", () => {
+    expect(reversePaymentFn).toContain("SECURITY DEFINER");
+    const postPaymentFn = fn(paymentIntegrity, "post_ap_payment");
+    expect(postPaymentFn).toContain("SECURITY DEFINER");
+  });
+
+  it("grants: reverse_ap_payment stays authenticated-executable (unaffected by the table-level grant fix)", () => {
+    expect(migration).toContain(
+      "GRANT EXECUTE ON FUNCTION public.reverse_ap_payment(uuid, text) TO authenticated;",
+    );
+  });
+});
+
 describe("AP hardening — post_ap_bill() concurrency fix", () => {
   it("now takes a row lock before checking/setting posted_entry_id — the pre-existing missing-lock bug", () => {
     expect(postFn).toContain("SELECT * INTO b FROM public.ap_bills WHERE id=_id FOR UPDATE;");
