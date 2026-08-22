@@ -65,12 +65,27 @@ NEEDS_RELOAD="$(node -e "console.log(!!JSON.parse(require('fs').readFileSync(pro
 stage "01-preflight" node scripts/prod/supabase-preflight.mjs --plan "$PLAN"
 
 if [ "$HAS_MIGRATION" = "true" ]; then
-  # Run twice by design: the first call (no --yes) performs every guard
-  # (hash check, dry-run, project-ref check) and stops before mutating,
-  # printing what would happen — this IS "migration hash check" as its own
-  # visible stage. The second call (with --yes, only when the whole
-  # pipeline was invoked with --yes) performs the real apply.
-  stage "02-migration-hash-check" node scripts/prod/supabase-migrate.mjs --plan "$PLAN" || true
+  # Run twice by design: the first call (--check) performs every guard
+  # (hash check, dry-run, project-ref check) and exits 0 on success without
+  # mutating anything — this IS "migration hash check" as its own visible
+  # stage, and a genuine failure here (mismatched hash, more than one
+  # pending migration, etc.) correctly halts the whole release via
+  # stage()'s own exit-on-failure, same as every other stage. The second
+  # call (--yes, only when the whole pipeline was invoked with --yes)
+  # re-runs every guard from scratch and then performs the real apply.
+  #
+  # Fixed 2026-08-22: this used to call supabase-migrate.mjs with no flag
+  # at all, relying on its own deliberate "refuse without --yes" non-zero
+  # exit as an expected checkpoint, worked around with a trailing `|| true`
+  # on this line. That never worked: stage()'s own `exit "$code"` on
+  # failure is an unconditional process exit that a trailing `|| true` at
+  # the call site cannot intercept (that only catches a `return`, not an
+  # `exit` from inside the called function) — so the deliberate refusal
+  # killed this whole script before stage 03 ever ran, even with a
+  # legitimate top-level --yes. supabase-migrate.mjs now has a real,
+  # successful-exit --check mode instead of relying on one particular
+  # failure being "expected."
+  stage "02-migration-hash-check" node scripts/prod/supabase-migrate.mjs --plan "$PLAN" --check
   if [ -n "$YES_FLAG" ]; then
     stage "03-migration-apply" node scripts/prod/supabase-migrate.mjs --plan "$PLAN" --yes
     stage "04-database-verify" node scripts/prod/supabase-verify.mjs --plan "$PLAN"

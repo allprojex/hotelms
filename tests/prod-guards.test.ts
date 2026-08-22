@@ -34,7 +34,7 @@ import {
   REPO_ROOT,
 } from "../scripts/prod/lib/guard.mjs";
 import { loadReleasePlan } from "../scripts/prod/lib/release-plan.mjs";
-import { parsePendingMigrations } from "../scripts/prod/supabase-migrate.mjs";
+import { parsePendingMigrations, resolveMode, runMigrate } from "../scripts/prod/supabase-migrate.mjs";
 import {
   splitSqlStatements,
   assertStatementReadOnly,
@@ -492,6 +492,189 @@ describe("parsePendingMigrations — verified against real `supabase db push --d
     ].join("\n");
     const pending = parsePendingMigrations(realOutput);
     expect(pending.size).toBe(1);
+  });
+});
+
+describe("resolveMode — pure argv-shape decision, no I/O", () => {
+  it("throws when neither --check nor --yes is given", () => {
+    expect(() => resolveMode({})).toThrow(/Specify exactly one mode/);
+  });
+  it("throws when both --check and --yes are given", () => {
+    expect(() => resolveMode({ check: true, yes: true })).toThrow(/only one of --check or --yes/);
+  });
+  it("resolves to 'check' for --check alone", () => {
+    expect(resolveMode({ check: true })).toBe("check");
+  });
+  it("resolves to 'apply' for --yes alone", () => {
+    expect(resolveMode({ yes: true })).toBe("apply");
+  });
+});
+
+describe("runMigrate — real incident fix regression (2026-08-22): a real --check/--yes mode split so a clean checkpoint is a real, successful exit rather than a deliberate failure the orchestrator has to treat as expected", () => {
+  const ORIGINAL_URL = process.env.PROD_SUPABASE_DB_URL;
+  const FAKE_DB_URL =
+    "postgresql://postgres.texhuavnrdhaohqzlyqw:FAKESECRET_migrate_test@aws-0-eu-west-1.pooler.supabase.com:6543/postgres";
+
+  beforeEach(() => {
+    process.env.PROD_SUPABASE_DB_URL = FAKE_DB_URL;
+  });
+  afterEach(() => {
+    if (ORIGINAL_URL === undefined) delete process.env.PROD_SUPABASE_DB_URL;
+    else process.env.PROD_SUPABASE_DB_URL = ORIGINAL_URL;
+  });
+
+  // A real, currently-tracked migration at the current checked-out HEAD —
+  // computed dynamically (never hardcoded) so this fixture stays correct
+  // regardless of which commit is actually checked out when the suite
+  // runs, exactly mirroring how a real release plan is built from a real
+  // approved commit.
+  function buildRealPlan() {
+    const head = execFileSync("git", ["rev-parse", "HEAD"], {
+      cwd: REPO_ROOT,
+      encoding: "utf8",
+    }).trim();
+    const relPath = "supabase/migrations/20260822120000_ap_posting_reversal_hardening.sql";
+    const approvedSha256 = gitBlobSha256(head, relPath);
+    return {
+      release_id: "test-release",
+      operator: "test",
+      approved_git_sha: head,
+      migration: { relPath, approvedSha256 },
+    };
+  }
+
+  const noOpProjectRefCheck = async () => {};
+
+  function fakeRunCli({ pendingFilename, applyShouldFail = false } = {}) {
+    const calls: { cmd: string; args: string[] }[] = [];
+    const fn = async (cmd: string, args: string[]) => {
+      calls.push({ cmd, args });
+      if (args.includes("--dry-run")) {
+        return {
+          stdout: [
+            "DRY RUN: migrations will *not* be pushed to the database.",
+            "Connecting to remote database...",
+            "Would push these migrations:",
+            ` • ${pendingFilename}`,
+            "Finished supabase db push.",
+            "",
+          ].join("\n"),
+          stderr: "",
+        };
+      }
+      if (args.includes("--yes")) {
+        if (applyShouldFail) throw new Error("simulated apply failure — not a real DB write");
+        return { stdout: "Finished supabase db push.\n", stderr: "" };
+      }
+      throw new Error(`fakeRunCli: unexpected args ${JSON.stringify(args)}`);
+    };
+    return { fn, calls };
+  }
+
+  it("check mode: passes cleanly and returns applied:false when the dry-run shows exactly the approved migration pending", async () => {
+    const plan = buildRealPlan();
+    const { fn, calls } = fakeRunCli({
+      pendingFilename: "20260822120000_ap_posting_reversal_hardening.sql",
+    });
+    const result = await runMigrate({
+      plan,
+      mode: "check",
+      runCli: fn,
+      checkProjectRef: noOpProjectRefCheck,
+    });
+    expect(result.applied).toBe(false);
+    // Only the dry-run call happened — never an apply.
+    expect(calls).toHaveLength(1);
+    expect(calls[0].args).toContain("--dry-run");
+  });
+
+  it("check mode never invokes the real apply args (no --yes in any runCli call it makes)", async () => {
+    const plan = buildRealPlan();
+    const { fn, calls } = fakeRunCli({
+      pendingFilename: "20260822120000_ap_posting_reversal_hardening.sql",
+    });
+    await runMigrate({ plan, mode: "check", runCli: fn, checkProjectRef: noOpProjectRefCheck });
+    expect(calls.some((c) => c.args.includes("--yes"))).toBe(false);
+  });
+
+  it("apply mode (--yes) re-runs the guard chain and then performs the real apply call", async () => {
+    const plan = buildRealPlan();
+    const { fn, calls } = fakeRunCli({
+      pendingFilename: "20260822120000_ap_posting_reversal_hardening.sql",
+    });
+    const result = await runMigrate({
+      plan,
+      mode: "apply",
+      runCli: fn,
+      checkProjectRef: noOpProjectRefCheck,
+    });
+    expect(result.applied).toBe(true);
+    expect(calls).toHaveLength(2);
+    expect(calls[0].args).toContain("--dry-run");
+    expect(calls[1].args).toContain("--yes");
+  });
+
+  it("apply mode still fails closed if the dry-run shows more than one pending migration, and never reaches the apply call", async () => {
+    const plan = buildRealPlan();
+    const { fn, calls } = fakeRunCli({ pendingFilename: "unused" });
+    const twoPending: typeof fn = async (cmd, args) => {
+      if (args.includes("--dry-run")) {
+        return {
+          stdout:
+            "Would push these migrations:\n" +
+            " • 20260822120000_ap_posting_reversal_hardening.sql\n" +
+            " • 20260901000000_unrelated_future_migration.sql\n",
+          stderr: "",
+        };
+      }
+      return fn(cmd, args);
+    };
+    await expect(
+      runMigrate({ plan, mode: "apply", runCli: twoPending, checkProjectRef: noOpProjectRefCheck }),
+    ).rejects.toThrow(/Expected exactly 1 pending migration/);
+    expect(calls).toHaveLength(0);
+  });
+
+  it("apply mode fails closed if the pending migration doesn't match the approved filename", async () => {
+    const plan = buildRealPlan();
+    const { fn } = fakeRunCli({ pendingFilename: "20260901000000_some_other_migration.sql" });
+    await expect(
+      runMigrate({ plan, mode: "apply", runCli: fn, checkProjectRef: noOpProjectRefCheck }),
+    ).rejects.toThrow(/does not match the approved migration/);
+  });
+
+  it("a real apply failure (stage 03's own failure case) propagates as a rejection, not a silent success", async () => {
+    const plan = buildRealPlan();
+    const { fn } = fakeRunCli({
+      pendingFilename: "20260822120000_ap_posting_reversal_hardening.sql",
+      applyShouldFail: true,
+    });
+    await expect(
+      runMigrate({ plan, mode: "apply", runCli: fn, checkProjectRef: noOpProjectRefCheck }),
+    ).rejects.toThrow(/simulated apply failure/);
+  });
+
+  it("runMigrate requires mode to be exactly 'check' or 'apply' — never silently defaults", async () => {
+    const plan = buildRealPlan();
+    await expect(
+      runMigrate({ plan, mode: "yolo" as never, checkProjectRef: noOpProjectRefCheck }),
+    ).rejects.toThrow(/mode must be "check" or "apply"/);
+  });
+
+  it("no thrown error from a failed apply leaks the fake production credential", async () => {
+    const plan = buildRealPlan();
+    const { fn } = fakeRunCli({
+      pendingFilename: "20260822120000_ap_posting_reversal_hardening.sql",
+      applyShouldFail: true,
+    });
+    try {
+      await runMigrate({ plan, mode: "apply", runCli: fn, checkProjectRef: noOpProjectRefCheck });
+      expect.unreachable("expected runMigrate to throw");
+    } catch (e) {
+      const err = e as Error;
+      expect(err.message).not.toContain("FAKESECRET_migrate_test");
+      expect(err.message).not.toContain(FAKE_DB_URL);
+    }
   });
 });
 
