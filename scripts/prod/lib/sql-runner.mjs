@@ -39,7 +39,25 @@
 // string/identifier/dollar-quoted literals, not just comments — so a
 // write keyword hidden after a valid SELECT, in any statement position,
 // is caught by BOTH layers independently before anything runs.
+//
+// SECOND REAL FINDING (same day, this fix's own live validation): the
+// obvious way to execute each split statement — pass its text as an
+// inline `supabase db query <text>` argument via `shell: true` — HUNG
+// against the real production pooler on the very first statement, with no
+// connection ever reaching the database. Reproduced safely (no production
+// contact) with a harmless stand-in command: a *multi-line* argument
+// passed through `cmd.exe /d /s /c` (what Node's `shell: true` uses on
+// Windows) comes out corrupted rather than cleanly quoted — Windows
+// cmd.exe has no construct for an embedded newline inside one argument.
+// Every real statement in this repo's preflight files spans multiple
+// lines, so this broke immediately, not as a rare edge case. Fixed in
+// execStatementViaSupabaseCli() below by writing each statement to a
+// throwaway temp file and using `--file` per statement instead of inline
+// text — see that function's own comment for the full explanation.
 
+import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { GuardError, runCliMasked, log, pass } from "./guard.mjs";
 
 // Same keyword list as guard.mjs's assertReadOnlySqlFile — kept in sync
@@ -235,21 +253,53 @@ export function assertStatementReadOnly(statementText, index) {
 }
 
 /** The real per-statement executor: the same masked CLI wrapper every other
- * supabase call in this toolkit uses, invoked with a single statement's
- * text as the inline query argument (the exact shape
- * supabase-reload-postgrest.mjs already uses for its one hardcoded
- * statement — see this file's header for why this, not `--file`, and why
- * not psql). Exported separately from runReadOnlySqlStatements so tests can
- * inject a fake executor and prove the orchestration logic (stop-on-first-
- * failure, statement order) without needing a live database — the fake
- * never bypasses runCliMasked's own redaction, since that's exercised
- * directly by this same executor whenever it's actually used for real. */
+ * supabase call in this toolkit uses. Writes the single statement to a
+ * throwaway temp file and runs `supabase db query --file <tempfile>`,
+ * rather than passing the statement text as an inline CLI argument.
+ *
+ * THIS MATTERS, NOT JUST STYLE: passing a multi-line statement as an
+ * inline `shell: true` argument HANGS on Windows — confirmed directly
+ * against production during this fix's own validation (a preflight run
+ * stopped dead at "statement 1/13: running..." for 2+ minutes with no
+ * open connection ever reaching the database — `netstat` showed nothing
+ * on port 5432 while it was "running"). Reproduced safely afterward with a
+ * harmless stand-in command (`node -e` echoing its own argv) instead of
+ * `supabase`: a multi-line argument through `cmd.exe /d /s /c` (what
+ * `shell: true` uses on Windows) comes out corrupted/truncated rather than
+ * cleanly quoted — Windows cmd.exe has no construct for an embedded
+ * newline inside one command-line argument the way a POSIX shell does.
+ * Every real preflight/postflight statement in this repo's actual files
+ * spans multiple lines, so this wasn't a rare edge case — it broke the
+ * very first live statement, every time.
+ *
+ * Writing to a temp file sidesteps shell-argument parsing entirely: the
+ * only thing that goes through argv/shell is the temp file's own path (a
+ * short, single-line, special-character-free string), while the CLI reads
+ * the actual (possibly multi-line) SQL content directly from disk. Cleaned
+ * up in a `finally` block so a failed statement still removes its temp
+ * file. The temp file's content is exactly the statement text and nothing
+ * else — never combined with any other statement — so this doesn't
+ * reopen the original multi-statement-per-file problem this whole module
+ * exists to fix.
+ *
+ * Exported separately from runReadOnlySqlStatements so tests can inject a
+ * fake executor and prove the orchestration logic (stop-on-first-failure,
+ * statement order) without needing a live database — the fake never
+ * bypasses runCliMasked's own redaction, since that's exercised directly
+ * by this same executor whenever it's actually used for real. */
 export async function execStatementViaSupabaseCli(url, statementText) {
-  return runCliMasked(
-    "supabase",
-    ["db", "query", "--db-url", url, statementText, "--output", "json"],
-    { maxBuffer: 20 * 1024 * 1024, shell: true },
-  );
+  const dir = mkdtempSync(path.join(tmpdir(), "sql-runner-stmt-"));
+  const file = path.join(dir, "statement.sql");
+  try {
+    writeFileSync(file, statementText, "utf8");
+    return await runCliMasked(
+      "supabase",
+      ["db", "query", "--db-url", url, "--file", file, "--output", "json"],
+      { maxBuffer: 20 * 1024 * 1024, shell: true, timeout: 30_000 },
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 }
 
 /** Splits `sqlText` into statements, independently re-validates each as

@@ -1,10 +1,17 @@
 // Tests for scripts/prod/lib/*.mjs — the guard logic behind the production
 // automation toolkit (see docs/prod-release-runbook.md). Every test here
 // runs against LOCAL git history and LOCAL fixture files only — nothing
-// touches Supabase, SSH, or any network target. This is deliberate: these
-// guards are what stand between an approved release and an unreviewed one,
-// so they need to be provably correct without ever needing production
-// access to test them.
+// touches Supabase, SSH, or any real production target. This is
+// deliberate: these guards are what stand between an approved release and
+// an unreviewed one, so they need to be provably correct without ever
+// needing production access to test them. One exception, clearly marked
+// where it appears below: a single test in the
+// "execStatementViaSupabaseCli" block makes a real, fast-failing
+// connection attempt to a deliberately invalid hostname (never a real
+// Supabase target) specifically to prove a real incident's fix (a
+// multi-line SQL statement no longer hangs when passed to the real
+// `supabase` CLI) — a fake/injected executor can't prove that, only an
+// actual child-process invocation can.
 import { describe, expect, it, beforeEach, afterEach } from "vitest";
 import { writeFileSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -32,6 +39,7 @@ import {
   splitSqlStatements,
   assertStatementReadOnly,
   runReadOnlySqlStatements,
+  execStatementViaSupabaseCli,
 } from "../scripts/prod/lib/sql-runner.mjs";
 
 // A real, already-merged migration from this repo's own history — reviewed
@@ -671,4 +679,37 @@ describe("runReadOnlySqlStatements — orchestration: order, stop-on-first-failu
       expect(err.message).not.toMatch(/postgresql:\/\/[^*]/); // no unredacted connection string slipped in
     }
   });
+});
+
+describe("execStatementViaSupabaseCli — real incident fix (2026-08-22): a multi-line statement passed as an inline `shell: true` argument corrupts/hangs on Windows cmd.exe; fixed by writing it to a temp file and using --file", () => {
+  const MULTILINE_STATEMENT =
+    "SELECT id, code\nFROM public.ap_bills\nWHERE amount_paid < 0 OR amount_paid > total";
+
+  it("a multi-line statement against a deliberately invalid host fails FAST via a real supabase CLI call — proves no hang, not just no error (the actual incident was a 2+ minute hang with zero network connection ever made, not a slow or failing one)", async () => {
+    const start = Date.now();
+    await expect(
+      execStatementViaSupabaseCli(
+        "postgresql://postgres:fake@nonexistent-host-for-test.invalid:5432/postgres",
+        MULTILINE_STATEMENT,
+      ),
+    ).rejects.toThrow();
+    // Generous relative to the incident (2+ minutes / 120000ms+), tight
+    // enough to catch a regression back to hanging.
+    expect(Date.now() - start).toBeLessThan(20_000);
+  }, 25_000);
+
+  it("the failure output shows the --file flag (temp file), never the multi-line statement text as an inline argument, and redaction still holds", async () => {
+    try {
+      await execStatementViaSupabaseCli(
+        "postgresql://postgres:fake@nonexistent-host-for-test.invalid:5432/postgres",
+        MULTILINE_STATEMENT,
+      );
+      expect.unreachable("expected execStatementViaSupabaseCli to throw");
+    } catch (e) {
+      const err = e as Error;
+      expect(err.message).toContain("--file");
+      expect(err.message).not.toContain(MULTILINE_STATEMENT);
+      expect(err.message).toContain("postgresql://***REDACTED***");
+    }
+  }, 25_000);
 });
