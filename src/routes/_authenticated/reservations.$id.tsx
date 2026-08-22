@@ -9,9 +9,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 import { format } from "date-fns";
 import { toast } from "sonner";
-import { LogIn, LogOut, XCircle, Plus, Printer } from "lucide-react";
+import { LogIn, LogOut, XCircle, Plus, Printer, Undo2 } from "lucide-react";
+import { useHasAnyRole } from "@/hooks/use-user-roles";
+import { ACCOUNTING_ADMIN_ROLES } from "@/lib/accounting/permissions";
 
 export const Route = createFileRoute("/_authenticated/reservations/$id")({
   head: () => ({ meta: [{ title: "Reservation" }] }),
@@ -22,6 +25,8 @@ function ReservationDetail() {
   const { id } = Route.useParams();
   const qc = useQueryClient();
   const navigate = useNavigate();
+  const [refundTarget, setRefundTarget] = useState<any>(null);
+  const [refundReason, setRefundReason] = useState("");
 
   const res = useQuery({
     queryKey: ["reservation", id],
@@ -43,6 +48,19 @@ function ReservationDetail() {
     queryKey: ["payments", id],
     queryFn: async () => (await supabase.from("payments").select("*").eq("reservation_id", id).order("received_at")).data,
   });
+
+  const canRefund = useHasAnyRole([...ACCOUNTING_ADMIN_ROLES], res.data?.property_id ?? null);
+
+  const refundedByIds = Array.from(
+    new Set((payments.data ?? []).filter((p: any) => p.reversed_by).map((p: any) => p.reversed_by as string)),
+  );
+  const refundedByProfiles = useQuery({
+    queryKey: ["refunded-by-profiles", refundedByIds.join(",")],
+    enabled: refundedByIds.length > 0,
+    queryFn: async () => (await supabase.from("profiles").select("id, full_name").in("id", refundedByIds)).data ?? [],
+  });
+  const refundedByName = (userId: string | null) =>
+    (refundedByProfiles.data ?? []).find((p: any) => p.id === userId)?.full_name ?? null;
 
   const availableRooms = useQuery({
     queryKey: ["avail-rooms", res.data?.property_id, res.data?.room_type_id],
@@ -73,7 +91,14 @@ function ReservationDetail() {
   const r = res.data as any;
 
   const totalCharges = (charges.data ?? []).reduce((s: number, c: any) => s + Number(c.amount), 0);
-  const totalPaid = (payments.data ?? []).reduce((s: number, p: any) => s + Number(p.amount), 0);
+  // Refunded (status='void') payments no longer count as cash received —
+  // the original row is preserved (never deleted) but excluded from this
+  // sum, matching every other place reservation payment totals feed
+  // (dashboard.tsx, reports.tsx, insights.functions.ts, pdf.functions.ts —
+  // all updated alongside this page in the same PR).
+  const totalPaid = (payments.data ?? [])
+    .filter((p: any) => p.status !== "void")
+    .reduce((s: number, p: any) => s + Number(p.amount), 0);
   const balance = totalCharges - totalPaid;
   const currency = r.properties?.currency ?? "GHS";
 
@@ -202,10 +227,28 @@ function ReservationDetail() {
             {(payments.data ?? []).map((p: any) => (
               <div key={p.id} className="flex items-center justify-between px-4 py-2 text-sm border-b last:border-0">
                 <div>
-                  <div className="capitalize">{p.method.replace("_", " ")}</div>
+                  <div className="flex items-center gap-2">
+                    <span className="capitalize">{p.method.replace("_", " ")}</span>
+                    {p.status === "void" && <Badge variant="secondary" className="text-[10px] uppercase">Refunded</Badge>}
+                  </div>
                   <div className="text-xs text-muted-foreground">{format(new Date(p.received_at), "PPp")} {p.reference ? `· ${p.reference}` : ""}</div>
+                  {p.status === "void" && (
+                    <div className="text-[10px] text-destructive mt-0.5">
+                      Refunded {p.reversed_at ? format(new Date(p.reversed_at), "PPp") : ""}
+                      {refundedByName(p.reversed_by) ? ` by ${refundedByName(p.reversed_by)}` : ""}: {p.reversal_reason}
+                    </div>
+                  )}
                 </div>
-                <div className="font-medium">-{Number(p.amount).toFixed(2)}</div>
+                <div className="flex items-center gap-3">
+                  <div className={`font-medium ${p.status === "void" ? "line-through text-muted-foreground" : ""}`}>
+                    -{Number(p.amount).toFixed(2)}
+                  </div>
+                  {p.status !== "void" && canRefund.allowed && (
+                    <Button size="sm" variant="outline" className="h-7" onClick={() => { setRefundReason(""); setRefundTarget(p); }}>
+                      <Undo2 className="h-3 w-3 mr-1" /> Refund
+                    </Button>
+                  )}
+                </div>
               </div>
             ))}
             {payments.data?.length === 0 && <div className="px-4 py-6 text-center text-sm text-muted-foreground">No payments yet.</div>}
@@ -218,6 +261,50 @@ function ReservationDetail() {
           </div>
         </CardContent>
       </Card>
+
+      <Dialog open={!!refundTarget} onOpenChange={(v) => { if (!v) setRefundTarget(null); }}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Refund payment</DialogTitle></DialogHeader>
+          {refundTarget && (
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <div><span className="text-muted-foreground">Amount</span><div className="font-mono">{currency} {Number(refundTarget.amount).toFixed(2)}</div></div>
+                <div><span className="text-muted-foreground">Method</span><div className="capitalize">{refundTarget.method.replace("_", " ")}</div></div>
+                <div><span className="text-muted-foreground">Paid</span><div>{format(new Date(refundTarget.received_at), "PPp")}</div></div>
+                {refundTarget.reference && <div><span className="text-muted-foreground">Reference</span><div className="truncate">{refundTarget.reference}</div></div>}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                This is a financial correction: the original payment is preserved and marked refunded — it is never deleted or edited. If this payment was posted to the accounting journal, an offsetting reversal entry is created. This cannot be undone through the UI.
+              </p>
+              <div>
+                <Label>Reason</Label>
+                <Textarea rows={3} maxLength={500} value={refundReason} onChange={(e) => setRefundReason(e.target.value)} placeholder="Why is this payment being refunded?" />
+                <p className="text-xs text-muted-foreground mt-1">{refundReason.trim().length}/500</p>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRefundTarget(null)}>Cancel</Button>
+            <Button
+              variant="destructive"
+              disabled={refundReason.trim().length < 5 || refundReason.trim().length > 500}
+              onClick={async () => {
+                const { error } = await (supabase.rpc as any)("reverse_reservation_payment", {
+                  _id: refundTarget.id, _reason: refundReason.trim(),
+                });
+                if (error) return toast.error(error.message);
+                toast.success("Payment refunded");
+                setRefundTarget(null);
+                setRefundReason("");
+                qc.invalidateQueries({ queryKey: ["payments", id] });
+                qc.invalidateQueries({ queryKey: ["reservation", id] });
+              }}
+            >
+              <Undo2 className="h-4 w-4 mr-1" /> Refund payment
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

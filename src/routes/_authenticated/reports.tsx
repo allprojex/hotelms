@@ -25,7 +25,11 @@ function ReportsPage() {
       const [{ data: rooms }, { data: res }, { data: pays }] = await Promise.all([
         supabase.from("rooms").select("id").eq("property_id", propertyId!),
         supabase.from("reservations").select("id,check_in,check_out,rate_total,status").eq("property_id", propertyId!).gte("check_out", startStr).in("status", ["checked_in", "checked_out"]),
-        supabase.from("payments").select("amount, received_at, reservations!inner(property_id)").eq("reservations.property_id", propertyId!).gte("received_at", startStr),
+        // status filter: excludes refunded payments from daily revenue — see
+        // 20260822130000_reservation_payment_refund.sql. Cast to `any`
+        // because `payments.status` is not yet in the generated Supabase
+        // types (matching the ap_payments/ar_receipts precedent).
+        (supabase as any).from("payments").select("amount, received_at, reservations!inner(property_id)").eq("reservations.property_id", propertyId!).eq("status", "posted").gte("received_at", startStr),
       ]);
       const roomCount = rooms?.length ?? 0;
       const range = eachDayOfInterval({ start, end });
