@@ -14,11 +14,38 @@
 //   7. `supabase db push --dry-run` must show EXACTLY the one approved
 //      migration pending — zero, or more than one, or a different filename
 //      aborts before anything is applied.
-//   8. Only then does the real `supabase db push` run.
+//   8. Only then does the real `supabase db push` run — and only in --yes
+//      (apply) mode.
 //
 // There is no flag or code path that accepts inline SQL text as "the
 // migration" — the only input is a file that must already be committed to
 // git and hash-approved.
+//
+// MODES (fix for a real incident, 2026-08-22): this script now requires
+// exactly one of --check or --yes.
+//   --check : runs every guard above through the dry-run check, then exits
+//             0 on success. NEVER calls `supabase db push` for real — only
+//             `--dry-run`. This is the orchestrator's own pre-apply
+//             checkpoint stage.
+//   --yes   : re-runs every guard above from scratch (never trusts a prior
+//             --check run — production state could have changed in
+//             between), then performs the real apply.
+// Before this fix, the same script always ran the guard chain and then
+// EXITED NON-ZERO if --yes was absent, as a deliberate "not yet confirmed"
+// refusal — a real, secondary use of that as a checkpoint by
+// scripts/prod-release.sh (`stage "02-..." node supabase-migrate.mjs
+// --plan "$PLAN" || true`) failed anyway, because stage()'s own `exit
+// "$code"` on failure is a hard, unconditional process exit that no
+// trailing `|| true` at the call site can intercept (that only catches a
+// `return`, not an `exit` from inside the called shell function) — so a
+// deliberately-refusing, otherwise-fully-passing dry-run check killed the
+// entire release script before stage "03-migration-apply" ever ran, even
+// when the top-level invocation legitimately included --yes. Discovered
+// during this toolkit's first real production release attempt (production
+// was never written to — the script stopped safely, just too early).
+// Fixed by making a clean, successful dry-run check its own real exit-0
+// mode, so the orchestrator no longer needs to treat one particular
+// non-zero exit as "actually fine."
 //
 // NOTE ON STEP 7's PARSING: verified (2026-08-21) against real
 // `supabase db push --dry-run` output from a local disposable Supabase
@@ -50,13 +77,32 @@ import { loadReleasePlan, assertHeadMatchesPlan } from "./lib/release-plan.mjs";
 
 const LABEL = "supabase-migrate";
 
-function parseArgs(argv) {
+export function parseArgs(argv) {
   const out = {};
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === "--plan") out.plan = argv[++i];
     if (argv[i] === "--yes") out.yes = true;
+    if (argv[i] === "--check") out.check = true;
   }
   return out;
+}
+
+/** Pure decision: which mode does this argv select? Never touches the
+ * filesystem, network, or git — safe to unit test in isolation. Throws a
+ * plain Error (not GuardError) for a usage mistake, same as every other
+ * argument-shape problem in this toolkit's CLI entry points. */
+export function resolveMode(args) {
+  if (args.check && args.yes) {
+    throw new Error("Specify only one of --check or --yes, not both.");
+  }
+  if (args.check) return "check";
+  if (args.yes) return "apply";
+  throw new Error(
+    "Specify exactly one mode: --check (run every guard + a dry-run, exit 0 " +
+      "on success, never apply anything) or --yes (re-run every guard, then " +
+      "apply the approved migration for real). " +
+      "Usage: supabase-migrate.mjs --plan <path> --check|--yes",
+  );
 }
 
 /** Best-effort, fail-closed parse of `supabase db push --dry-run` output.
@@ -93,9 +139,24 @@ export function parsePendingMigrations(dryRunOutput) {
   return found;
 }
 
-async function main() {
-  const args = parseArgs(process.argv.slice(2));
-  const { plan } = loadReleasePlan(args.plan);
+/** Runs the full guard chain (human confirmation, git remote, HEAD-matches-
+ * plan, project ref, db-url, migration-hash, dry-run + exactly-one-pending)
+ * and, depending on `mode`, either stops after a clean dry-run (`"check"`)
+ * or goes on to perform the real apply (`"apply"`). Every dependency that
+ * would otherwise touch the network is injectable (defaulting to the real
+ * implementation) specifically so tests can exercise this exact function —
+ * mode dispatch, guard ordering, "check never applies" — without live
+ * Supabase credentials. Never skips a guard for either mode: "apply" always
+ * re-runs everything from scratch rather than trusting a prior "check". */
+export async function runMigrate({
+  plan,
+  mode,
+  runCli = runCliMasked,
+  checkProjectRef = assertProjectRefKnownToCli,
+}) {
+  if (mode !== "check" && mode !== "apply") {
+    throw new Error(`runMigrate: mode must be "check" or "apply", got ${JSON.stringify(mode)}`);
+  }
   if (!plan.migration) {
     throw new Error("Release plan has no migration block — nothing for this script to do");
   }
@@ -111,7 +172,7 @@ async function main() {
   pass(LABEL, `checked-out HEAD matches release plan's approved_git_sha (${head})`);
 
   log(LABEL, `Target: ${config.supabase_project_ref} (${config.supabase_project_name_expected})`);
-  await assertProjectRefKnownToCli(config);
+  await checkProjectRef(config, runCli);
   pass(LABEL, "project ref verified via Supabase Management API");
 
   const { url, masked } = resolveProductionDbUrl(config);
@@ -130,17 +191,17 @@ async function main() {
   const expectedFilename = path.basename(plan.migration.relPath);
 
   log(LABEL, "Running `supabase db push --dry-run` ...");
-  // runCliMasked, not execFileAsync directly: the supabase CLI has been
-  // observed to echo the full --db-url argument (including the plaintext
-  // password) into its OWN error output on failure (e.g. a connection
-  // error) — see redactSecretsFromText's comment in lib/guard.mjs. This is
-  // the single most important call site in this toolkit to get that right.
-  // shell: true — Windows npm-installed `supabase` is a .cmd shim execFile
-  // can't spawn directly; Node still safely quotes each array argument
-  // (verified against a connection-string-shaped argument containing
-  // ://, @, : before relying on this in a script that handles real
-  // credentials).
-  const dryRun = await runCliMasked("supabase", ["db", "push", "--db-url", url, "--dry-run"], {
+  // runCli (defaults to runCliMasked), not execFileAsync directly: the
+  // supabase CLI has been observed to echo the full --db-url argument
+  // (including the plaintext password) into its OWN error output on
+  // failure (e.g. a connection error) — see redactSecretsFromText's
+  // comment in lib/guard.mjs. This is the single most important call site
+  // in this toolkit to get that right. shell: true — Windows npm-installed
+  // `supabase` is a .cmd shim execFile can't spawn directly; Node still
+  // safely quotes each array argument (verified against a
+  // connection-string-shaped argument containing ://, @, : before relying
+  // on this in a script that handles real credentials).
+  const dryRun = await runCli("supabase", ["db", "push", "--db-url", url, "--dry-run"], {
     maxBuffer: 10 * 1024 * 1024,
     shell: true,
   });
@@ -159,30 +220,40 @@ async function main() {
   }
   pass(LABEL, `dry-run confirms exactly one pending migration, matching the approved one`);
 
-  if (!args.yes) {
-    throw new Error(
-      "Refusing to apply without --yes. This is the last gate before a real write to production — " +
-        "re-read the PASS lines above, then rerun with --yes appended.",
+  if (mode === "check") {
+    pass(
+      LABEL,
+      "check mode: every guard passed and the dry-run confirms exactly the approved migration " +
+        "is pending — nothing was applied",
     );
+    return { applied: false, actualSha256 };
   }
 
   log(LABEL, "Applying migration for real: `supabase db push` ...");
   // --yes here is the Supabase CLI's own flag ("answer yes to all
-  // prompts") — NOT a substitute for this script's own --yes gate above.
+  // prompts") — NOT a substitute for this script's own --yes mode above.
   // Discovered while rehearsing this against a local disposable stack: a
   // plain `db push` without it renders an interactive [Y/n] confirmation,
   // which would hang forever in this script's non-TTY child process. By
   // this point every safety gate above has already passed (hash match,
   // exactly-one-pending dry-run check, human_confirmation, this script's
-  // own --yes) — the CLI's own prompt would be redundant, not a missing
-  // safety check.
-  const applied = await runCliMasked("supabase", ["db", "push", "--db-url", url, "--yes"], {
+  // own --yes mode) — the CLI's own prompt would be redundant, not a
+  // missing safety check.
+  const applied = await runCli("supabase", ["db", "push", "--db-url", url, "--yes"], {
     maxBuffer: 10 * 1024 * 1024,
     shell: true,
   });
   process.stdout.write(applied.stdout);
   if (applied.stderr?.trim()) log(LABEL, `stderr: ${applied.stderr.trim()}`);
   pass(LABEL, `migration applied: ${plan.migration.relPath} (sha256 ${actualSha256})`);
+  return { applied: true, actualSha256 };
+}
+
+async function main() {
+  const args = parseArgs(process.argv.slice(2));
+  const mode = resolveMode(args);
+  const { plan } = loadReleasePlan(args.plan);
+  await runMigrate({ plan, mode });
 }
 
 // Only run main() when this file is executed directly (node
