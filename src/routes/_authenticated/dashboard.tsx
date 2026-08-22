@@ -82,11 +82,16 @@ function DashboardPage() {
         supabase.from("reservations").select("id", { count: "exact", head: true }).eq("property_id", propertyId!).eq("check_in", today).in("status", ["confirmed", "checked_in"]),
         supabase.from("reservations").select("id", { count: "exact", head: true }).eq("property_id", propertyId!).eq("check_out", today).in("status", ["checked_in", "checked_out"]),
         supabase.from("reservations").select("id", { count: "exact", head: true }).eq("property_id", propertyId!).eq("status", "checked_in"),
-        supabase.from("payments").select("amount, reservations!inner(property_id)").eq("reservations.property_id", propertyId!).gte("received_at", today),
+        // status filter: excludes refunded payments from "today's revenue" —
+        // see 20260822130000_reservation_payment_refund.sql. `payments.status`
+        // is not yet in the generated Supabase types, so the query builder
+        // is cast to `any` here, matching the established precedent for
+        // ap_payments/ar_receipts (accounting.ap.tsx, accounting.ar.tsx).
+        (supabase as any).from("payments").select("amount, reservations!inner(property_id)").eq("reservations.property_id", propertyId!).eq("status", "posted").gte("received_at", today),
       ]);
       const totalRooms = rooms.count ?? 0;
       const occupied = (rooms.data ?? []).filter((r) => r.status === "occupied").length;
-      const revenueToday = (revenue.data ?? []).reduce((s, r: any) => s + Number(r.amount || 0), 0);
+      const revenueToday = (revenue.data ?? []).reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
       return {
         totalRooms,
         occupied,

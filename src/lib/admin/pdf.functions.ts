@@ -115,7 +115,12 @@ export const renderAdminPdf = createServerFn({ method: "POST" })
             .eq("id", data.propertyId)
             .maybeSingle(),
           supabase.from("reservation_charges").select("*").eq("reservation_id", data.id),
-          supabase.from("payments").select("*").eq("reservation_id", data.id),
+          // status filter: a refunded payment must not appear as money
+          // collected on a printed folio — see
+          // 20260822130000_reservation_payment_refund.sql. Cast to `any`
+          // because `payments.status` is not yet in the generated Supabase
+          // types (matching the ap_payments/ar_receipts precedent).
+          (supabase as any).from("payments").select("*").eq("reservation_id", data.id).eq("status", "posted"),
         ]);
       if (rErr) throw new Error(rErr.message);
       if (!r) throw new Error("Reservation not found for this property");
