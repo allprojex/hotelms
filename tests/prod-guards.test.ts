@@ -13,7 +13,7 @@
 // `supabase` CLI) — a fake/injected executor can't prove that, only an
 // actual child-process invocation can.
 import { describe, expect, it, beforeEach, afterEach } from "vitest";
-import { writeFileSync, mkdtempSync, rmSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
@@ -675,6 +675,116 @@ describe("runMigrate — real incident fix regression (2026-08-22): a real --che
       expect(err.message).not.toContain("FAKESECRET_migrate_test");
       expect(err.message).not.toContain(FAKE_DB_URL);
     }
+  });
+});
+
+describe("preflight/postflight SQL — enum columns must be cast to text for the Supabase CLI's JSON output (real incident, 2026-08-22)", () => {
+  // Real incident: the AP hardening release's own postflight file failed
+  // in production with "unknown oid ... cannot be scanned into
+  // *interface {}" when a statement returned a raw custom-enum column
+  // (ap_bills.status) through `supabase db query --output json` — the
+  // CLI's JSON decoder has no registered scanner for an arbitrary
+  // custom-enum OID. Reproduced live against a local disposable Postgres
+  // instance with real enum data, through the real Supabase CLI
+  // (2.107.0): the uncast form crashes every time a matching row exists;
+  // `status::text` does not, and decodes cleanly. Every preflight/
+  // postflight SELECT statement that returns one of this migration's own
+  // enum-typed columns (ap_bills.status is `ap_status`, ap_payments.status
+  // is the new `ap_payment_status`) must cast it. The preflight file's own
+  // two affected statements happened to match zero rows in the actual
+  // release run (no void bills, no amount_paid inconsistency existed) —
+  // so the bug never fired there, but it is the identical latent defect,
+  // fixed proactively here alongside the postflight file rather than left
+  // for the next time either WHERE clause actually matches a row.
+  const ENUM_COLUMNS = ["status"];
+
+  /** Deliberately conservative, not a real SQL parser — same philosophy as
+   * guard.mjs's own WRITE_KEYWORDS scanner (see its doc comment): a false
+   * positive just means a human looks at one more line; a false negative
+   * would mean this exact incident recurs silently. Finds every
+   * `SELECT ... FROM` span in the (comment-stripped) SQL and flags any
+   * bare occurrence of an enum column name in that select-list that isn't
+   * already cast to ::text/::varchar. */
+  function bareEnumSelectExpressions(sql: string): string[] {
+    const withoutLineComments = sql.replace(/--[^\n]*/g, "");
+    const withoutBlockComments = withoutLineComments.replace(/\/\*[\s\S]*?\*\//g, "");
+    const offenders: string[] = [];
+    for (const selectMatch of withoutBlockComments.matchAll(/select\s+([\s\S]*?)\sfrom\s/gi)) {
+      const selectList = selectMatch[1];
+      for (const col of ENUM_COLUMNS) {
+        const re = new RegExp(
+          `\\b(?:[a-z_][a-z0-9_]*\\.)?${col}\\b(?!\\s*::\\s*(text|varchar))`,
+          "gi",
+        );
+        for (const m of selectList.matchAll(re)) offenders.push(m[0]);
+      }
+    }
+    return offenders;
+  }
+
+  it("detector sanity: flags a bare enum column in a SELECT list", () => {
+    expect(
+      bareEnumSelectExpressions("SELECT status, count(*) FROM public.ap_bills GROUP BY status;"),
+    ).toEqual(["status"]);
+  });
+
+  it("detector sanity: does not flag a properly cast column", () => {
+    expect(
+      bareEnumSelectExpressions(
+        "SELECT status::text, count(*) FROM public.ap_bills GROUP BY status;",
+      ),
+    ).toEqual([]);
+  });
+
+  it("detector sanity: does not flag a table-qualified but properly cast column", () => {
+    expect(bareEnumSelectExpressions("SELECT b.status::text FROM public.ap_bills b;")).toEqual([]);
+  });
+
+  it("detector sanity: does not flag the column name when it only appears in a WHERE clause (outside any SELECT list)", () => {
+    expect(
+      bareEnumSelectExpressions("SELECT count(*) FROM public.ap_bills WHERE status = 'void';"),
+    ).toEqual([]);
+  });
+
+  it("detector sanity: flags a bare table-qualified occurrence too", () => {
+    expect(bareEnumSelectExpressions("SELECT b.status FROM public.ap_bills b;")).toEqual([
+      "b.status",
+    ]);
+  });
+
+  it("the real postflight file has zero bare enum columns left in any SELECT list", () => {
+    const sql = readFileSync(
+      path.join(
+        REPO_ROOT,
+        "supabase/postflight/20260822120000_ap_posting_reversal_hardening_postflight.sql",
+      ),
+      "utf8",
+    );
+    expect(bareEnumSelectExpressions(sql)).toEqual([]);
+  });
+
+  it("the real preflight file has zero bare enum columns left in any SELECT list", () => {
+    const sql = readFileSync(
+      path.join(
+        REPO_ROOT,
+        "supabase/preflight/20260822_ap_posting_reversal_hardening_preflight.sql",
+      ),
+      "utf8",
+    );
+    expect(bareEnumSelectExpressions(sql)).toEqual([]);
+  });
+
+  it("both files still pass the toolkit's own read-only file-content guard after the fix (casting to ::text does not introduce a write/DDL keyword)", () => {
+    const postflightPath = path.join(
+      REPO_ROOT,
+      "supabase/postflight/20260822120000_ap_posting_reversal_hardening_postflight.sql",
+    );
+    const preflightPath = path.join(
+      REPO_ROOT,
+      "supabase/preflight/20260822_ap_posting_reversal_hardening_preflight.sql",
+    );
+    expect(() => assertReadOnlySqlFile(postflightPath)).not.toThrow();
+    expect(() => assertReadOnlySqlFile(preflightPath)).not.toThrow();
   });
 });
 
