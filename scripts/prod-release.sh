@@ -59,7 +59,20 @@ stage() {
   fi
 }
 
-HAS_MIGRATION="$(node -e "console.log(!!JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')).migration)" "$PLAN")"
+# Uses the same normalizeMigrations() helper supabase-migrate.mjs and
+# release-report.mjs already rely on, rather than re-deriving "does this
+# plan have a migration" from the raw JSON shape here too — that
+# duplication is exactly how this line went stale when plan.migrations
+# (plural, ordered array) was added: this check kept testing only the
+# original singular plan.migration field, so a plan using migrations
+# exclusively silently reported HAS_MIGRATION=false and skipped the
+# migration-hash-check/apply/verify stages entirely below.
+HAS_MIGRATION="$(node -e "
+import('./scripts/prod/lib/release-plan.mjs').then((m) => {
+  const plan = JSON.parse(require('fs').readFileSync(process.argv[1], 'utf8'));
+  console.log(m.normalizeMigrations(plan).length > 0);
+});
+" "$PLAN")"
 NEEDS_RELOAD="$(node -e "console.log(!!JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')).postgrest_reload_required)" "$PLAN")"
 
 stage "01-preflight" node scripts/prod/supabase-preflight.mjs --plan "$PLAN"

@@ -233,3 +233,84 @@ describe("scripts/prod-release.sh — stage 02 invocation itself (static check t
     );
   });
 });
+
+describe("scripts/prod-release.sh — HAS_MIGRATION recognizes both plan.migration (singular) and plan.migrations (plural)", () => {
+  // Regression coverage for a real defect found 2026-08-23 during the
+  // inventory-expiration release: HAS_MIGRATION used to be computed as
+  // `!!plan.migration` only, so a release plan using the newer plural
+  // `migrations` array (added to lib/release-plan.mjs's normalizeMigrations
+  // for ordered multi-migration releases) would evaluate HAS_MIGRATION as
+  // false and silently skip stages 02-04 (migration hash check, apply,
+  // verify) entirely, proceeding straight to VPS precheck/deploy without
+  // ever applying or verifying the migration the plan declared. The fix
+  // makes this line call the same normalizeMigrations() helper
+  // supabase-migrate.mjs and release-report.mjs already use, instead of
+  // re-deriving the check from the raw JSON shape a second time.
+  //
+  // The exact HAS_MIGRATION assignment is extracted from the real
+  // scripts/prod-release.sh (never reimplemented), same technique as
+  // extractStageFunction() above, so this breaks loudly if the real script
+  // changes shape without this test being updated.
+  function extractHasMigrationBlock(): string {
+    const source = readNormalized("scripts/prod-release.sh");
+    const match = source.match(/^HAS_MIGRATION="\$\(node -e "\n[\s\S]*?\n" "\$PLAN"\)"\n/m);
+    if (!match) {
+      throw new Error(
+        "Could not extract the HAS_MIGRATION assignment from scripts/prod-release.sh — its shape changed; update this test's extraction regex to match.",
+      );
+    }
+    return match[0];
+  }
+
+  let dir: string;
+  let planPath: string;
+  let driverPath: string;
+
+  beforeEach(() => {
+    dir = mkdtempSync(path.join(tmpdir(), "prod-release-has-migration-test-"));
+    planPath = path.join(dir, "plan.json");
+    driverPath = path.join(dir, "driver.sh");
+  });
+
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  function computeHasMigration(planObj: unknown): string {
+    writeFileSync(planPath, JSON.stringify(planObj));
+    const block = extractHasMigrationBlock();
+    const script = [
+      "#!/usr/bin/env bash",
+      "set -euo pipefail",
+      'cd "' + REPO_ROOT.replace(/\\/g, "/") + '"', // relative import path inside the block resolves from here
+      `PLAN="${planPath.replace(/\\/g, "/")}"`,
+      block,
+      'echo "$HAS_MIGRATION"',
+    ].join("\n");
+    writeFileSync(driverPath, script);
+    return execFileSync("bash", [driverPath], { encoding: "utf8" }).trim();
+  }
+
+  it("plan.migration (singular, the original shape) is still recognized", () => {
+    expect(
+      computeHasMigration({
+        migration: { relPath: "supabase/migrations/1.sql", approvedSha256: "a".repeat(64) },
+      }),
+    ).toBe("true");
+  });
+
+  it("plan.migrations (plural array, the newer shape) is now recognized — this is the actual regression fix", () => {
+    expect(
+      computeHasMigration({
+        migrations: [
+          { relPath: "supabase/migrations/1.sql", approvedSha256: "a".repeat(64) },
+          { relPath: "supabase/migrations/2.sql", approvedSha256: "b".repeat(64) },
+        ],
+      }),
+    ).toBe("true");
+  });
+
+  it("a plan with neither field correctly reports no migration", () => {
+    expect(computeHasMigration({ release_id: "no-migration-plan" })).toBe("false");
+  });
+});
