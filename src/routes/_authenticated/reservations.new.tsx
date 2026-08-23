@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { differenceInCalendarDays } from "date-fns";
 import { toast } from "sonner";
+import { RoomTypeGalleryStrip } from "@/components/gallery/room-type-gallery-preview";
 
 export const Route = createFileRoute("/_authenticated/reservations/new")({
   head: () => ({ meta: [{ title: "New reservation" }] }),
@@ -106,6 +107,7 @@ function NewReservation() {
                   ))}
                 </SelectContent>
               </Select>
+              {roomTypeId && <RoomTypeGalleryStrip roomTypeId={roomTypeId} className="mt-2" />}
             </Field>
             <Field label="Source">
               <Select value={source} onValueChange={setSource}>

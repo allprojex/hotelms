@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -9,8 +9,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Plus, Pencil } from "lucide-react";
+import { Plus, Pencil, Images } from "lucide-react";
 import { toast } from "sonner";
+import { RoomTypeCoverThumbnail } from "@/components/gallery/room-type-gallery-preview";
 
 export const Route = createFileRoute("/_authenticated/rooms/types")({
   head: () => ({ meta: [{ title: "Room types" }] }),
@@ -39,8 +40,9 @@ function TypesPage() {
         {list.data?.map((t: any) => (
           <Card key={t.id}>
             <CardContent className="p-5">
-              <div className="flex items-start justify-between">
-                <div>
+              <div className="flex items-start justify-between gap-3">
+                <RoomTypeCoverThumbnail roomTypeId={t.id} className="h-16 w-16 shrink-0" />
+                <div className="flex-1">
                   <div className="text-xs uppercase tracking-wider text-muted-foreground">{t.code}</div>
                   <div className="text-lg font-semibold">{t.name}</div>
                 </div>
@@ -51,6 +53,11 @@ function TypesPage() {
                 <span className="text-muted-foreground">Occupancy {t.base_occupancy}/{t.max_occupancy}</span>
                 <span className="font-semibold">{Number(t.base_rate).toFixed(2)}/night</span>
               </div>
+              <Button asChild size="sm" variant="outline" className="mt-3 w-full">
+                <Link to="/gallery" search={{ context: "room_type", roomTypeId: t.id } as never}>
+                  <Images className="h-3.5 w-3.5 mr-1" /> Manage photos
+                </Link>
+              </Button>
             </CardContent>
           </Card>
         ))}

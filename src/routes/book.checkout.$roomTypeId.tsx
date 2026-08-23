@@ -11,6 +11,7 @@ import { ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 import { z } from "zod";
 import { useState } from "react";
+import { RoomTypeGalleryStrip } from "@/components/gallery/room-type-gallery-preview";
 
 const searchSchema = z.object({
   propertyId: z.string().uuid(),
@@ -120,6 +121,7 @@ function Checkout() {
             <CardContent className="space-y-3 text-sm">
               <div><div className="text-xs text-muted-foreground">Hotel</div><div className="font-medium">{property.data?.name}</div></div>
               <div><div className="text-xs text-muted-foreground">Room</div><div className="font-medium">{roomType.data?.name}</div></div>
+              <RoomTypeGalleryStrip roomTypeId={roomTypeId} />
               <div className="grid grid-cols-2 gap-2">
                 <div><div className="text-xs text-muted-foreground">Check-in</div><div>{checkIn}</div></div>
                 <div><div className="text-xs text-muted-foreground">Check-out</div><div>{checkOut}</div></div>
