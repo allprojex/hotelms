@@ -44,6 +44,94 @@ describe("reservation_item_distributions — event-ledger shape, history never r
   it("actor_id is NOT NULL and has no default -- every RPC must supply it from auth.uid(), never trusted as a plain insert default", () => {
     expect(migration).toContain("actor_id UUID NOT NULL REFERENCES auth.users(id)");
   });
+
+  it("request_id is NOT NULL on every row and unique per property -- issue/return/adjustment are all replay-protected identically", () => {
+    expect(migration).toContain("request_id UUID NOT NULL");
+    expect(migration).toContain("UNIQUE (property_id, request_id)");
+  });
+});
+
+describe("Idempotency -- replaying the same request_id must not apply a mutation twice (client requirement: authoritative server-side dedup, not a client-side disabled button)", () => {
+  it("every mutating RPC requires a non-null request_id before doing anything else", () => {
+    const occurrences =
+      migration.match(
+        /IF _request_id IS NULL THEN\s*\n\s*RAISE EXCEPTION 'A request id is required';/g,
+      ) ?? [];
+    expect(occurrences.length).toBe(3);
+  });
+
+  it("every mutating RPC takes a transaction-scoped advisory lock keyed on request_id, BEFORE any existing-row check or mutation -- this is what makes truly concurrent duplicate requests serialize instead of racing", () => {
+    const occurrences =
+      migration.match(
+        /PERFORM pg_advisory_xact_lock\(hashtextextended\(_request_id::text, 0\)\);/g,
+      ) ?? [];
+    expect(occurrences.length).toBe(3);
+    // Must appear before the corresponding existing-row check in each function.
+    for (const [fnName, checkFragment] of [
+      [
+        "issue_reservation_item",
+        "SELECT id INTO _existing_id FROM public.reservation_item_distributions",
+      ],
+      [
+        "return_reservation_item",
+        "SELECT id INTO _existing_id FROM public.reservation_item_distributions",
+      ],
+      [
+        "adjust_reservation_item_distribution",
+        "SELECT id INTO _existing_id FROM public.reservation_item_distributions",
+      ],
+    ] as const) {
+      const fnStart = migration.indexOf(`CREATE OR REPLACE FUNCTION public.${fnName}`);
+      const lockIdx = migration.indexOf("PERFORM pg_advisory_xact_lock", fnStart);
+      const checkIdx = migration.indexOf(checkFragment, fnStart);
+      expect(lockIdx).toBeGreaterThan(fnStart);
+      expect(lockIdx).toBeLessThan(checkIdx);
+    }
+  });
+
+  it("every mutating RPC checks for an existing row with the same (property_id, request_id) and returns its id immediately on a replay -- a clean answer, not a raw constraint-violation error", () => {
+    const occurrences =
+      migration.match(
+        /WHERE property_id = (?:res|orig)\.property_id AND request_id = _request_id;\s*\n\s*IF _existing_id IS NOT NULL THEN\s*\n\s*RETURN _existing_id;\s*\n\s*END IF;/g,
+      ) ?? [];
+    expect(occurrences.length).toBe(3);
+  });
+
+  it("the existing-request-id check happens AFTER the role check but BEFORE any business validation or stock mutation -- an unauthorized caller can never probe for a real event id via replay, and a replay never re-runs validation/mutation", () => {
+    for (const fnName of [
+      "issue_reservation_item",
+      "return_reservation_item",
+      "adjust_reservation_item_distribution",
+    ] as const) {
+      const fnStart = migration.indexOf(`CREATE OR REPLACE FUNCTION public.${fnName}`);
+      const fnEnd = migration.indexOf("\n$$;", fnStart);
+      const body = migration.slice(fnStart, fnEnd);
+      const roleCheckIdx = body.indexOf("has_any_role");
+      const existingCheckIdx = body.indexOf("_existing_id IS NOT NULL");
+      const applyStockIdx = body.indexOf("apply_stock_delta");
+      expect(roleCheckIdx).toBeGreaterThan(-1);
+      expect(existingCheckIdx).toBeGreaterThan(roleCheckIdx);
+      if (applyStockIdx > -1) {
+        expect(existingCheckIdx).toBeLessThan(applyStockIdx);
+      }
+    }
+  });
+
+  it("every INSERT into the ledger persists request_id -- the replay-detection column is actually populated, not just checked", () => {
+    expect(migration).toContain("'issue', _quantity, _notes, auth.uid(), _request_id");
+    expect(migration).toContain("'return', _quantity, orig.id, _notes, auth.uid(), _request_id");
+    expect(migration).toContain(
+      "'adjustment', _quantity, orig.id, _stock_direction, _reason, auth.uid(), _request_id",
+    );
+  });
+
+  it("uses an advisory lock (auto-released on commit or rollback), never an explicit unlock -- a failed transaction can never leave the request_id permanently locked out", () => {
+    expect(migration).not.toMatch(/pg_advisory_unlock/);
+    // pg_advisory_XACT_lock specifically (not the session-scoped variant)
+    // is what guarantees release on rollback without any unlock call.
+    expect(migration).toMatch(/pg_advisory_xact_lock/);
+    expect(migration).not.toMatch(/pg_advisory_lock\(/);
+  });
 });
 
 describe("reservation_item_distributions — RLS: read-only to authenticated, mutation is RPC-only", () => {
@@ -67,7 +155,7 @@ describe("reservation_item_distributions — RLS: read-only to authenticated, mu
 describe("issue_reservation_item — role/property/state checks, floor-checked under a row lock, uses apply_stock_delta", () => {
   it("derives property_id from the reservation, never accepts it as a parameter", () => {
     expect(migration).toMatch(
-      /CREATE OR REPLACE FUNCTION public\.issue_reservation_item\(\s*_reservation_id UUID,\s*_inventory_item_id UUID,\s*_location_id UUID,\s*_quantity NUMERIC,\s*_notes TEXT DEFAULT NULL\s*\)/,
+      /CREATE OR REPLACE FUNCTION public\.issue_reservation_item\(\s*_reservation_id UUID,\s*_inventory_item_id UUID,\s*_location_id UUID,\s*_quantity NUMERIC,\s*_request_id UUID,\s*_notes TEXT DEFAULT NULL\s*\)/,
     );
     expect(migration).not.toMatch(/issue_reservation_item\([^)]*_property_id/);
   });

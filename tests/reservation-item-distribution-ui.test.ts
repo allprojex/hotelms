@@ -104,6 +104,59 @@ describe("Issue dialog — no silent default location, shows available stock", (
   });
 });
 
+describe("Idempotency key lifecycle — one id per open dialog session, not one per click (client requirement: retries of the same submission must not double-apply)", () => {
+  it("IssueItemDialog generates a requestId lazily on mount and passes it as _request_id in the RPC call", () => {
+    const start = source.indexOf("function IssueItemDialog");
+    const end = source.indexOf("function ItemDistributionPicker");
+    const body = source.slice(start, end);
+    expect(body).toContain("useState<string>(() => crypto.randomUUID())");
+    expect(body).toContain("_request_id: requestId");
+  });
+
+  it("ReturnItemDialog and AdjustItemDialog each generate their own requestId the same way", () => {
+    const returnStart = source.indexOf("function ReturnItemDialog");
+    const returnEnd = source.indexOf("function AdjustItemDialog");
+    const returnBody = source.slice(returnStart, returnEnd);
+    expect(returnBody).toContain("useState<string>(() => crypto.randomUUID())");
+    expect(returnBody).toContain("_request_id: requestId");
+
+    const adjustBody = source.slice(returnEnd);
+    expect(adjustBody).toContain("useState<string>(() => crypto.randomUUID())");
+    expect(adjustBody).toContain("_request_id: requestId");
+  });
+
+  it("a new requestId is only generated on close/reset, never inside the submit button's onClick before the RPC call fires — so a double-click/network-retry within one open session reuses the same key", () => {
+    for (const [name, start, end] of [
+      [
+        "IssueItemDialog",
+        source.indexOf("function IssueItemDialog"),
+        source.indexOf("function ItemDistributionPicker"),
+      ],
+      [
+        "ReturnItemDialog",
+        source.indexOf("function ReturnItemDialog"),
+        source.indexOf("function AdjustItemDialog"),
+      ],
+      ["AdjustItemDialog", source.indexOf("function AdjustItemDialog"), source.length],
+    ] as const) {
+      const body = source.slice(start, end);
+      const onClickIdx = body.indexOf("onClick={async () => {");
+      const rpcCallIdx = body.indexOf("(supabase.rpc as any)(", onClickIdx);
+      expect(onClickIdx, `${name}: onClick handler not found`).toBeGreaterThan(-1);
+      expect(rpcCallIdx, `${name}: RPC call not found inside onClick`).toBeGreaterThan(onClickIdx);
+      const preRpcSlice = body.slice(onClickIdx, rpcCallIdx);
+      expect(
+        preRpcSlice,
+        `${name}: requestId must not be regenerated between the click and the RPC call`,
+      ).not.toContain("setRequestId(crypto.randomUUID())");
+      // The regeneration call does exist -- just only in the close/reset
+      // path, which is after the RPC call site (post-success cleanup) or
+      // in the Dialog's own onOpenChange handler, never pre-empting this call.
+      expect(body).toContain("setRequestId(crypto.randomUUID())");
+    }
+  });
+});
+
 describe("Return/Adjust dialogs — bounded by outstanding, guarded RPCs only", () => {
   it("the return quantity input is capped at the outstanding amount and the button is disabled beyond it", () => {
     const start = source.indexOf("function ReturnItemDialog");

@@ -52,6 +52,27 @@
 --   database, not the client's displayed "available stock" number, is
 --   what actually prevents two concurrent requests from over-issuing or
 --   over-returning.
+--
+-- * Idempotency: a `FOR UPDATE` lock alone stops two concurrent requests
+--   from over-issuing/over-returning past the true available/outstanding
+--   amount, but it does NOT stop two requests that both represent the
+--   SAME user action (a network retry, a double click that beats the
+--   client's own busy-state, a replay from two tabs) from each
+--   legitimately succeeding in sequence — that is a valid concurrency
+--   outcome but a wrong business outcome: it deducts/restores stock twice
+--   for what was really one action. Every mutating RPC therefore takes a
+--   caller-supplied `_request_id UUID`, persisted on the resulting row
+--   under `UNIQUE(property_id, request_id)`. Each RPC opens with
+--   `pg_advisory_xact_lock` keyed on that request_id (auto-released at
+--   transaction end, commit or rollback) so that even two truly
+--   concurrent calls carrying the same request_id serialize against each
+--   other — the second one always finds the first's already-committed row
+--   and returns its id, rather than racing to also mutate stock. A caller
+--   that already has a committed row for its request_id gets that row's
+--   id back immediately, before any other validation re-runs — a clean,
+--   safe answer instead of a confusing constraint-violation error. A
+--   genuinely new action (fresh dialog submission, fresh request_id) is
+--   never blocked by this.
 -- ============================================================
 
 CREATE TABLE public.reservation_item_distributions (
@@ -80,12 +101,17 @@ CREATE TABLE public.reservation_item_distributions (
   -- for adjustments specifically.
   reason TEXT,
   actor_id UUID NOT NULL REFERENCES auth.users(id),
+  -- Client-generated per-submission-attempt idempotency key (see the
+  -- design note above). Required on every row -- issue, return, and
+  -- adjustment are all replay-protected identically.
+  request_id UUID NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   CHECK (
     (action = 'issue' AND related_distribution_id IS NULL AND stock_direction IS NULL)
     OR (action = 'return' AND related_distribution_id IS NOT NULL AND stock_direction IS NULL)
     OR (action = 'adjustment' AND related_distribution_id IS NOT NULL AND stock_direction IS NOT NULL)
-  )
+  ),
+  UNIQUE (property_id, request_id)
 );
 
 CREATE INDEX idx_res_item_dist_reservation ON public.reservation_item_distributions(reservation_id, created_at);
@@ -120,6 +146,7 @@ CREATE OR REPLACE FUNCTION public.issue_reservation_item(
   _inventory_item_id UUID,
   _location_id UUID,
   _quantity NUMERIC,
+  _request_id UUID,
   _notes TEXT DEFAULT NULL
 )
 RETURNS UUID
@@ -130,8 +157,18 @@ AS $$
 DECLARE
   res RECORD;
   _current_qty NUMERIC(14,3);
+  _existing_id UUID;
   _new_id UUID;
 BEGIN
+  IF _request_id IS NULL THEN
+    RAISE EXCEPTION 'A request id is required';
+  END IF;
+  -- Serializes every call carrying this exact request_id, including two
+  -- truly concurrent ones -- whichever loses the race waits here until the
+  -- winner's transaction has fully committed (or rolled back), so the
+  -- existing-row check just below always sees the winner's real outcome.
+  PERFORM pg_advisory_xact_lock(hashtextextended(_request_id::text, 0));
+
   SELECT * INTO res FROM public.reservations WHERE id = _reservation_id;
   IF res IS NULL THEN
     RAISE EXCEPTION 'Reservation not found';
@@ -143,6 +180,15 @@ BEGIN
     res.property_id
   ) THEN
     RAISE EXCEPTION 'Not permitted to issue items for this reservation';
+  END IF;
+
+  -- Idempotent replay: this exact request already succeeded (or a
+  -- concurrent call just finished it while we waited on the lock above) --
+  -- return the same result, re-running nothing.
+  SELECT id INTO _existing_id FROM public.reservation_item_distributions
+    WHERE property_id = res.property_id AND request_id = _request_id;
+  IF _existing_id IS NOT NULL THEN
+    RETURN _existing_id;
   END IF;
 
   IF res.status <> 'checked_in' THEN
@@ -181,10 +227,10 @@ BEGIN
 
   INSERT INTO public.reservation_item_distributions(
     property_id, reservation_id, room_id, guest_id, inventory_item_id, location_id,
-    action, quantity, reason, actor_id
+    action, quantity, reason, actor_id, request_id
   ) VALUES (
     res.property_id, _reservation_id, res.room_id, res.guest_id, _inventory_item_id, _location_id,
-    'issue', _quantity, _notes, auth.uid()
+    'issue', _quantity, _notes, auth.uid(), _request_id
   ) RETURNING id INTO _new_id;
 
   PERFORM public.audit_capture(
@@ -198,12 +244,13 @@ BEGIN
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.issue_reservation_item(UUID, UUID, UUID, NUMERIC, TEXT) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.issue_reservation_item(UUID, UUID, UUID, NUMERIC, TEXT) TO authenticated;
+REVOKE ALL ON FUNCTION public.issue_reservation_item(UUID, UUID, UUID, NUMERIC, UUID, TEXT) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.issue_reservation_item(UUID, UUID, UUID, NUMERIC, UUID, TEXT) TO authenticated;
 
 CREATE OR REPLACE FUNCTION public.return_reservation_item(
   _distribution_id UUID,
   _quantity NUMERIC,
+  _request_id UUID,
   _notes TEXT DEFAULT NULL
 )
 RETURNS UUID
@@ -214,8 +261,14 @@ AS $$
 DECLARE
   orig RECORD;
   _outstanding NUMERIC(14,3);
+  _existing_id UUID;
   _new_id UUID;
 BEGIN
+  IF _request_id IS NULL THEN
+    RAISE EXCEPTION 'A request id is required';
+  END IF;
+  PERFORM pg_advisory_xact_lock(hashtextextended(_request_id::text, 0));
+
   -- Row lock on the original issue row: every return/adjustment against
   -- this same issue must acquire this lock first, so two concurrent
   -- returns against the same issue serialize instead of racing.
@@ -231,6 +284,12 @@ BEGIN
     orig.property_id
   ) THEN
     RAISE EXCEPTION 'Not permitted to return items for this reservation';
+  END IF;
+
+  SELECT id INTO _existing_id FROM public.reservation_item_distributions
+    WHERE property_id = orig.property_id AND request_id = _request_id;
+  IF _existing_id IS NOT NULL THEN
+    RETURN _existing_id;
   END IF;
 
   IF _quantity IS NULL OR _quantity <= 0 THEN
@@ -252,10 +311,10 @@ BEGIN
 
   INSERT INTO public.reservation_item_distributions(
     property_id, reservation_id, room_id, guest_id, inventory_item_id, location_id,
-    action, quantity, related_distribution_id, reason, actor_id
+    action, quantity, related_distribution_id, reason, actor_id, request_id
   ) VALUES (
     orig.property_id, orig.reservation_id, orig.room_id, orig.guest_id, orig.inventory_item_id, orig.location_id,
-    'return', _quantity, orig.id, _notes, auth.uid()
+    'return', _quantity, orig.id, _notes, auth.uid(), _request_id
   ) RETURNING id INTO _new_id;
 
   PERFORM public.audit_capture(
@@ -269,14 +328,15 @@ BEGIN
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.return_reservation_item(UUID, NUMERIC, TEXT) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.return_reservation_item(UUID, NUMERIC, TEXT) TO authenticated;
+REVOKE ALL ON FUNCTION public.return_reservation_item(UUID, NUMERIC, UUID, TEXT) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.return_reservation_item(UUID, NUMERIC, UUID, TEXT) TO authenticated;
 
 CREATE OR REPLACE FUNCTION public.adjust_reservation_item_distribution(
   _distribution_id UUID,
   _quantity NUMERIC,
   _stock_direction TEXT,
-  _reason TEXT
+  _reason TEXT,
+  _request_id UUID
 )
 RETURNS UUID
 LANGUAGE plpgsql
@@ -287,8 +347,14 @@ DECLARE
   orig RECORD;
   _outstanding NUMERIC(14,3);
   _current_qty NUMERIC(14,3);
+  _existing_id UUID;
   _new_id UUID;
 BEGIN
+  IF _request_id IS NULL THEN
+    RAISE EXCEPTION 'A request id is required';
+  END IF;
+  PERFORM pg_advisory_xact_lock(hashtextextended(_request_id::text, 0));
+
   SELECT * INTO orig FROM public.reservation_item_distributions
     WHERE id = _distribution_id AND action = 'issue' FOR UPDATE;
   IF orig IS NULL THEN
@@ -302,6 +368,12 @@ BEGIN
     auth.uid(), ARRAY['super_admin','hotel_owner','general_manager','housekeeping_supervisor']::app_role[], orig.property_id
   ) THEN
     RAISE EXCEPTION 'Not permitted to adjust this distribution';
+  END IF;
+
+  SELECT id INTO _existing_id FROM public.reservation_item_distributions
+    WHERE property_id = orig.property_id AND request_id = _request_id;
+  IF _existing_id IS NOT NULL THEN
+    RETURN _existing_id;
   END IF;
 
   IF _reason IS NULL OR btrim(_reason) = '' THEN
@@ -341,10 +413,10 @@ BEGIN
 
   INSERT INTO public.reservation_item_distributions(
     property_id, reservation_id, room_id, guest_id, inventory_item_id, location_id,
-    action, quantity, related_distribution_id, stock_direction, reason, actor_id
+    action, quantity, related_distribution_id, stock_direction, reason, actor_id, request_id
   ) VALUES (
     orig.property_id, orig.reservation_id, orig.room_id, orig.guest_id, orig.inventory_item_id, orig.location_id,
-    'adjustment', _quantity, orig.id, _stock_direction, _reason, auth.uid()
+    'adjustment', _quantity, orig.id, _stock_direction, _reason, auth.uid(), _request_id
   ) RETURNING id INTO _new_id;
 
   PERFORM public.audit_capture(
@@ -358,5 +430,5 @@ BEGIN
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.adjust_reservation_item_distribution(UUID, NUMERIC, TEXT, TEXT) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.adjust_reservation_item_distribution(UUID, NUMERIC, TEXT, TEXT) TO authenticated;
+REVOKE ALL ON FUNCTION public.adjust_reservation_item_distribution(UUID, NUMERIC, TEXT, TEXT, UUID) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.adjust_reservation_item_distribution(UUID, NUMERIC, TEXT, TEXT, UUID) TO authenticated;

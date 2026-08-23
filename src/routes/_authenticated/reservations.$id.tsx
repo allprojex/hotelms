@@ -641,6 +641,14 @@ function IssueItemDialog({
   const [quantity, setQuantity] = useState("1");
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
+  // Generated once per open dialog "session", not per click: every Issue
+  // click while this same dialog stays open (a double-click that beats the
+  // busy-state disable, a network-layer retry, a lost-response retry)
+  // reuses this SAME id, so the server-side idempotency check collapses
+  // them into one event. Only regenerated on close (reset()) -- a
+  // deliberately reopened dialog is a genuinely new action and gets a
+  // fresh id.
+  const [requestId, setRequestId] = useState<string>(() => crypto.randomUUID());
 
   const locations = useQuery({
     queryKey: ["dist-locations", propertyId],
@@ -659,7 +667,7 @@ function IssueItemDialog({
   });
 
   function reset() {
-    setItem(null); setLocationId(""); setQuantity("1"); setNotes("");
+    setItem(null); setLocationId(""); setQuantity("1"); setNotes(""); setRequestId(crypto.randomUUID());
   }
 
   return (
@@ -694,7 +702,7 @@ function IssueItemDialog({
               setBusy(true);
               const { error } = await (supabase.rpc as any)("issue_reservation_item", {
                 _reservation_id: reservationId, _inventory_item_id: item!.id, _location_id: locationId,
-                _quantity: Number(quantity), _notes: notes || null,
+                _quantity: Number(quantity), _request_id: requestId, _notes: notes || null,
               });
               setBusy(false);
               if (error) return toast.error(error.message);
@@ -786,9 +794,11 @@ function ReturnItemDialog({
   const [quantity, setQuantity] = useState("");
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
+  // Same one-id-per-open-session lifecycle as IssueItemDialog's requestId.
+  const [requestId, setRequestId] = useState<string>(() => crypto.randomUUID());
 
   return (
-    <Dialog open={!!target} onOpenChange={(v) => { onOpenChange(v); if (!v) { setQuantity(""); setNotes(""); } }}>
+    <Dialog open={!!target} onOpenChange={(v) => { onOpenChange(v); if (!v) { setQuantity(""); setNotes(""); setRequestId(crypto.randomUUID()); } }}>
       <DialogContent>
         <DialogHeader><DialogTitle>Return item</DialogTitle></DialogHeader>
         {target && (
@@ -804,12 +814,12 @@ function ReturnItemDialog({
             onClick={async () => {
               setBusy(true);
               const { error } = await (supabase.rpc as any)("return_reservation_item", {
-                _distribution_id: target.id, _quantity: Number(quantity), _notes: notes || null,
+                _distribution_id: target.id, _quantity: Number(quantity), _request_id: requestId, _notes: notes || null,
               });
               setBusy(false);
               if (error) return toast.error(error.message);
               toast.success("Item returned");
-              onDone(); onOpenChange(false); setQuantity(""); setNotes("");
+              onDone(); onOpenChange(false); setQuantity(""); setNotes(""); setRequestId(crypto.randomUUID());
             }}
           >
             {busy ? "Returning…" : "Return"}
@@ -827,9 +837,11 @@ function AdjustItemDialog({
   const [direction, setDirection] = useState<"restore" | "deduct" | "none">("none");
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
+  // Same one-id-per-open-session lifecycle as IssueItemDialog's requestId.
+  const [requestId, setRequestId] = useState<string>(() => crypto.randomUUID());
 
   return (
-    <Dialog open={!!target} onOpenChange={(v) => { onOpenChange(v); if (!v) { setQuantity(""); setReason(""); setDirection("none"); } }}>
+    <Dialog open={!!target} onOpenChange={(v) => { onOpenChange(v); if (!v) { setQuantity(""); setReason(""); setDirection("none"); setRequestId(crypto.randomUUID()); } }}>
       <DialogContent>
         <DialogHeader><DialogTitle>Adjust distribution</DialogTitle></DialogHeader>
         {target && (
@@ -856,12 +868,12 @@ function AdjustItemDialog({
             onClick={async () => {
               setBusy(true);
               const { error } = await (supabase.rpc as any)("adjust_reservation_item_distribution", {
-                _distribution_id: target.id, _quantity: Number(quantity), _stock_direction: direction, _reason: reason.trim(),
+                _distribution_id: target.id, _quantity: Number(quantity), _stock_direction: direction, _reason: reason.trim(), _request_id: requestId,
               });
               setBusy(false);
               if (error) return toast.error(error.message);
               toast.success("Adjustment recorded");
-              onDone(); onOpenChange(false); setQuantity(""); setReason(""); setDirection("none");
+              onDone(); onOpenChange(false); setQuantity(""); setReason(""); setDirection("none"); setRequestId(crypto.randomUUID());
             }}
           >
             {busy ? "Saving…" : "Save adjustment"}
