@@ -12,7 +12,7 @@
 import { readFileSync, writeFileSync, existsSync, readdirSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import path from "node:path";
-import { loadReleasePlan } from "./lib/release-plan.mjs";
+import { loadReleasePlan, normalizeMigrations } from "./lib/release-plan.mjs";
 import { REPO_ROOT, redactSecretsFromText } from "./lib/guard.mjs";
 
 function parseArgs(argv) {
@@ -54,6 +54,65 @@ function readStageLog(rundir, stageFileGuess) {
 function extractLine(log, pattern) {
   const m = log.match(pattern);
   return m ? m[0] : null;
+}
+
+/** Per-migration hash-check results: relPath -> actual pristine git-blob
+ * SHA256, from a "PASS — <relPath> pristine git-blob SHA256 matches
+ * approved hash (<sha256>)" line. Present in both the check-stage (02) and
+ * apply-stage (03) logs, since apply always re-runs every guard from
+ * scratch — either log answers "did this migration's hash check pass". */
+function extractMigrationHashChecks(log) {
+  const map = new Map();
+  const re = /(supabase\/migrations\/\S+\.sql) pristine git-blob SHA256 matches approved hash \(([0-9a-f]{64})\)/g;
+  for (const m of log.matchAll(re)) map.set(m[1], m[2]);
+  return map;
+}
+
+/** Per-migration post-apply remote-history verification: the set of
+ * relPaths confirmed via a "PASS — <relPath> recorded as applied remotely
+ * (timestamp <ts>)" line — only ever emitted in the apply-stage (03) log,
+ * after a real `supabase db push --yes` and independent re-verification via
+ * `supabase migration list`. */
+function extractRemoteHistoryVerified(log) {
+  const set = new Set();
+  const re = /(supabase\/migrations\/\S+\.sql) recorded as applied remotely \(timestamp \d{14}\)/g;
+  for (const m of log.matchAll(re)) set.add(m[1]);
+  return set;
+}
+
+function buildMigrationsTable(plan, migrationCheckLog, migrationApplyLog) {
+  const migrations = normalizeMigrations(plan);
+  if (migrations.length === 0) return [];
+  const checkedInCheck = extractMigrationHashChecks(migrationCheckLog);
+  const checkedInApply = extractMigrationHashChecks(migrationApplyLog);
+  const remoteVerified = extractRemoteHistoryVerified(migrationApplyLog);
+  return migrations.map((m) => {
+    const filename = path.basename(m.relPath);
+    const timestamp = filename.match(/^(\d{14})_/)?.[1] ?? "?";
+    const checkResult = checkedInCheck.has(m.relPath)
+      ? "PASS"
+      : migrationCheckLog
+        ? "FAIL/NOT REACHED"
+        : "NOT RUN";
+    const applyResult = checkedInApply.has(m.relPath)
+      ? "PASS"
+      : migrationApplyLog
+        ? "FAIL/NOT REACHED"
+        : "NOT RUN";
+    const remoteHistoryResult = remoteVerified.has(m.relPath)
+      ? "PASS"
+      : migrationApplyLog
+        ? "FAIL/NOT VERIFIED"
+        : "NOT RUN";
+    return {
+      filename,
+      timestamp,
+      approvedSha256: m.approvedSha256,
+      checkResult,
+      applyResult,
+      remoteHistoryResult,
+    };
+  });
 }
 
 function main() {
@@ -105,13 +164,28 @@ function main() {
   lines.push(`- **Operator:** ${plan.operator}`);
   lines.push(`- **Git SHA:** ${gitSha}`);
   lines.push(`- **Approved Git SHA (plan):** ${plan.approved_git_sha}`);
-  if (plan.migration) {
-    lines.push(`- **Migration filename:** ${plan.migration.relPath}`);
-    lines.push(`- **Migration SHA256 (approved):** ${plan.migration.approvedSha256}`);
-  } else {
+  const migrationsTable = buildMigrationsTable(plan, migrationCheckLog, migrationApplyLog);
+  if (migrationsTable.length === 0) {
     lines.push(`- **Migration:** none in this release`);
+  } else if (migrationsTable.length === 1) {
+    lines.push(`- **Migration filename:** ${migrationsTable[0].filename}`);
+    lines.push(`- **Migration SHA256 (approved):** ${migrationsTable[0].approvedSha256}`);
+  } else {
+    lines.push(`- **Migrations (ordered set, ${migrationsTable.length}):**`);
   }
   lines.push("");
+  if (migrationsTable.length > 0) {
+    lines.push("## Migrations");
+    lines.push("");
+    lines.push("| # | Filename | Timestamp | Approved SHA256 | Check | Apply | Remote history |");
+    lines.push("|---|---|---|---|---|---|---|");
+    migrationsTable.forEach((m, i) => {
+      lines.push(
+        `| ${i + 1} | ${m.filename} | ${m.timestamp} | ${m.approvedSha256} | ${m.checkResult} | ${m.applyResult} | ${m.remoteHistoryResult} |`,
+      );
+    });
+    lines.push("");
+  }
   lines.push("## Stage results");
   lines.push("");
   lines.push("| Stage | Result | Started (UTC) |");
