@@ -248,31 +248,64 @@ REVOKE ALL ON FUNCTION public.seed_gallery_permissions_for_property() FROM PUBLI
 GRANT EXECUTE ON FUNCTION public.seed_gallery_permissions_for_property() TO service_role;
 
 -- ============ STORAGE BUCKET ============
--- Public (unlike uploads/backups/brand-assets/product-images, all private):
--- gallery images must load in a plain <img src> for anonymous public-booking
--- visitors with zero signed-URL/session machinery. The bucket holds nothing
--- but gallery photos, so publicness cannot leak an unrelated private file.
--- "Hidden" (active=false) images are still technically fetchable by a guessed
--- exact URL — the standard trade-off of any public object bucket — but the
--- app's own booking/browsing surfaces only ever link to active=true rows via
--- the gallery_images table, never by listing the bucket.
+-- PRIVATE. An earlier version of this migration made the bucket public,
+-- reasoning that gallery_images.active alone would gate visibility. That is
+-- wrong: Supabase's public-object endpoint serves a public bucket's objects
+-- unconditionally, bypassing storage.objects RLS (and therefore bypassing
+-- gallery_images.active) entirely. Proven live: with the bucket public, an
+-- object stayed fetchable at 200 after its row was set active=false, and
+-- again after the row was deleted outright, leaving a permanently-public
+-- orphan. See PR #62's storage-visibility review for the full reproduction.
+--
+-- With the bucket private, the ONLY way to read an object is a signed URL,
+-- and Supabase only mints one if the requesting role currently passes a
+-- SELECT policy on storage.objects at *signing time* — so visibility always
+-- reflects the live value of gallery_images.active, not a URL's shape.
 INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 VALUES (
-  'gallery-images', 'gallery-images', true, 8388608,
+  'gallery-images', 'gallery-images', false, 8388608,
   ARRAY['image/jpeg', 'image/png', 'image/webp']
 )
 ON CONFLICT (id) DO UPDATE SET
-  public = true, file_size_limit = EXCLUDED.file_size_limit, allowed_mime_types = EXCLUDED.allowed_mime_types;
+  public = false, file_size_limit = EXCLUDED.file_size_limit, allowed_mime_types = EXCLUDED.allowed_mime_types;
 
 -- Property-scoped: first storage path segment must be the property_id, same
--- convention as product-images/employee-documents. No SELECT policy is
--- needed — the bucket is public, so reads go through the public object
--- endpoint and never touch storage.objects RLS at all.
+-- convention as product-images/employee-documents.
 CREATE POLICY gallery_images_storage_insert ON storage.objects
 FOR INSERT TO authenticated
 WITH CHECK (
   bucket_id = 'gallery-images'
   AND public.has_permission(auth.uid(), ((storage.foldername(name))[1])::uuid, 'gallery', 'create')
+);
+
+-- Public/anon signing path: a signed URL can only ever be minted for an
+-- object that currently has a matching gallery_images row with active=true.
+-- The instant active flips to false, this policy stops matching and any new
+-- signing attempt is denied (an already-issued signed URL from before the
+-- flip keeps working until its own short embedded expiry — inherent to any
+-- signed-URL design, and the reason the TTL is kept short; see
+-- GALLERY_SIGNED_URL_TTL_SECONDS in src/lib/gallery/signed-url.ts).
+CREATE POLICY gallery_images_storage_public_read ON storage.objects
+FOR SELECT TO anon
+USING (
+  bucket_id = 'gallery-images'
+  AND EXISTS (
+    SELECT 1 FROM public.gallery_images gi
+    WHERE gi.active AND (gi.storage_path = storage.objects.name OR gi.thumbnail_path = storage.objects.name)
+  )
+);
+
+-- Staff signing path: any authenticated user holding the gallery read
+-- permission for this property can sign ANY image under it regardless of
+-- active — this is what lets Gallery Management preview hidden images
+-- without making the bucket public. Deliberately does not join against
+-- gallery_images at all (unlike the anon policy above) so upload-in-progress
+-- objects with no row yet can still be previewed by the uploader.
+CREATE POLICY gallery_images_storage_staff_read ON storage.objects
+FOR SELECT TO authenticated
+USING (
+  bucket_id = 'gallery-images'
+  AND public.has_permission(auth.uid(), ((storage.foldername(name))[1])::uuid, 'gallery', 'read')
 );
 
 CREATE POLICY gallery_images_storage_update ON storage.objects

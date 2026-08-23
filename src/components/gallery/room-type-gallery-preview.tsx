@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ImageOff, Images } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { galleryPublicUrl } from "@/lib/gallery/public-url";
+import { gallerySignedUrls, GALLERY_SIGNED_URL_TTL_SECONDS } from "@/lib/gallery/signed-url";
 import { GalleryLightbox } from "@/components/gallery/gallery-lightbox";
 
 type PreviewImage = {
@@ -11,19 +11,25 @@ type PreviewImage = {
   storage_path: string;
   thumbnail_path: string;
   is_cover: boolean;
+  url: string | null;
+  thumbnailUrl: string | null;
 };
 
 /**
  * Reads the same gallery_images rows regardless of caller: RLS alone decides
  * what's visible (staff see everything for their property, anonymous public
  * booking sees only active=true) — there is no separate public vs. staff
- * query or duplicate data source, satisfying Phase 11's "no separate
- * duplicate image source" requirement by construction.
+ * query or duplicate data source. Signed URLs are resolved in the same
+ * queryFn right after the metadata fetch, batched via gallerySignedUrls, so
+ * a card never needs its own extra round-trip. react-query's staleTime is
+ * kept below the signed URL TTL so a stale-but-still-cached entry never
+ * outlives the URL it points to.
  */
 function useRoomTypeGalleryImages(roomTypeId: string | null | undefined) {
   return useQuery({
     queryKey: ["gallery-room-type-images", roomTypeId],
     enabled: !!roomTypeId,
+    staleTime: (GALLERY_SIGNED_URL_TTL_SECONDS / 2) * 1000,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("gallery_images")
@@ -33,16 +39,25 @@ function useRoomTypeGalleryImages(roomTypeId: string | null | undefined) {
         .order("is_cover", { ascending: false })
         .order("sort_order", { ascending: true });
       if (error) throw error;
-      return (data ?? []) as PreviewImage[];
+      const rows = data ?? [];
+      const urls = await gallerySignedUrls(rows.flatMap((r) => [r.storage_path, r.thumbnail_path]));
+      return rows.map(
+        (r): PreviewImage => ({
+          ...r,
+          url: urls.get(r.storage_path) ?? null,
+          thumbnailUrl: urls.get(r.thumbnail_path) ?? null,
+        }),
+      );
     },
   });
 }
 
-/** Batched cover lookup for a list of room types (public booking results grid) — one query, not N. */
+/** Batched cover lookup for a list of room types (public booking results grid) — one metadata query + one bulk sign call, not N. */
 export function useRoomTypeCoverImages(roomTypeIds: string[]) {
   return useQuery({
     queryKey: ["gallery-room-type-covers", roomTypeIds.slice().sort().join(",")],
     enabled: roomTypeIds.length > 0,
+    staleTime: (GALLERY_SIGNED_URL_TTL_SECONDS / 2) * 1000,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("gallery_images")
@@ -52,13 +67,19 @@ export function useRoomTypeCoverImages(roomTypeIds: string[]) {
         .order("is_cover", { ascending: false })
         .order("sort_order", { ascending: true });
       if (error) throw error;
-      const byRoomType = new Map<string, string>();
+      const coverByRoomType = new Map<string, string>();
       for (const row of data ?? []) {
-        if (!byRoomType.has(row.room_type_id as string)) {
-          byRoomType.set(row.room_type_id as string, row.thumbnail_path as string);
-        }
+        const roomTypeId = row.room_type_id as string;
+        if (!coverByRoomType.has(roomTypeId))
+          coverByRoomType.set(roomTypeId, row.thumbnail_path as string);
       }
-      return byRoomType;
+      const urls = await gallerySignedUrls([...coverByRoomType.values()]);
+      const result = new Map<string, string>();
+      for (const [roomTypeId, path] of coverByRoomType) {
+        const url = urls.get(path);
+        if (url) result.set(roomTypeId, url);
+      }
+      return result;
     },
   });
 }
@@ -74,9 +95,9 @@ export function RoomTypeCoverThumbnail({
   const cover = images.data?.[0];
   return (
     <div className={`overflow-hidden rounded-md bg-muted ${className ?? "h-16 w-16"}`}>
-      {cover ? (
+      {cover?.thumbnailUrl ? (
         <img
-          src={galleryPublicUrl(cover.thumbnail_path)}
+          src={cover.thumbnailUrl}
           alt={cover.title ?? ""}
           className="h-full w-full object-cover"
           loading="lazy"
@@ -100,7 +121,7 @@ export function RoomTypeGalleryStrip({
 }) {
   const images = useRoomTypeGalleryImages(roomTypeId);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
-  const rows = images.data ?? [];
+  const rows = (images.data ?? []).filter((img) => img.thumbnailUrl);
 
   if (images.isLoading) return null;
   if (rows.length === 0) {
@@ -122,7 +143,7 @@ export function RoomTypeGalleryStrip({
             className="h-16 w-16 shrink-0 overflow-hidden rounded-md border bg-muted"
           >
             <img
-              src={galleryPublicUrl(img.thumbnail_path)}
+              src={img.thumbnailUrl!}
               alt={img.title ?? ""}
               className="h-full w-full object-cover"
               loading="lazy"
@@ -137,11 +158,7 @@ export function RoomTypeGalleryStrip({
       )}
       {lightboxIndex !== null && (
         <GalleryLightbox
-          images={rows.map((r) => ({
-            id: r.id,
-            url: galleryPublicUrl(r.storage_path),
-            title: r.title,
-          }))}
+          images={rows.filter((r) => r.url).map((r) => ({ id: r.id, url: r.url!, title: r.title }))}
           startIndex={lightboxIndex}
           onClose={() => setLightboxIndex(null)}
         />

@@ -185,10 +185,19 @@ describe("Gallery migration — permission seeding", () => {
   });
 });
 
-describe("Gallery migration — storage bucket and object policies", () => {
-  it("4. creates a dedicated PUBLIC bucket scoped to image MIME types and an 8 MB size limit, distinct from every private bucket", () => {
-    expect(sql).toMatch(/VALUES \(\s*\n\s*'gallery-images', 'gallery-images', true, 8388608,/);
+describe("Gallery migration — storage bucket and object policies (PRIVATE bucket, PR #62 storage-visibility fix)", () => {
+  it("4. creates a dedicated PRIVATE bucket scoped to image MIME types and an 8 MB size limit — never public, unlike an earlier version of this migration", () => {
+    expect(sql).toMatch(/VALUES \(\s*\n\s*'gallery-images', 'gallery-images', false, 8388608,/);
     expect(sql).toContain("ARRAY['image/jpeg', 'image/png', 'image/webp']");
+    expect(sql).toContain("public = false, file_size_limit = EXCLUDED.file_size_limit");
+    expect(sql).not.toMatch(/'gallery-images', 'gallery-images', true,/);
+  });
+
+  it("documents why the bucket is private — a public bucket was proven live to ignore gallery_images.active entirely", () => {
+    expect(sql).toMatch(
+      /public-object endpoint serves a public bucket's objects\s*\n-- unconditionally, bypassing storage\.objects RLS/,
+    );
+    expect(sql).toContain("Proven live");
   });
 
   it("28. never touches the existing private buckets (uploads/backups/brand-assets/product-images) — no unrelated file is exposed by this change", () => {
@@ -209,8 +218,29 @@ describe("Gallery migration — storage bucket and object policies", () => {
     );
   });
 
-  it("declares no SELECT policy on storage.objects for this bucket — reads go through the public object endpoint, never through RLS", () => {
-    expect(sql).not.toMatch(/CREATE POLICY gallery_images_storage_(read|select)/i);
+  it("2 / 3 / 18 / 19. the anon SELECT policy only matches a path that has a currently-active gallery_images row referencing it — a signed URL can never be minted for a hidden or orphaned object", () => {
+    expect(sql).toMatch(
+      /CREATE POLICY gallery_images_storage_public_read ON storage\.objects\s*\nFOR SELECT TO anon/,
+    );
+    expect(sql).toMatch(
+      /gallery_images_storage_public_read[\s\S]{0,400}EXISTS \(\s*\n\s*SELECT 1 FROM public\.gallery_images gi\s*\n\s*WHERE gi\.active AND \(gi\.storage_path = storage\.objects\.name OR gi\.thumbnail_path = storage\.objects\.name\)/,
+    );
+  });
+
+  it("9 / 10. the staff SELECT policy is has_permission-gated per property and does not require active — this is what lets Gallery Management preview a hidden image without making the bucket public", () => {
+    expect(sql).toMatch(
+      /CREATE POLICY gallery_images_storage_staff_read ON storage\.objects\s*\nFOR SELECT TO authenticated/,
+    );
+    expect(sql).toMatch(
+      /gallery_images_storage_staff_read[\s\S]{0,250}has_permission\(auth\.uid\(\), \(\(storage\.foldername\(name\)\)\[1\]\)::uuid, 'gallery', 'read'\)/,
+    );
+  });
+
+  it("exactly two SELECT policies exist on this bucket's objects — anon (active-gated) and authenticated staff (permission-gated) — no broader read path", () => {
+    const selectPolicies =
+      sql.match(/CREATE POLICY gallery_images_storage_\w+ ON storage\.objects\s*\nFOR SELECT/g) ??
+      [];
+    expect(selectPolicies).toHaveLength(2);
   });
 });
 

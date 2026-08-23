@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { GripVertical, Pencil, Star, Trash2, Eye, EyeOff } from "lucide-react";
+import { useEffect, useState } from "react";
+import { GripVertical, Pencil, Star, Trash2, Eye, EyeOff, ImageOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -22,7 +22,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { galleryPublicUrl } from "@/lib/gallery/public-url";
+import { gallerySignedUrl } from "@/lib/gallery/signed-url";
 import { GALLERY_CONTEXT_LABELS, type GalleryContext } from "@/lib/gallery/domain";
 
 export type GalleryImageRow = {
@@ -68,6 +68,18 @@ export function GalleryImageCard({
   const [title, setTitle] = useState(image.title ?? "");
   const [caption, setCaption] = useState(image.caption ?? "");
   const [saving, setSaving] = useState(false);
+  const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setThumbnailUrl(null);
+    gallerySignedUrl(image.thumbnail_path).then((url) => {
+      if (!cancelled) setThumbnailUrl(url);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [image.thumbnail_path]);
 
   async function handleSave() {
     setSaving(true);
@@ -90,12 +102,18 @@ export function GalleryImageCard({
       className="group relative overflow-hidden rounded-md border bg-card"
     >
       <div className="relative aspect-square bg-muted">
-        <img
-          src={galleryPublicUrl(image.thumbnail_path)}
-          alt={image.title ?? ""}
-          className="h-full w-full object-cover"
-          loading="lazy"
-        />
+        {thumbnailUrl ? (
+          <img
+            src={thumbnailUrl}
+            alt={image.title ?? ""}
+            className="h-full w-full object-cover"
+            loading="lazy"
+          />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center">
+            <ImageOff className="h-5 w-5 text-muted-foreground" />
+          </div>
+        )}
         {draggable && (
           <div className="absolute left-1 top-1 rounded bg-background/80 p-0.5">
             <GripVertical className="h-3.5 w-3.5 text-muted-foreground" />

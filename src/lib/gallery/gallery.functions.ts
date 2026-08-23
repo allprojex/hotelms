@@ -262,6 +262,17 @@ export const reorderGalleryImages = createServerFn({ method: "POST" })
  * storage removal is best-effort: a missing/already-gone object must never
  * block the metadata delete from completing, so the DB stays the source of
  * truth even if a prior partial failure already removed one of the objects.
+ *
+ * A left-behind object is inert, not a public leak: the bucket is private,
+ * and the anon read policy on storage.objects requires a matching
+ * gallery_images row to exist — once this row is gone, no anonymous signed
+ * URL can ever be minted for either path again, regardless of the object's
+ * physical presence. Staff with the gallery read permission for this
+ * property can still sign it (by design — see the staff storage policy),
+ * which is exactly what makes the failure below actionable: a
+ * gallery_image.orphan_storage_object audit row records the exact paths so
+ * a follow-up cleanup pass (or a support engineer, using their own
+ * authenticated session) can find and remove it later.
  */
 export const deleteGalleryImage = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -293,6 +304,19 @@ export const deleteGalleryImage = createServerFn({ method: "POST" })
         data.imageId,
         removed.error,
       );
+      await captureAuditEvent(context, {
+        propertyId: data.propertyId,
+        sourceModule: "gallery",
+        action: "gallery_image.orphan_storage_object",
+        resourceType: "gallery_image",
+        resourceId: data.imageId,
+        newValues: {
+          storagePath: existing.data.storage_path,
+          thumbnailPath: existing.data.thumbnail_path,
+          error: removed.error.message,
+        },
+        success: false,
+      });
     }
 
     await captureAuditEvent(context, {

@@ -9,7 +9,6 @@ import { ArrowLeft, BedDouble, Users, Sparkles, ImageOff } from "lucide-react";
 import { z } from "zod";
 import { useMemo } from "react";
 import { useRoomTypeCoverImages } from "@/components/gallery/room-type-gallery-preview";
-import { galleryPublicUrl } from "@/lib/gallery/public-url";
 
 const searchSchema = z.object({
   propertyId: z.string().uuid(),
@@ -96,7 +95,7 @@ function BookResults() {
                   <div className="hidden md:block h-full min-h-[140px] bg-muted">
                     {covers.data?.get(rt.room_type_id) ? (
                       <img
-                        src={galleryPublicUrl(covers.data.get(rt.room_type_id)!)}
+                        src={covers.data.get(rt.room_type_id)!}
                         alt={rt.room_type_name}
                         className="h-full w-full object-cover"
                         loading="lazy"

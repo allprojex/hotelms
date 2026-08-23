@@ -100,9 +100,9 @@ describe("Image card — edit, delete, cover, visibility, reorder", () => {
     expect(imageCard).toContain("onDrop={onDrop}");
   });
 
-  it("22. renders the thumbnail_path, never the full-resolution storage_path, in the grid card", () => {
-    expect(imageCard).toContain("galleryPublicUrl(image.thumbnail_path)");
-    expect(imageCard).not.toContain("galleryPublicUrl(image.storage_path)");
+  it("22. signs the thumbnail_path, never the full-resolution storage_path, for the grid card", () => {
+    expect(imageCard).toContain("gallerySignedUrl(image.thumbnail_path)");
+    expect(imageCard).not.toContain("gallerySignedUrl(image.storage_path)");
   });
 });
 
@@ -207,10 +207,11 @@ describe("Shared gallery-read component — one data source for staff and public
     expect(bookResults).toContain("ImageOff");
   });
 
-  it("22. list/grid/card views use thumbnail_path; only the lightbox (single enlarged view) uses the full storage_path", () => {
-    expect(preview).toContain("galleryPublicUrl(cover.thumbnail_path)");
-    expect(preview).toContain("galleryPublicUrl(img.thumbnail_path)");
-    expect(preview).toContain("url: galleryPublicUrl(r.storage_path)");
+  it("22. list/grid/card views resolve a signed thumbnail URL; only the lightbox (single enlarged view) resolves the full-resolution one", () => {
+    expect(preview).toContain("urls.get(r.storage_path)");
+    expect(preview).toContain("urls.get(r.thumbnail_path)");
+    expect(preview).toContain("cover?.thumbnailUrl");
+    expect(preview).toContain("img.thumbnailUrl");
   });
 
   it("30. the public booking results grid batches one query across every visible room type instead of one query per card (no N+1)", () => {
