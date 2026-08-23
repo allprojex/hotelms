@@ -11,8 +11,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Plus, Trash2, Pencil, Upload } from "lucide-react";
+import { Plus, Trash2, Pencil, Upload, Search } from "lucide-react";
 import { toast } from "sonner";
+import { matchesSearch, menuItemSearchText } from "@/lib/search-filter";
 
 export const Route = createFileRoute("/_authenticated/pos/menu")({
   head: () => ({ meta: [{ title: "POS Menu" }] }),
@@ -27,6 +28,7 @@ function MenuPage() {
     queryFn: async () => (await (supabase.from as any)("pos_outlets").select("*").eq("property_id", propertyId).order("name")).data ?? [],
   });
   const [outletId, setOutletId] = useState<string>("");
+  const [itemQuery, setItemQuery] = useState("");
   const outlet = outlets.data?.find((o: any) => o.id === outletId) ?? outlets.data?.[0];
 
   const cats = useQuery({
@@ -37,6 +39,7 @@ function MenuPage() {
     queryKey: ["menu-items", outlet?.id], enabled: !!outlet?.id,
     queryFn: async () => (await (supabase.from as any)("pos_menu_items").select("*, pos_menu_categories(name), inventory_items(name)").eq("outlet_id", outlet.id).order("name")).data ?? [],
   });
+  const filteredItems = (items.data ?? []).filter((it: any) => matchesSearch(menuItemSearchText(it), itemQuery));
   const inv = useQuery({
     queryKey: ["menu-inv", propertyId], enabled: !!propertyId,
     queryFn: async () => (await (supabase.from as any)("inventory_items").select("id,sku,name").eq("property_id", propertyId).eq("active", true).order("name")).data ?? [],
@@ -89,14 +92,22 @@ function MenuPage() {
           </Card>
 
           <Card>
-            <div className="flex items-center justify-between p-3">
+            <div className="flex items-center justify-between p-3 flex-wrap gap-2">
               <div className="text-sm font-semibold">Items</div>
-              <ItemDialog propertyId={propertyId} outletId={outlet.id} cats={cats.data ?? []} inv={inv.data ?? []} onDone={() => qc.invalidateQueries({ queryKey: ["menu-items", outlet.id] })} />
+              <div className="flex items-center gap-2">
+                {(items.data?.length ?? 0) > 0 && (
+                  <div className="relative">
+                    <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input placeholder="Search items…" className="pl-8 w-56" value={itemQuery} onChange={(e) => setItemQuery(e.target.value)} />
+                  </div>
+                )}
+                <ItemDialog propertyId={propertyId} outletId={outlet.id} cats={cats.data ?? []} inv={inv.data ?? []} onDone={() => qc.invalidateQueries({ queryKey: ["menu-items", outlet.id] })} />
+              </div>
             </div>
             <Table>
               <TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Category</TableHead><TableHead>Linked stock</TableHead><TableHead className="text-right">Price</TableHead><TableHead></TableHead></TableRow></TableHeader>
               <TableBody>
-                {items.data?.map((it: any) => (
+                {filteredItems.map((it: any) => (
                   <TableRow key={it.id}>
                     <TableCell className="font-medium">{it.name}</TableCell>
                     <TableCell>{it.pos_menu_categories?.name ?? "—"}</TableCell>
@@ -109,6 +120,9 @@ function MenuPage() {
                   </TableRow>
                 ))}
                 {items.data?.length === 0 && <TableRow><TableCell colSpan={5} className="py-8 text-center text-muted-foreground">No items yet.</TableCell></TableRow>}
+                {(items.data?.length ?? 0) > 0 && filteredItems.length === 0 && (
+                  <TableRow><TableCell colSpan={5} className="py-8 text-center text-muted-foreground">No items match "{itemQuery}".</TableCell></TableRow>
+                )}
               </TableBody>
             </Table>
           </Card>
