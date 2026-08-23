@@ -159,7 +159,7 @@ export function DashboardSearch({ propertyId }: { propertyId: string }) {
               {matchedReservations.map((r) => (
                 <CommandItem
                   key={r.id}
-                  value={`reservation-${r.id}`}
+                  value={`${reservationSearchText(r)} ${r.id}`}
                   onSelect={() => {
                     close();
                     navigate({ to: "/reservations/$id", params: { id: r.id } });
@@ -176,7 +176,7 @@ export function DashboardSearch({ propertyId }: { propertyId: string }) {
               {matchedGuests.map((g) => (
                 <CommandItem
                   key={g.id}
-                  value={`guest-${g.id}`}
+                  value={`${guestSearchText(g)} ${g.id}`}
                   onSelect={() => {
                     close();
                     navigate({ to: "/guests/$id", params: { id: g.id } });
@@ -193,7 +193,7 @@ export function DashboardSearch({ propertyId }: { propertyId: string }) {
               {matchedRooms.map((r) => (
                 <CommandItem
                   key={r.id}
-                  value={`room-${r.id}`}
+                  value={`${roomSearchText(r)} ${r.id}`}
                   onSelect={() => {
                     close();
                     navigate({ to: "/rooms" });
