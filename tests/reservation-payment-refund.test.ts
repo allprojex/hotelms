@@ -3,21 +3,26 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const root = resolve(__dirname, "..");
-const migration = readFileSync(
+// Normalized to LF immediately on read: this repo's git blobs are LF, but a
+// Windows checkout with core.autocrlf materializes tracked files as CRLF on
+// disk (confirmed via `git cat-file -p` vs a direct fs read of the same
+// file after a later `git checkout` re-materialized it) — normalizing here
+// once keeps every assertion below independent of which state the working
+// tree happens to be in at test-run time, rather than each test needing its
+// own \r?\n-tolerant pattern.
+const readNormalized = (p: string) => readFileSync(p, "utf8").replace(/\r\n/g, "\n");
+const migration = readNormalized(
   resolve(root, "supabase/migrations/20260822130000_reservation_payment_refund.sql"),
-  "utf8",
 );
-const reservationPage = readFileSync(
+const reservationPage = readNormalized(
   resolve(root, "src/routes/_authenticated/reservations.$id.tsx"),
-  "utf8",
 );
-const dashboardPage = readFileSync(resolve(root, "src/routes/_authenticated/dashboard.tsx"), "utf8");
-const reportsPage = readFileSync(resolve(root, "src/routes/_authenticated/reports.tsx"), "utf8");
-const insightsFns = readFileSync(resolve(root, "src/lib/insights.functions.ts"), "utf8");
-const pdfFns = readFileSync(resolve(root, "src/lib/admin/pdf.functions.ts"), "utf8");
-const foundation = readFileSync(
+const dashboardPage = readNormalized(resolve(root, "src/routes/_authenticated/dashboard.tsx"));
+const reportsPage = readNormalized(resolve(root, "src/routes/_authenticated/reports.tsx"));
+const insightsFns = readNormalized(resolve(root, "src/lib/insights.functions.ts"));
+const pdfFns = readNormalized(resolve(root, "src/lib/admin/pdf.functions.ts"));
+const foundation = readNormalized(
   resolve(root, "supabase/migrations/20260705025821_92278fdb-63f6-4a91-922f-a7cb4005b441.sql"),
-  "utf8",
 );
 
 function fn(source: string, name: string): string {
