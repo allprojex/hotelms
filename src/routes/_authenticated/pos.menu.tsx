@@ -95,12 +95,10 @@ function MenuPage() {
             <div className="flex items-center justify-between p-3 flex-wrap gap-2">
               <div className="text-sm font-semibold">Items</div>
               <div className="flex items-center gap-2">
-                {(items.data?.length ?? 0) > 0 && (
-                  <div className="relative">
-                    <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                    <Input placeholder="Search items…" className="pl-8 w-56" value={itemQuery} onChange={(e) => setItemQuery(e.target.value)} />
-                  </div>
-                )}
+                <div className="relative">
+                  <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input placeholder="Search items…" className="pl-8 w-56" value={itemQuery} onChange={(e) => setItemQuery(e.target.value)} />
+                </div>
                 <ItemDialog propertyId={propertyId} outletId={outlet.id} cats={cats.data ?? []} inv={inv.data ?? []} onDone={() => qc.invalidateQueries({ queryKey: ["menu-items", outlet.id] })} />
               </div>
             </div>
