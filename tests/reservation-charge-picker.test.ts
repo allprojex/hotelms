@@ -58,8 +58,8 @@ describe("ChargeItemPicker — active/inactive item handling", () => {
 
 describe("ChargeItemPicker — search behavior", () => {
   it("uses the shared matchesSearch()/menuItemSearchText() helpers (same case-insensitive, partial-match semantics as POS order/menu search)", () => {
-    expect(reservationPage).toContain(
-      'import { matchesSearch, menuItemSearchText } from "@/lib/search-filter"',
+    expect(reservationPage).toMatch(
+      /import \{[^}]*\bmatchesSearch\b[^}]*\bmenuItemSearchText\b[^}]*\} from "@\/lib\/search-filter"/,
     );
     expect(reservationPage).toMatch(
       /\.filter\(\(it: any\) => matchesSearch\(menuItemSearchText\(it\), query\)\)/,
