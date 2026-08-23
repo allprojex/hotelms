@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { validateInventoryImportBatch } from "@/lib/inventory/import-validation";
 
 const ADMIN_ROLES = ["super_admin", "hotel_owner", "general_manager"] as const;
 
@@ -21,6 +22,7 @@ export const createUpload = createServerFn({ method: "POST" })
     propertyId: string; targetKind: UploadTargetKind;
     filename: string; storagePath?: string;
     rows: Record<string, unknown>[];
+    duplicateMode?: "skip" | "reject";
   }) => {
     if (!d.propertyId) throw new Error("propertyId required");
     if (!Array.isArray(d.rows) || d.rows.length === 0) throw new Error("rows required");
@@ -31,11 +33,16 @@ export const createUpload = createServerFn({ method: "POST" })
     await assertAdmin(context, data.propertyId);
     const { supabase } = context;
 
-    // Duplicate detection summary (very simple: repeated 'name' or 'code' fields)
+    // Duplicate detection summary. Inventory rows are keyed on SKU alone
+    // (the field the DB itself enforces uniqueness on), not the generic
+    // code/name/sku fallback used for the other targets, so two inventory
+    // rows sharing a name but with distinct SKUs are never misflagged.
     const seen = new Map<string, number>();
     const duplicates: number[] = [];
     data.rows.forEach((r, i) => {
-      const k = String(r.code ?? r.name ?? r.sku ?? "").trim().toLowerCase();
+      const k = data.targetKind === "inventory"
+        ? String(r.sku ?? "").trim().toLowerCase()
+        : String(r.code ?? r.name ?? r.sku ?? "").trim().toLowerCase();
       if (!k) return;
       if (seen.has(k)) duplicates.push(i); else seen.set(k, i);
     });
@@ -48,7 +55,7 @@ export const createUpload = createServerFn({ method: "POST" })
       storage_path: data.storagePath ?? null,
       row_count: data.rows.length,
       status: "pending",
-      summary: { duplicates: duplicates.length, distinctKeys: seen.size },
+      summary: { duplicates: duplicates.length, distinctKeys: seen.size, duplicateMode: data.duplicateMode ?? "skip" },
       errors: duplicates.length ? [{ code: "duplicate_rows", rows: duplicates }] : [],
     }).select("id").single();
     if (upErr) throw new Error(upErr.message);
@@ -83,13 +90,21 @@ export const approveUpload = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await assertAdmin(context, data.propertyId);
     const { supabase } = context;
-    const { data: up, error: upErr } = await (supabase.from("data_uploads") as any)
-      .select("*").eq("id", data.uploadId).single();
-    if (upErr) throw new Error(upErr.message);
-    if (up.status !== "pending") throw new Error(`Upload is ${up.status}`);
+    // Atomic claim, not a plain select-then-check: two concurrent Approve
+    // calls for the same upload both racing past a "status === 'pending'"
+    // read would otherwise both proceed to import. The UPDATE's row-level
+    // lock lets only one of them flip pending -> processing; the loser
+    // gets zero rows back and is rejected before touching anything.
+    const { data: claimed, error: claimErr } = await (supabase.from("data_uploads") as any)
+      .update({ status: "processing" })
+      .eq("id", data.uploadId).eq("status", "pending")
+      .select("*").maybeSingle();
+    if (claimErr) throw new Error(claimErr.message);
+    if (!claimed) throw new Error("Upload is not pending (already processed, or being processed by another request)");
+    const up = claimed;
 
     const { data: rows } = await (supabase.from("data_upload_rows") as any)
-      .select("row_index,payload,status").eq("upload_id", data.uploadId).order("row_index");
+      .select("id,row_index,payload,status").eq("upload_id", data.uploadId).order("row_index");
 
     let imported = 0;
     const errors: any[] = [];
@@ -133,7 +148,7 @@ export const approveUpload = createServerFn({ method: "POST" })
         if (error) errors.push({ row: r.row_index, error: error.message });
         else imported++;
       }
-    } else if (up.target_kind === "inventory" || up.target_kind === "product") {
+    } else if (up.target_kind === "product") {
       for (const r of rows ?? []) {
         const p = r.payload as any;
         if (r.status === "duplicate") continue;
@@ -147,6 +162,118 @@ export const approveUpload = createServerFn({ method: "POST" })
         });
         if (error) errors.push({ row: r.row_index, error: error.message });
         else imported++;
+      }
+    } else if (up.target_kind === "inventory") {
+      // Hardened inventory import: the whole confirmed mutation set (every
+      // candidate row's item creation + opening item_stock + opening
+      // inventory_stock_batches) commits or rolls back together in ONE
+      // call to import_inventory_items() -- never several independent
+      // per-row RPC calls, which would each be their own transaction and
+      // let an unexpected failure on row N leave rows 1..N-1 committed.
+      // Re-validates every row against a FRESH read of existing
+      // SKUs/locations (never trusts the client's earlier Preview-time
+      // validation), using the exact same validateInventoryImportBatch()
+      // the Preview UI already ran.
+      const duplicateMode = up.summary?.duplicateMode === "reject" ? "reject" : "skip";
+
+      const [{ data: existingItems }, { data: existingLocations }] = await Promise.all([
+        (supabase.from("inventory_items") as any).select("sku").eq("property_id", data.propertyId),
+        (supabase.from("stock_locations") as any).select("name").eq("property_id", data.propertyId),
+      ]);
+      const ctx = {
+        existingSkusLower: new Set<string>((existingItems ?? []).map((i: any) => String(i.sku).toLowerCase())),
+        validLocationNamesLower: new Set<string>((existingLocations ?? []).map((l: any) => String(l.name).toLowerCase())),
+      };
+
+      const eligibleRows = (rows ?? []).filter((r: any) => r.status !== "duplicate");
+      const batch = validateInventoryImportBatch(eligibleRows.map((r: any) => r.payload as Record<string, unknown>), ctx);
+
+      if (duplicateMode === "reject" && batch.totals.duplicateInProperty > 0) {
+        const dupSkus = batch.rows
+          .filter((row) => row.isDuplicateInProperty && !row.isDuplicateInFile)
+          .map((row) => row.parsed?.sku ?? "?");
+        const message = `Import rejected: duplicate SKU(s) already exist in this property: ${dupSkus.join(", ")}`;
+        await (supabase.from("data_uploads") as any).update({
+          status: "rejected", approved_by: context.userId, approved_at: new Date().toISOString(),
+          summary: { ...up.summary, imported: 0, errors: 0, rejectedReason: message },
+        }).eq("id", data.uploadId);
+        throw new Error(message);
+      }
+
+      // Rows that never reach the atomic mutation set at all: blank,
+      // example, individually-invalid, or an in-file SKU duplicate (never
+      // sent into the same transaction as the row it duplicates -- the DB's
+      // own UNIQUE(property_id, sku) would otherwise turn an already-known,
+      // already-reported problem into an "unexpected" whole-batch failure).
+      const candidates: { r: any; v: (typeof batch.rows)[number] }[] = [];
+      for (let i = 0; i < eligibleRows.length; i++) {
+        const r = eligibleRows[i];
+        const v = batch.rows[i];
+        if (v.isBlank || v.isExample) {
+          await (supabase.from("data_upload_rows") as any)
+            .update({ status: v.isExample ? "example_skipped" : "blank_skipped" }).eq("id", r.id);
+          continue;
+        }
+        if (v.errors.length > 0 || !v.parsed) {
+          const msg = v.errors.join("; ") || "Invalid row";
+          errors.push({ row: r.row_index, error: msg });
+          await (supabase.from("data_upload_rows") as any).update({ status: "error", error: msg }).eq("id", r.id);
+          continue;
+        }
+        if (v.isDuplicateInFile) {
+          await (supabase.from("data_upload_rows") as any).update({ status: "skipped_duplicate" }).eq("id", r.id);
+          continue;
+        }
+        candidates.push({ r, v });
+      }
+
+      // Everything left (candidates) is sent to import_inventory_items() as
+      // ONE call -- one PostgreSQL transaction for the whole confirmed
+      // mutation set. A known existing-property duplicate is still included
+      // here rather than pre-filtered: the RPC's own duplicate check (a
+      // normal skip, not an exception) is the race-safe authority for
+      // "does this SKU exist right now", covering a SKU created between
+      // Preview and this Approve call.
+      if (candidates.length > 0) {
+        const payload = candidates.map(({ v }) => ({
+          name: v.parsed!.name, sku: v.parsed!.sku, category: v.parsed!.category, unit: v.parsed!.unit,
+          cost: v.parsed!.cost, sale_price: v.parsed!.salePrice, reorder_level: v.parsed!.reorderLevel,
+          location: v.parsed!.location, opening_quantity: v.parsed!.openingQuantity, expiry_date: v.parsed!.expiryDate,
+        }));
+        try {
+          const { data: bulkResult, error: bulkError } = await (context.supabase.rpc as any)("import_inventory_items", {
+            _property_id: data.propertyId, _rows: payload, _duplicate_mode: duplicateMode,
+          });
+          if (bulkError) throw new Error(bulkError.message);
+          const results = (bulkResult?.results ?? []) as any[];
+          for (let i = 0; i < candidates.length; i++) {
+            const { r } = candidates[i];
+            if (results[i]?.skipped) {
+              await (supabase.from("data_upload_rows") as any).update({ status: "skipped_duplicate" }).eq("id", r.id);
+            } else {
+              imported++;
+              await (supabase.from("data_upload_rows") as any).update({ status: "imported" }).eq("id", r.id);
+            }
+          }
+        } catch (bulkErr: any) {
+          // Whole-batch failure: NOTHING among `candidates` was committed
+          // (the RPC's own transaction rolled back entirely). Every
+          // candidate row is marked failed -- none of them silently stay
+          // "pending" or get mismarked as imported -- and the upload itself
+          // is finalized as rejected/failed before this rethrows, so the
+          // audit record never claims a rolled-back import completed.
+          const msg = `Import failed and was rolled back: ${bulkErr.message}`;
+          for (const { r } of candidates) {
+            errors.push({ row: r.row_index, error: msg });
+            await (supabase.from("data_upload_rows") as any).update({ status: "error", error: msg }).eq("id", r.id);
+          }
+          await (supabase.from("data_uploads") as any).update({
+            status: "rejected", approved_by: context.userId, approved_at: new Date().toISOString(),
+            summary: { ...up.summary, imported: 0, errors: errors.length, rejectedReason: msg },
+            errors: [...(up.errors ?? []), ...errors],
+          }).eq("id", data.uploadId);
+          throw new Error(msg);
+        }
       }
     } else {
       // service / price_list — record as approved-only (implementers wire specific tables later).
