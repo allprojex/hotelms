@@ -26,6 +26,7 @@ import { getActivePropertyId, setActivePropertyId } from "@/lib/property-store";
 import { toast } from "sonner";
 import { NotificationBell } from "@/components/notification-bell";
 import { getPasswordChangeState } from "@/lib/auth.functions";
+import { GlobalSearch } from "@/components/global-search";
 
 export function TopBar() {
   const navigate = useNavigate();
@@ -105,6 +106,7 @@ export function TopBar() {
         )}
       </div>
       <div className="flex items-center gap-2">
+        <GlobalSearch />
         <NotificationBell />
         <Button
           variant="ghost"

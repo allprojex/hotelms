@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useActiveProperty } from "@/hooks/use-active-property";
 import {
   CommandDialog,
   CommandEmpty,
@@ -41,18 +42,22 @@ interface RoomSearchRow {
   room_types: { name: string | null } | null;
 }
 
-// Dashboard "quick jump" search. Deliberately reuses the exact same
-// property-scoped queries (and queryKeys, so the React Query cache is
-// shared) already used by reservations.index.tsx / guests.index.tsx /
-// rooms.index.tsx — no new backend/search service, no broadened data
-// access: a user can only ever find rows their existing list pages would
-// already show them, filtered client-side the same way CrudTable/those
-// pages already do. Rooms have no per-room detail route in this app, so
-// room results link to the rooms list rather than a fabricated detail page.
-export function DashboardSearch({ propertyId }: { propertyId: string }) {
+// Global "quick jump" search, mounted once in TopBar (so it's reachable from
+// every authenticated page via the button or Ctrl/Cmd+K) rather than living
+// inside the Dashboard page's own content. Self-contained: reads the active
+// property itself via useActiveProperty() (the same hook/events TopBar's own
+// property switcher already dispatches), so switching property elsewhere
+// automatically rescopes results here too. Reuses the exact same
+// property-scoped queries (and queryKeys, so the cache is shared) already
+// used by reservations.index.tsx / guests.index.tsx / rooms.index.tsx — no
+// new backend/search service, no broadened data access. Rooms have no
+// per-room detail route in this app, so room results link to the rooms list
+// rather than a fabricated detail page.
+export function GlobalSearch() {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const navigate = useNavigate();
+  const propertyId = useActiveProperty();
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -74,7 +79,7 @@ export function DashboardSearch({ propertyId }: { propertyId: string }) {
         .select(
           "id, code, check_in, status, guests(first_name,last_name,email), room_types(name), rooms(number)",
         )
-        .eq("property_id", propertyId)
+        .eq("property_id", propertyId!)
         .order("check_in", { ascending: false })
         .limit(200);
       if (error) throw error;
@@ -89,7 +94,7 @@ export function DashboardSearch({ propertyId }: { propertyId: string }) {
       const { data, error } = await supabase
         .from("guests")
         .select("*")
-        .eq("property_id", propertyId)
+        .eq("property_id", propertyId!)
         .order("last_name")
         .limit(500);
       if (error) throw error;
@@ -104,7 +109,7 @@ export function DashboardSearch({ propertyId }: { propertyId: string }) {
       const { data, error } = await supabase
         .from("rooms")
         .select("*, room_types(name)")
-        .eq("property_id", propertyId)
+        .eq("property_id", propertyId!)
         .order("number");
       if (error) throw error;
       return data as unknown as RoomSearchRow[];
@@ -133,13 +138,22 @@ export function DashboardSearch({ propertyId }: { propertyId: string }) {
   return (
     <>
       <Button
+        variant="ghost"
+        size="icon"
+        className="text-muted-foreground sm:hidden"
+        onClick={() => setOpen(true)}
+        aria-label="Search"
+      >
+        <Search className="h-4 w-4" />
+      </Button>
+      <Button
         variant="outline"
-        className="gap-2 text-muted-foreground"
+        className="hidden gap-2 text-muted-foreground sm:inline-flex"
         onClick={() => setOpen(true)}
       >
         <Search className="h-4 w-4" />
         Search
-        <kbd className="hidden sm:inline-flex ml-2 pointer-events-none select-none items-center gap-1 rounded border bg-muted px-1.5 text-[10px] font-medium">
+        <kbd className="ml-2 hidden pointer-events-none select-none items-center gap-1 rounded border bg-muted px-1.5 text-[10px] font-medium md:inline-flex">
           Ctrl K
         </kbd>
       </Button>
@@ -150,8 +164,15 @@ export function DashboardSearch({ propertyId }: { propertyId: string }) {
           onValueChange={setQ}
         />
         <CommandList>
-          {!loading && !hasResults && <CommandEmpty>No results for “{q}”.</CommandEmpty>}
-          {loading && (
+          {!propertyId && (
+            <div className="py-6 text-center text-sm text-muted-foreground">
+              Select a property first.
+            </div>
+          )}
+          {propertyId && !loading && !hasResults && (
+            <CommandEmpty>No results for “{q}”.</CommandEmpty>
+          )}
+          {propertyId && loading && (
             <div className="py-6 text-center text-sm text-muted-foreground">Searching…</div>
           )}
           {matchedReservations.length > 0 && (

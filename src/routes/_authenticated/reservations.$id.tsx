@@ -10,11 +10,14 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { format } from "date-fns";
 import { toast } from "sonner";
-import { LogIn, LogOut, XCircle, Plus, Printer, Undo2 } from "lucide-react";
+import { LogIn, LogOut, XCircle, Plus, Printer, Undo2, Search } from "lucide-react";
 import { useHasAnyRole } from "@/hooks/use-user-roles";
 import { ACCOUNTING_ADMIN_ROLES } from "@/lib/accounting/permissions";
+import { matchesSearch, menuItemSearchText } from "@/lib/search-filter";
 
 export const Route = createFileRoute("/_authenticated/reservations/$id")({
   head: () => ({ meta: [{ title: "Reservation" }] }),
@@ -203,7 +206,7 @@ function ReservationDetail() {
         <CardHeader className="flex-row items-center justify-between">
           <CardTitle className="text-base">Folio</CardTitle>
           <div className="flex gap-2">
-            <AddCharge reservationId={id} onDone={() => qc.invalidateQueries({ queryKey: ["charges", id] })} />
+            <AddCharge reservationId={id} propertyId={res.data?.property_id} onDone={() => qc.invalidateQueries({ queryKey: ["charges", id] })} />
             <AddPayment reservationId={id} balance={balance} onDone={() => qc.invalidateQueries({ queryKey: ["payments", id] })} />
           </div>
         </CardHeader>
@@ -329,7 +332,7 @@ function SummaryLine({ label, value, currency, highlight }: { label: string; val
   );
 }
 
-function AddCharge({ reservationId, onDone }: { reservationId: string; onDone: () => void }) {
+function AddCharge({ reservationId, propertyId, onDone }: { reservationId: string; propertyId?: string; onDone: () => void }) {
   const [open, setOpen] = useState(false);
   const [desc, setDesc] = useState("");
   const [amount, setAmount] = useState("");
@@ -339,6 +342,16 @@ function AddCharge({ reservationId, onDone }: { reservationId: string; onDone: (
       <DialogContent>
         <DialogHeader><DialogTitle>Post a charge</DialogTitle></DialogHeader>
         <div className="space-y-3">
+          <div>
+            <Label>Search a product (optional)</Label>
+            <ChargeItemPicker
+              propertyId={propertyId}
+              onPick={(item) => { setDesc(item.name); setAmount(String(item.price)); }}
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              Picking a product fills in the description and amount below — you can still edit either before posting.
+            </p>
+          </div>
           <div><Label>Description</Label><Input value={desc} onChange={(e) => setDesc(e.target.value)} /></div>
           <div><Label>Amount</Label><Input type="number" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} /></div>
         </div>
@@ -354,6 +367,79 @@ function AddCharge({ reservationId, onDone }: { reservationId: string; onDone: (
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+// Searchable picker over the property's existing sellable-item catalog
+// (pos_menu_items — the same catalog POS Terminal/Menu already search).
+// Deliberately does NOT create a new product/rate-item table: charges are
+// simple copy-on-select (name -> description, price -> amount) into the
+// existing reservation_charges columns, exactly like a manually-typed
+// charge — no new source-link column, no live reference back to the
+// catalog item. See the design note in the PR description for why a copy
+// is safer than a link here (charge history must not retroactively change
+// if a catalog price is edited later; reservation_charges has no existing
+// source-tracking columns to begin with, and none of the reads of this
+// table anywhere in the app expect one).
+function ChargeItemPicker({
+  propertyId,
+  onPick,
+}: {
+  propertyId?: string;
+  onPick: (item: { name: string; price: number }) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+
+  const items = useQuery({
+    queryKey: ["charge-item-picker", propertyId],
+    enabled: open && !!propertyId,
+    queryFn: async () => {
+      const { data, error } = await (supabase.from as any)("pos_menu_items")
+        .select("id, name, price, active, pos_menu_categories(name), pos_outlets(name)")
+        .eq("property_id", propertyId)
+        .eq("active", true)
+        .order("name");
+      if (error) throw error;
+      return (data ?? []) as any[];
+    },
+  });
+
+  const matched = (items.data ?? [])
+    .filter((it: any) => matchesSearch(menuItemSearchText(it), query))
+    .slice(0, 50);
+
+  return (
+    <Popover open={open} onOpenChange={(v) => { setOpen(v); if (!v) setQuery(""); }}>
+      <PopoverTrigger asChild>
+        <Button type="button" variant="outline" size="sm" className="w-full justify-start font-normal text-muted-foreground">
+          <Search className="h-3.5 w-3.5 mr-2" /> Search products…
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[360px] p-0" align="start">
+        <Command shouldFilter={false}>
+          <CommandInput placeholder="Search by name or category…" value={query} onValueChange={setQuery} />
+          <CommandList className="max-h-72">
+            {!propertyId && <div className="py-6 text-center text-sm text-muted-foreground">Loading property…</div>}
+            {propertyId && items.isLoading && <div className="py-6 text-center text-sm text-muted-foreground">Searching…</div>}
+            {propertyId && !items.isLoading && matched.length === 0 && <CommandEmpty>No products found.</CommandEmpty>}
+            {matched.map((it: any) => (
+              <CommandItem
+                key={it.id}
+                value={`${menuItemSearchText(it)} ${it.id}`}
+                onSelect={() => { onPick({ name: it.name, price: Number(it.price) }); setOpen(false); setQuery(""); }}
+              >
+                <span className="flex-1">{it.name}</span>
+                {it.pos_menu_categories?.name && (
+                  <span className="text-xs text-muted-foreground mr-2">{it.pos_menu_categories.name}</span>
+                )}
+                <span className="font-mono text-xs">{Number(it.price).toFixed(2)}</span>
+              </CommandItem>
+            ))}
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
   );
 }
 
