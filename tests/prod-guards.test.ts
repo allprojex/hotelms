@@ -547,24 +547,43 @@ describe("runMigrate — real incident fix regression (2026-08-22): a real --che
 
   function fakeRunCli({ pendingFilename, applyShouldFail = false } = {}) {
     const calls: { cmd: string; args: string[] }[] = [];
+    let dryRunCalls = 0;
     const fn = async (cmd: string, args: string[]) => {
       calls.push({ cmd, args });
       if (args.includes("--dry-run")) {
-        return {
-          stdout: [
-            "DRY RUN: migrations will *not* be pushed to the database.",
-            "Connecting to remote database...",
-            "Would push these migrations:",
-            ` • ${pendingFilename}`,
-            "Finished supabase db push.",
-            "",
-          ].join("\n"),
-          stderr: "",
-        };
+        dryRunCalls++;
+        if (dryRunCalls === 1) {
+          // Pre-apply dry-run: the approved migration is pending.
+          return {
+            stdout: [
+              "DRY RUN: migrations will *not* be pushed to the database.",
+              "Connecting to remote database...",
+              "Would push these migrations:",
+              ` • ${pendingFilename}`,
+              "Finished supabase db push.",
+              "",
+            ].join("\n"),
+            stderr: "",
+          };
+        }
+        // Post-apply dry-run: everything has now been applied.
+        return { stdout: "Local database is up to date.\n", stderr: "" };
       }
       if (args.includes("--yes")) {
         if (applyShouldFail) throw new Error("simulated apply failure — not a real DB write");
         return { stdout: "Finished supabase db push.\n", stderr: "" };
+      }
+      if (args[0] === "migration" && args[1] === "list") {
+        const ts = pendingFilename.match(/^(\d{14})_/)?.[1] ?? "00000000000000";
+        return {
+          stdout: [
+            "   Local          | Remote         | Time (UTC)          ",
+            "  ----------------|----------------|---------------------",
+            `   ${ts} | ${ts} | 2026-08-22 12:00:00 `,
+            "",
+          ].join("\n"),
+          stderr: "",
+        };
       }
       throw new Error(`fakeRunCli: unexpected args ${JSON.stringify(args)}`);
     };
@@ -597,7 +616,7 @@ describe("runMigrate — real incident fix regression (2026-08-22): a real --che
     expect(calls.some((c) => c.args.includes("--yes"))).toBe(false);
   });
 
-  it("apply mode (--yes) re-runs the guard chain and then performs the real apply call", async () => {
+  it("apply mode (--yes) re-runs the guard chain, performs the real apply call, then independently re-verifies the result post-apply", async () => {
     const plan = buildRealPlan();
     const { fn, calls } = fakeRunCli({
       pendingFilename: "20260822120000_ap_posting_reversal_hardening.sql",
@@ -609,9 +628,29 @@ describe("runMigrate — real incident fix regression (2026-08-22): a real --che
       checkProjectRef: noOpProjectRefCheck,
     });
     expect(result.applied).toBe(true);
-    expect(calls).toHaveLength(2);
+    // 1: pre-apply dry-run, 2: the real apply, 3: post-apply dry-run
+    // (confirms nothing left pending), 4: `migration list` (confirms the
+    // migration is recorded as applied remotely) — see PART 4 of runMigrate.
+    expect(calls).toHaveLength(4);
     expect(calls[0].args).toContain("--dry-run");
     expect(calls[1].args).toContain("--yes");
+    expect(calls[2].args).toContain("--dry-run");
+    expect(calls[3].args).toEqual(expect.arrayContaining(["migration", "list"]));
+  });
+
+  it("apply mode's post-apply verification confirms the migration is recorded as applied remotely, not just that the apply call exited 0", async () => {
+    const plan = buildRealPlan();
+    const { fn } = fakeRunCli({
+      pendingFilename: "20260822120000_ap_posting_reversal_hardening.sql",
+    });
+    const result = await runMigrate({
+      plan,
+      mode: "apply",
+      runCli: fn,
+      checkProjectRef: noOpProjectRefCheck,
+    });
+    expect(result.migrations).toHaveLength(1);
+    expect(result.migrations[0].recordedRemotely).toBe(true);
   });
 
   it("apply mode still fails closed if the dry-run shows more than one pending migration, and never reaches the apply call", async () => {
@@ -640,7 +679,7 @@ describe("runMigrate — real incident fix regression (2026-08-22): a real --che
     const { fn } = fakeRunCli({ pendingFilename: "20260901000000_some_other_migration.sql" });
     await expect(
       runMigrate({ plan, mode: "apply", runCli: fn, checkProjectRef: noOpProjectRefCheck }),
-    ).rejects.toThrow(/does not match the approved migration/);
+    ).rejects.toThrow(/Pending migration order\/name mismatch/);
   });
 
   it("a real apply failure (stage 03's own failure case) propagates as a rejection, not a silent success", async () => {
