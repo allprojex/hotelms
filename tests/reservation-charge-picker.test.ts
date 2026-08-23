@@ -81,7 +81,7 @@ describe("ChargeItemPicker — selecting a product populates the existing fields
 
   it("AddCharge's onPick sets the existing desc/amount state — selection is the explicit user action that fills them, and both remain freely editable afterward", () => {
     expect(reservationPage).toMatch(
-      /onPick=\{\(item\) => \{ setDesc\(item\.name\); setAmount\(String\(item\.price\)\); \}\}/,
+      /onPick=\{\(item\) => \{ setDesc\(item\.name\); setAmount\(item\.price\.toFixed\(2\)\); \}\}/,
     );
     // The Description/Amount Inputs are still plain, uncontrolled-by-picker
     // editable inputs (not readOnly/disabled) — manual freeform entry
@@ -92,6 +92,37 @@ describe("ChargeItemPicker — selecting a product populates the existing fields
     expect(reservationPage).toMatch(
       /<Label>Amount<\/Label><Input type="number" step="0\.01" value=\{amount\} onChange=\{\(e\) => setAmount\(e\.target\.value\)\}/,
     );
+  });
+
+  it('regression: Amount is populated with a fixed 2-decimal string, not String(price) which drops trailing zeros (e.g. 12.50 -> "12.5")', () => {
+    // Not a floating-point corruption risk (Number("12.50") -> 12.5 ->
+    // Number("12.5") === 12.5, so the final submitted amount is always
+    // numerically exact) — but String(12.5) === "12.5" displays as if the
+    // price were entered imprecisely. .toFixed(2) keeps the displayed
+    // amount matching the stored menu price's own 2-decimal formatting.
+    expect(reservationPage).not.toMatch(/setAmount\(String\(item\.price\)\)/);
+    expect(reservationPage).toMatch(/setAmount\(item\.price\.toFixed\(2\)\)/);
+  });
+});
+
+describe("ChargeItemPicker — duplicate item names across outlets", () => {
+  it("renders the source outlet name alongside category, so two items with the same name in different outlets are visually distinguishable", () => {
+    // pos_menu_items has no property-wide uniqueness constraint on `name` —
+    // the same item name (e.g. "Water") can legitimately exist in two
+    // different outlets of the same property, at the same or different
+    // price. Each row still has a unique key/CommandItem value (it.id), so
+    // there's no React-key or cmdk-selection collision — but without
+    // showing which outlet an item belongs to, a user could not tell two
+    // same-named results apart before picking one.
+    expect(reservationPage).toContain("pos_outlets(name)");
+    expect(reservationPage).toMatch(
+      /\[it\.pos_outlets\?\.name, it\.pos_menu_categories\?\.name\]\.filter\(Boolean\)\.join\(" · "\)/,
+    );
+  });
+
+  it("each result's key and cmdk value are the row's own unique id — duplicate names never collide", () => {
+    expect(reservationPage).toMatch(/key=\{it\.id\}/);
+    expect(reservationPage).toMatch(/value=\{`\$\{menuItemSearchText\(it\)\} \$\{it\.id\}`\}/);
   });
 });
 

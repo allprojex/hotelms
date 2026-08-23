@@ -346,7 +346,7 @@ function AddCharge({ reservationId, propertyId, onDone }: { reservationId: strin
             <Label>Search a product (optional)</Label>
             <ChargeItemPicker
               propertyId={propertyId}
-              onPick={(item) => { setDesc(item.name); setAmount(String(item.price)); }}
+              onPick={(item) => { setDesc(item.name); setAmount(item.price.toFixed(2)); }}
             />
             <p className="text-xs text-muted-foreground mt-1">
               Picking a product fills in the description and amount below — you can still edit either before posting.
@@ -429,10 +429,14 @@ function ChargeItemPicker({
                 value={`${menuItemSearchText(it)} ${it.id}`}
                 onSelect={() => { onPick({ name: it.name, price: Number(it.price) }); setOpen(false); setQuery(""); }}
               >
-                <span className="flex-1">{it.name}</span>
-                {it.pos_menu_categories?.name && (
-                  <span className="text-xs text-muted-foreground mr-2">{it.pos_menu_categories.name}</span>
-                )}
+                <div className="flex-1 min-w-0">
+                  <div className="truncate">{it.name}</div>
+                  {(it.pos_outlets?.name || it.pos_menu_categories?.name) && (
+                    <div className="text-xs text-muted-foreground truncate">
+                      {[it.pos_outlets?.name, it.pos_menu_categories?.name].filter(Boolean).join(" · ")}
+                    </div>
+                  )}
+                </div>
                 <span className="font-mono text-xs">{Number(it.price).toFixed(2)}</span>
               </CommandItem>
             ))}
