@@ -87,4 +87,24 @@ describe("Dashboard search — UI requirements", () => {
     );
     expect(dashboardRoute).toMatch(/<DashboardSearch propertyId={propertyId}\s*\/>/);
   });
+
+  it("regression: CommandItem value is built from human-matchable search text, not an opaque id-only string", () => {
+    // cmdk's Command primitive does its OWN internal filtering of
+    // CommandItems based on their `value` prop (independent of our own
+    // matchesSearch() pre-filter above). A live production check confirmed
+    // that setting value={`reservation-${r.id}`} (an opaque UUID string
+    // that never contains what a human types) made cmdk silently hide every
+    // item for every query — the dialog rendered blank instead of results
+    // OR a "no results" message, because our own hasResults check (based on
+    // the correct pre-filtered arrays) suppressed CommandEmpty while cmdk's
+    // separate filter hid the actual CommandItems. Fixed by building value
+    // from the same search-text helpers matchesSearch() itself uses, with
+    // the id appended only to keep it unique — never a bare id-based value.
+    expect(searchComponent).toMatch(/value=\{`\$\{reservationSearchText\(r\)\} \$\{r\.id\}`\}/);
+    expect(searchComponent).toMatch(/value=\{`\$\{guestSearchText\(g\)\} \$\{g\.id\}`\}/);
+    expect(searchComponent).toMatch(/value=\{`\$\{roomSearchText\(r\)\} \$\{r\.id\}`\}/);
+    expect(searchComponent).not.toMatch(/value=\{`reservation-\$\{r\.id\}`\}/);
+    expect(searchComponent).not.toMatch(/value=\{`guest-\$\{g\.id\}`\}/);
+    expect(searchComponent).not.toMatch(/value=\{`room-\$\{r\.id\}`\}/);
+  });
 });
