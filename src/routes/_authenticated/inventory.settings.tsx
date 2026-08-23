@@ -20,6 +20,8 @@ import {
   type ProductImageSelection,
 } from "@/components/inventory/product-image-field";
 import { ApSupplierStatementView } from "@/components/accounting/ap-supplier-statement-view";
+import { Badge } from "@/components/ui/badge";
+import { computeBatchStatus, BATCH_STATUS_LABEL, BATCH_STATUS_BADGE_VARIANT } from "@/lib/inventory/batch-status";
 
 export const Route = createFileRoute("/_authenticated/inventory/settings")({
   head: () => ({ meta: [{ title: "Inventory settings" }] }),
@@ -36,11 +38,13 @@ function SettingsPage() {
       <Tabs defaultValue="items">
         <TabsList>
           <TabsTrigger value="items">Items</TabsTrigger>
+          <TabsTrigger value="batches">Batches</TabsTrigger>
           <TabsTrigger value="categories">Categories</TabsTrigger>
           <TabsTrigger value="suppliers">Suppliers</TabsTrigger>
           <TabsTrigger value="locations">Locations</TabsTrigger>
         </TabsList>
         <TabsContent value="items"><ItemsTab /></TabsContent>
+        <TabsContent value="batches"><BatchesTab /></TabsContent>
         <TabsContent value="categories"><CategoriesTab /></TabsContent>
         <TabsContent value="suppliers"><SuppliersTab /></TabsContent>
         <TabsContent value="locations"><LocationsTab /></TabsContent>
@@ -68,6 +72,23 @@ function ItemsTab() {
   const totals = new Map<string, number>();
   (stock.data ?? []).forEach((s: any) => totals.set(s.item_id, (totals.get(s.item_id) ?? 0) + Number(s.quantity)));
 
+  const property = useQuery({
+    queryKey: ["inv-property-threshold", propertyId], enabled: !!propertyId,
+    queryFn: async () => (await (supabase.from as any)("properties").select("inventory_expiry_warning_days").eq("id", propertyId).single()).data,
+  });
+  const batches = useQuery({
+    queryKey: ["inv-batches-for-items", propertyId], enabled: !!propertyId,
+    queryFn: async () => (await (supabase.from as any)("inventory_stock_batches").select("item_id, expiry_date").eq("property_id", propertyId)).data ?? [],
+  });
+  const warningDays = property.data?.inventory_expiry_warning_days ?? 30;
+  const STATUS_RANK: Record<string, number> = { expired: 0, expiring_soon: 1, valid: 2, no_expiry: 3 };
+  const nearestStatusByItem = new Map<string, ReturnType<typeof computeBatchStatus>>();
+  (batches.data ?? []).forEach((b: any) => {
+    const status = computeBatchStatus(b.expiry_date, warningDays);
+    const current = nearestStatusByItem.get(b.item_id);
+    if (!current || STATUS_RANK[status] < STATUS_RANK[current]) nearestStatusByItem.set(b.item_id, status);
+  });
+
   async function remove(id: string) {
     if (!confirm("Delete this item?")) return;
     const { error } = await (supabase.from as any)("inventory_items").delete().eq("id", id);
@@ -85,10 +106,13 @@ function ItemsTab() {
           <TableHeader><TableRow>
             <TableHead>SKU</TableHead><TableHead>Name</TableHead><TableHead>Category</TableHead><TableHead>Unit</TableHead>
             <TableHead className="text-right">Cost</TableHead><TableHead className="text-right">Price</TableHead>
-            <TableHead className="text-right">Reorder</TableHead><TableHead className="text-right">On hand</TableHead><TableHead></TableHead>
+            <TableHead className="text-right">Reorder</TableHead><TableHead className="text-right">On hand</TableHead>
+            <TableHead>Expiry</TableHead><TableHead></TableHead>
           </TableRow></TableHeader>
           <TableBody>
-            {items.data?.map((i: any) => (
+            {items.data?.map((i: any) => {
+              const nearest = nearestStatusByItem.get(i.id);
+              return (
               <TableRow key={i.id}>
                 <TableCell className="font-mono text-xs">{i.sku}</TableCell>
                 <TableCell className="font-medium">{i.name}</TableCell>
@@ -98,13 +122,21 @@ function ItemsTab() {
                 <TableCell className="text-right">{Number(i.sale_price).toFixed(2)}</TableCell>
                 <TableCell className="text-right">{Number(i.reorder_level).toFixed(2)}</TableCell>
                 <TableCell className="text-right">{(totals.get(i.id) ?? 0).toFixed(2)}</TableCell>
+                <TableCell>
+                  {nearest ? (
+                    <Badge variant={BATCH_STATUS_BADGE_VARIANT[nearest]}>{BATCH_STATUS_LABEL[nearest]}</Badge>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">—</span>
+                  )}
+                </TableCell>
                 <TableCell className="text-right flex justify-end gap-1">
                   <ItemDialog propertyId={propertyId} cats={cats.data ?? []} existing={i} trigger={<Button size="icon" variant="ghost"><Pencil className="h-4 w-4" /></Button>} onDone={() => qc.invalidateQueries({ queryKey: ["inv-items-all", propertyId] })} />
                   <Button size="icon" variant="ghost" onClick={() => remove(i.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
                 </TableCell>
               </TableRow>
-            ))}
-            {items.data?.length === 0 && <TableRow><TableCell colSpan={9} className="py-8 text-center text-muted-foreground">No items yet.</TableCell></TableRow>}
+              );
+            })}
+            {items.data?.length === 0 && <TableRow><TableCell colSpan={10} className="py-8 text-center text-muted-foreground">No items yet.</TableCell></TableRow>}
           </TableBody>
         </Table>
       </Card>
@@ -184,6 +216,135 @@ function ItemDialog({ propertyId, cats, existing, trigger, onDone }: any) {
           onChange={setImageSelection}
         />
         <DialogFooter><Button onClick={save}>Save</Button></DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ---------- BATCHES (expiration tracking) ----------
+// Read-mostly: batches are created by receiving a purchase order
+// (inventory.purchase-orders.tsx's ReceiveDialog). The only edit allowed
+// here is expiry_date, via the update_batch_expiry() RPC -- quantity,
+// item, and location are never editable from this screen.
+function BatchesTab() {
+  const propertyId = useActiveProperty();
+  const qc = useQueryClient();
+  const [thresholdDraft, setThresholdDraft] = useState<string | null>(null);
+
+  const property = useQuery({
+    queryKey: ["inv-property-threshold", propertyId], enabled: !!propertyId,
+    queryFn: async () => (await (supabase.from as any)("properties").select("inventory_expiry_warning_days").eq("id", propertyId).single()).data,
+  });
+  const batches = useQuery({
+    queryKey: ["inv-batches-all", propertyId], enabled: !!propertyId,
+    queryFn: async () => (await (supabase.from as any)("inventory_stock_batches")
+      .select("id, received_quantity, received_date, expiry_date, inventory_items(name, sku), stock_locations(name)")
+      .eq("property_id", propertyId)
+      .order("received_date", { ascending: false })).data ?? [],
+  });
+
+  const warningDays = property.data?.inventory_expiry_warning_days ?? 30;
+
+  async function saveThreshold() {
+    if (!propertyId || thresholdDraft === null) return;
+    const days = Number(thresholdDraft);
+    if (!Number.isInteger(days) || days <= 0) return toast.error("Enter a whole number of days greater than 0");
+    const { error } = await (supabase.from as any)("properties").update({ inventory_expiry_warning_days: days }).eq("id", propertyId);
+    if (error) return toast.error(error.message);
+    toast.success("Threshold updated");
+    setThresholdDraft(null);
+    qc.invalidateQueries({ queryKey: ["inv-property-threshold", propertyId] });
+  }
+
+  return (
+    <div className="space-y-3">
+      <Card className="p-3 flex items-center gap-3 max-w-md">
+        <Label className="text-sm whitespace-nowrap">"Expiring Soon" within</Label>
+        <Input
+          type="number"
+          min={1}
+          step={1}
+          className="w-24"
+          value={thresholdDraft ?? warningDays}
+          onChange={(e) => setThresholdDraft(e.target.value)}
+        />
+        <span className="text-sm text-muted-foreground">days</span>
+        {thresholdDraft !== null && thresholdDraft !== String(warningDays) && (
+          <Button size="sm" onClick={saveThreshold}>Save</Button>
+        )}
+      </Card>
+      <Card>
+        <Table>
+          <TableHeader><TableRow>
+            <TableHead>Item</TableHead><TableHead>Location</TableHead><TableHead className="text-right">Received qty</TableHead>
+            <TableHead>Received</TableHead><TableHead>Expiry</TableHead><TableHead>Status</TableHead><TableHead></TableHead>
+          </TableRow></TableHeader>
+          <TableBody>
+            {batches.data?.map((b: any) => {
+              const status = computeBatchStatus(b.expiry_date, warningDays);
+              return (
+                <TableRow key={b.id}>
+                  <TableCell>
+                    <div className="font-medium">{b.inventory_items?.name ?? "—"}</div>
+                    <div className="text-xs text-muted-foreground font-mono">{b.inventory_items?.sku}</div>
+                  </TableCell>
+                  <TableCell>{b.stock_locations?.name ?? "—"}</TableCell>
+                  <TableCell className="text-right">{Number(b.received_quantity).toFixed(2)}</TableCell>
+                  <TableCell>{b.received_date}</TableCell>
+                  <TableCell>{b.expiry_date ?? "—"}</TableCell>
+                  <TableCell><Badge variant={BATCH_STATUS_BADGE_VARIANT[status]}>{BATCH_STATUS_LABEL[status]}</Badge></TableCell>
+                  <TableCell className="text-right">
+                    <EditBatchExpiryDialog
+                      batchId={b.id}
+                      currentExpiry={b.expiry_date}
+                      onDone={() => qc.invalidateQueries({ queryKey: ["inv-batches-all", propertyId] })}
+                    />
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+            {batches.data?.length === 0 && <TableRow><TableCell colSpan={7} className="py-8 text-center text-muted-foreground">No batches yet — receive a purchase order to record one.</TableCell></TableRow>}
+          </TableBody>
+        </Table>
+      </Card>
+    </div>
+  );
+}
+
+function EditBatchExpiryDialog({ batchId, currentExpiry, onDone }: { batchId: string; currentExpiry: string | null; onDone: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [value, setValue] = useState(currentExpiry ?? "");
+  const [saving, setSaving] = useState(false);
+
+  async function save() {
+    setSaving(true);
+    const { error } = await (supabase.rpc as any)("update_batch_expiry", {
+      _batch_id: batchId,
+      _expiry_date: value || null,
+    });
+    setSaving(false);
+    if (error) return toast.error(error.message);
+    toast.success("Expiry updated");
+    setOpen(false);
+    onDone();
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (v) setValue(currentExpiry ?? ""); }}>
+      <DialogTrigger asChild><Button size="icon" variant="ghost"><Pencil className="h-4 w-4" /></Button></DialogTrigger>
+      <DialogContent>
+        <DialogHeader><DialogTitle>Edit expiry date</DialogTitle></DialogHeader>
+        <p className="text-xs text-muted-foreground">
+          Only the expiry date can be changed here — quantity, item, and location are never affected.
+        </p>
+        <div>
+          <Label>Expiration date</Label>
+          <Input type="date" value={value} onChange={(e) => setValue(e.target.value)} />
+        </div>
+        <DialogFooter className="flex justify-between sm:justify-between">
+          <Button variant="outline" onClick={() => setValue("")}>Clear (No Expiry)</Button>
+          <Button onClick={save} disabled={saving}>{saving ? "Saving…" : "Save"}</Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
