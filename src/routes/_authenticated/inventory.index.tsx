@@ -5,7 +5,8 @@ import { useActiveProperty } from "@/hooks/use-active-property";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Boxes, AlertTriangle, Truck, ArrowLeftRight } from "lucide-react";
+import { Boxes, AlertTriangle, Truck, ArrowLeftRight, CalendarClock } from "lucide-react";
+import { computeBatchStatus } from "@/lib/inventory/batch-status";
 
 export const Route = createFileRoute("/_authenticated/inventory/")({
   head: () => ({ meta: [{ title: "Inventory overview" }] }),
@@ -45,11 +46,25 @@ function InventoryHome() {
     queryKey: ["inv-draft-tr", propertyId], enabled: !!propertyId,
     queryFn: async () => (await (supabase.from as any)("stock_transfers").select("id").eq("property_id", propertyId).eq("status","draft")).data ?? [],
   });
+  const property = useQuery({
+    queryKey: ["inv-property-threshold", propertyId], enabled: !!propertyId,
+    queryFn: async () => (await (supabase.from as any)("properties").select("inventory_expiry_warning_days").eq("id", propertyId).single()).data,
+  });
+  const batches = useQuery({
+    queryKey: ["inv-batches-home", propertyId], enabled: !!propertyId,
+    queryFn: async () => (await (supabase.from as any)("inventory_stock_batches").select("expiry_date").eq("property_id", propertyId)).data ?? [],
+  });
 
   const totals = new Map<string, number>();
   (stock.data ?? []).forEach((s: any) => totals.set(s.item_id, (totals.get(s.item_id) ?? 0) + Number(s.quantity)));
   const lowStock = (items.data ?? []).map((i: any) => ({ ...i, on_hand: totals.get(i.id) ?? 0 }))
     .filter((i: any) => Number(i.reorder_level) > 0 && i.on_hand <= Number(i.reorder_level));
+
+  const warningDays = property.data?.inventory_expiry_warning_days ?? 30;
+  const expiringOrExpired = (batches.data ?? []).filter((b: any) => {
+    const s = computeBatchStatus(b.expiry_date, warningDays);
+    return s === "expired" || s === "expiring_soon";
+  });
 
   return (
     <div className="space-y-6">
@@ -58,11 +73,12 @@ function InventoryHome() {
         <p className="text-sm text-muted-foreground">Stock levels, purchase orders and low-stock alerts.</p>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <Stat label="Active items" value={items.data?.filter((i: any) => i.active).length ?? 0} icon={Boxes} />
         <Stat label="Low stock alerts" value={lowStock.length} icon={AlertTriangle} />
         <Stat label="Open POs" value={openPOs.data?.length ?? 0} icon={Truck} />
         <Stat label="Draft transfers" value={draftTransfers.data?.length ?? 0} icon={ArrowLeftRight} />
+        <Link to="/inventory/settings"><Stat label="Expiring / expired batches" value={expiringOrExpired.length} icon={CalendarClock} /></Link>
       </div>
 
       <Card>
