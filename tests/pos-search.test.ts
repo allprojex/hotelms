@@ -81,4 +81,21 @@ describe("POS menu management screen — search added without regressing existin
     expect(menuScreen).toContain("No items yet.");
     expect(menuScreen).toMatch(/No items match/);
   });
+
+  it("regression: the search input is always visible, not conditionally hidden when the selected outlet has zero items", () => {
+    // A live production audit found the search box was gated behind
+    // `(items.data?.length ?? 0) > 0`, so an outlet with no items yet (e.g.
+    // the alphabetically-first outlet, auto-selected by default even when
+    // a different outlet has all the real data) hid the search affordance
+    // entirely — a real user had no way to discover search exists at all
+    // on this page. Fixed by rendering the search input unconditionally;
+    // the existing "No items yet." / "No items match" empty states already
+    // handle the zero-items case underneath it.
+    expect(menuScreen).not.toMatch(
+      /\{\(items\.data\?\.length \?\? 0\) > 0 && \(\s*<div className="relative">\s*<Search/,
+    );
+    expect(menuScreen).toMatch(
+      /<div className="relative">\s*<Search className="absolute left-2 top-1\/2 h-4 w-4 -translate-y-1\/2 text-muted-foreground" \/>\s*<Input placeholder="Search items…"/,
+    );
+  });
 });
