@@ -5,8 +5,10 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { BrandMark } from "@/components/brand-mark";
-import { ArrowLeft, BedDouble, Users, Sparkles } from "lucide-react";
+import { ArrowLeft, BedDouble, Users, Sparkles, ImageOff } from "lucide-react";
 import { z } from "zod";
+import { useMemo } from "react";
+import { useRoomTypeCoverImages } from "@/components/gallery/room-type-gallery-preview";
 
 const searchSchema = z.object({
   propertyId: z.string().uuid(),
@@ -46,6 +48,12 @@ function BookResults() {
     },
   });
 
+  const roomTypeIds = useMemo(
+    () => (availability.data ?? []).map((rt) => rt.room_type_id as string),
+    [availability.data],
+  );
+  const covers = useRoomTypeCoverImages(roomTypeIds);
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5">
       <header className="border-b bg-card/40 backdrop-blur">
@@ -83,7 +91,21 @@ function BookResults() {
             const total = Number(rt.best_rate) * nights;
             return (
               <Card key={rt.room_type_id} className="overflow-hidden">
-                <div className="grid md:grid-cols-[1fr_auto]">
+                <div className="grid md:grid-cols-[140px_1fr_auto]">
+                  <div className="hidden md:block h-full min-h-[140px] bg-muted">
+                    {covers.data?.get(rt.room_type_id) ? (
+                      <img
+                        src={covers.data.get(rt.room_type_id)!}
+                        alt={rt.room_type_name}
+                        className="h-full w-full object-cover"
+                        loading="lazy"
+                      />
+                    ) : (
+                      <div className="flex h-full items-center justify-center text-muted-foreground">
+                        <ImageOff className="h-6 w-6" />
+                      </div>
+                    )}
+                  </div>
                   <CardContent className="p-6 space-y-3">
                     <div className="flex items-start justify-between gap-4">
                       <div>

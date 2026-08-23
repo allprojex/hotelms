@@ -57,6 +57,7 @@ import {
   LifeBuoy,
   Activity,
   BriefcaseBusiness,
+  Images,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useUserRoles, EXEC_ROLES, type AppRole } from "@/hooks/use-user-roles";
@@ -155,6 +156,12 @@ const opsGroups: { label: string; items: NavItem[] }[] = [
         to: "/rates",
         icon: Tag,
         description: "Public and negotiated pricing.",
+      },
+      {
+        title: "Gallery",
+        to: "/gallery",
+        icon: Images,
+        description: "Photos, albums, room type images.",
       },
     ],
   },

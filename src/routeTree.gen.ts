@@ -25,6 +25,7 @@ import { Route as AuthenticatedRatesRouteImport } from './routes/_authenticated/
 import { Route as AuthenticatedPropertiesRouteImport } from './routes/_authenticated/properties'
 import { Route as AuthenticatedNotificationsRouteImport } from './routes/_authenticated/notifications'
 import { Route as AuthenticatedHousekeepingRouteImport } from './routes/_authenticated/housekeeping'
+import { Route as AuthenticatedGalleryRouteImport } from './routes/_authenticated/gallery'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedCalendarRouteImport } from './routes/_authenticated/calendar'
 import { Route as AuthenticatedAnalyticsRouteImport } from './routes/_authenticated/analytics'
@@ -218,6 +219,11 @@ const AuthenticatedHousekeepingRoute =
     path: '/housekeeping',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedGalleryRoute = AuthenticatedGalleryRouteImport.update({
+  id: '/gallery',
+  path: '/gallery',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
@@ -869,6 +875,7 @@ export interface FileRoutesByFullPath {
   '/analytics': typeof AuthenticatedAnalyticsRoute
   '/calendar': typeof AuthenticatedCalendarRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
+  '/gallery': typeof AuthenticatedGalleryRoute
   '/housekeeping': typeof AuthenticatedHousekeepingRoute
   '/notifications': typeof AuthenticatedNotificationsRoute
   '/properties': typeof AuthenticatedPropertiesRoute
@@ -997,6 +1004,7 @@ export interface FileRoutesByTo {
   '/analytics': typeof AuthenticatedAnalyticsRoute
   '/calendar': typeof AuthenticatedCalendarRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
+  '/gallery': typeof AuthenticatedGalleryRoute
   '/housekeeping': typeof AuthenticatedHousekeepingRoute
   '/notifications': typeof AuthenticatedNotificationsRoute
   '/properties': typeof AuthenticatedPropertiesRoute
@@ -1127,6 +1135,7 @@ export interface FileRoutesById {
   '/_authenticated/analytics': typeof AuthenticatedAnalyticsRoute
   '/_authenticated/calendar': typeof AuthenticatedCalendarRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
+  '/_authenticated/gallery': typeof AuthenticatedGalleryRoute
   '/_authenticated/housekeeping': typeof AuthenticatedHousekeepingRoute
   '/_authenticated/notifications': typeof AuthenticatedNotificationsRoute
   '/_authenticated/properties': typeof AuthenticatedPropertiesRoute
@@ -1257,6 +1266,7 @@ export interface FileRouteTypes {
     | '/analytics'
     | '/calendar'
     | '/dashboard'
+    | '/gallery'
     | '/housekeeping'
     | '/notifications'
     | '/properties'
@@ -1385,6 +1395,7 @@ export interface FileRouteTypes {
     | '/analytics'
     | '/calendar'
     | '/dashboard'
+    | '/gallery'
     | '/housekeeping'
     | '/notifications'
     | '/properties'
@@ -1514,6 +1525,7 @@ export interface FileRouteTypes {
     | '/_authenticated/analytics'
     | '/_authenticated/calendar'
     | '/_authenticated/dashboard'
+    | '/_authenticated/gallery'
     | '/_authenticated/housekeeping'
     | '/_authenticated/notifications'
     | '/_authenticated/properties'
@@ -1768,6 +1780,13 @@ declare module '@tanstack/react-router' {
       path: '/housekeeping'
       fullPath: '/housekeeping'
       preLoaderRoute: typeof AuthenticatedHousekeepingRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/gallery': {
+      id: '/_authenticated/gallery'
+      path: '/gallery'
+      fullPath: '/gallery'
+      preLoaderRoute: typeof AuthenticatedGalleryRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/dashboard': {
@@ -2731,6 +2750,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedAnalyticsRoute: typeof AuthenticatedAnalyticsRoute
   AuthenticatedCalendarRoute: typeof AuthenticatedCalendarRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
+  AuthenticatedGalleryRoute: typeof AuthenticatedGalleryRoute
   AuthenticatedHousekeepingRoute: typeof AuthenticatedHousekeepingRoute
   AuthenticatedNotificationsRoute: typeof AuthenticatedNotificationsRoute
   AuthenticatedPropertiesRoute: typeof AuthenticatedPropertiesRoute
@@ -2812,6 +2832,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAnalyticsRoute: AuthenticatedAnalyticsRoute,
   AuthenticatedCalendarRoute: AuthenticatedCalendarRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
+  AuthenticatedGalleryRoute: AuthenticatedGalleryRoute,
   AuthenticatedHousekeepingRoute: AuthenticatedHousekeepingRoute,
   AuthenticatedNotificationsRoute: AuthenticatedNotificationsRoute,
   AuthenticatedPropertiesRoute: AuthenticatedPropertiesRoute,

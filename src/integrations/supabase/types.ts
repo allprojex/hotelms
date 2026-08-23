@@ -1929,6 +1929,123 @@ export type Database = {
           },
         ]
       }
+      gallery_albums: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          description: string | null
+          id: string
+          name: string
+          property_id: string
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          name: string
+          property_id: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          name?: string
+          property_id?: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "gallery_albums_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      gallery_images: {
+        Row: {
+          active: boolean
+          album_id: string | null
+          caption: string | null
+          context: Database["public"]["Enums"]["gallery_context"]
+          created_at: string
+          id: string
+          is_cover: boolean
+          property_id: string
+          room_type_id: string | null
+          sort_order: number
+          storage_path: string
+          thumbnail_path: string
+          title: string | null
+          updated_at: string
+          uploaded_by: string | null
+        }
+        Insert: {
+          active?: boolean
+          album_id?: string | null
+          caption?: string | null
+          context?: Database["public"]["Enums"]["gallery_context"]
+          created_at?: string
+          id?: string
+          is_cover?: boolean
+          property_id: string
+          room_type_id?: string | null
+          sort_order?: number
+          storage_path: string
+          thumbnail_path: string
+          title?: string | null
+          updated_at?: string
+          uploaded_by?: string | null
+        }
+        Update: {
+          active?: boolean
+          album_id?: string | null
+          caption?: string | null
+          context?: Database["public"]["Enums"]["gallery_context"]
+          created_at?: string
+          id?: string
+          is_cover?: boolean
+          property_id?: string
+          room_type_id?: string | null
+          sort_order?: number
+          storage_path?: string
+          thumbnail_path?: string
+          title?: string | null
+          updated_at?: string
+          uploaded_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "gallery_images_album_id_fkey"
+            columns: ["album_id"]
+            isOneToOne: false
+            referencedRelation: "gallery_albums"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "gallery_images_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "gallery_images_room_type_id_fkey"
+            columns: ["room_type_id"]
+            isOneToOne: false
+            referencedRelation: "room_types"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       guest_id_types: {
         Row: {
           active: boolean
@@ -4758,6 +4875,10 @@ export type Database = {
       post_pos_order_close: { Args: { _order_id: string }; Returns: string }
       post_reservation_checkout: { Args: { _res_id: string }; Returns: string }
       receive_purchase_order: { Args: { _po_id: string }; Returns: undefined }
+      reorder_gallery_images: {
+        Args: { _image_ids: string[]; _property_id: string }
+        Returns: undefined
+      }
       report_balance_sheet: {
         Args: { _as_of: string; _property_id: string }
         Returns: {
@@ -4811,6 +4932,10 @@ export type Database = {
         Args: { _property_id: string }
         Returns: undefined
       }
+      set_gallery_room_type_cover: {
+        Args: { _image_id: string; _property_id: string; _room_type_id: string }
+        Returns: undefined
+      }
       short_code: { Args: { prefix: string }; Returns: string }
     }
     Enums: {
@@ -4845,6 +4970,15 @@ export type Database = {
         | "webhook_inbound"
       channel_sync_status: "idle" | "syncing" | "success" | "failed"
       channel_type: "booking_com" | "expedia" | "airbnb"
+      gallery_context:
+        | "hotel"
+        | "room_type"
+        | "restaurant"
+        | "bar"
+        | "gym"
+        | "swimming_pool"
+        | "facility"
+        | "other"
       hk_status: "clean" | "dirty" | "inspected" | "maintenance"
       journal_source:
         | "manual"
@@ -5039,6 +5173,16 @@ export const Constants = {
       ],
       channel_sync_status: ["idle", "syncing", "success", "failed"],
       channel_type: ["booking_com", "expedia", "airbnb"],
+      gallery_context: [
+        "hotel",
+        "room_type",
+        "restaurant",
+        "bar",
+        "gym",
+        "swimming_pool",
+        "facility",
+        "other",
+      ],
       hk_status: ["clean", "dirty", "inspected", "maintenance"],
       journal_source: [
         "manual",
