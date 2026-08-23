@@ -37,3 +37,11 @@ export function menuItemSearchText(item: {
 }): string {
   return [item.name, item.pos_menu_categories?.name].filter(Boolean).join(" ");
 }
+
+export function inventoryItemSearchText(item: {
+  name?: string | null;
+  sku?: string | null;
+  item_categories?: { name?: string | null } | null;
+}): string {
+  return [item.name, item.sku, item.item_categories?.name].filter(Boolean).join(" ");
+}
