@@ -10,8 +10,9 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Plus, Minus, Trash2, Printer, DollarSign, ArrowLeft, ChefHat } from "lucide-react";
+import { Plus, Minus, Trash2, Printer, DollarSign, ArrowLeft, ChefHat, Search } from "lucide-react";
 import { toast } from "sonner";
+import { matchesSearch, menuItemSearchText } from "@/lib/search-filter";
 
 export const Route = createFileRoute("/_authenticated/pos/order/$id")({
   head: () => ({ meta: [{ title: "Order" }] }),
@@ -22,6 +23,7 @@ function OrderPage() {
   const { id } = Route.useParams();
   const qc = useQueryClient();
   const nav = useNavigate();
+  const [menuQuery, setMenuQuery] = useState("");
 
   const order = useQuery({
     queryKey: ["pos-order", id],
@@ -73,8 +75,9 @@ function OrderPage() {
     toast.success("Voided"); nav({ to: "/pos" });
   }
 
+  const filteredMenu = (menu.data ?? []).filter((m: any) => matchesSearch(menuItemSearchText(m), menuQuery));
   const grouped = new Map<string, any[]>();
-  (menu.data ?? []).forEach((m: any) => {
+  filteredMenu.forEach((m: any) => {
     const k = m.pos_menu_categories?.name ?? "Other";
     if (!grouped.has(k)) grouped.set(k, []);
     grouped.get(k)!.push(m);
@@ -100,6 +103,17 @@ function OrderPage() {
       <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
         {/* Menu picker */}
         <Card className="p-4 space-y-4">
+          {(menu.data ?? []).length > 0 && (
+            <div className="relative">
+              <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Search menu items…"
+                className="pl-8"
+                value={menuQuery}
+                onChange={(e) => setMenuQuery(e.target.value)}
+              />
+            </div>
+          )}
           {[...grouped.entries()].map(([cat, ms]) => (
             <div key={cat}>
               <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">{cat}</div>
@@ -114,7 +128,12 @@ function OrderPage() {
               </div>
             </div>
           ))}
-          {grouped.size === 0 && <div className="text-sm text-muted-foreground p-6 text-center">No menu items for this outlet. Add some in POS → Menu.</div>}
+          {grouped.size === 0 && (menu.data ?? []).length === 0 && (
+            <div className="text-sm text-muted-foreground p-6 text-center">No menu items for this outlet. Add some in POS → Menu.</div>
+          )}
+          {grouped.size === 0 && (menu.data ?? []).length > 0 && (
+            <div className="text-sm text-muted-foreground p-6 text-center">No menu items match “{menuQuery}”.</div>
+          )}
         </Card>
 
         {/* Order lines & totals */}
