@@ -12,7 +12,6 @@ import { Building2, BedDouble, LogIn, LogOut, Users, DollarSign, Sparkles, Refre
 import { format } from "date-fns";
 import { Line, LineChart, ResponsiveContainer, Tooltip as RTooltip } from "recharts";
 import { getBusinessInsights, type Insight } from "@/lib/insights.functions";
-import { DashboardSearch } from "@/components/dashboard-search";
 
 // --- Shared refresh interval (persisted to localStorage) -------------------
 const INTERVAL_KEY = "pms.dashboard.refreshMs";
@@ -127,10 +126,7 @@ function DashboardPage() {
           <h1 className="text-2xl font-semibold">Today</h1>
           <p className="text-sm text-muted-foreground">{format(new Date(), "EEEE, MMMM d, yyyy")}</p>
         </div>
-        <div className="flex items-center gap-2">
-          <DashboardSearch propertyId={propertyId} />
-          <RefreshIntervalControl />
-        </div>
+        <RefreshIntervalControl />
       </div>
 
 
