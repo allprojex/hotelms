@@ -6,15 +6,21 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { BrandMark } from "@/components/brand-mark";
+import { useBrandSettings } from "@/hooks/use-brand-settings";
 import { useState } from "react";
 import { Search, CalendarDays, Users, MapPin, Sparkles } from "lucide-react";
 
+// Static SSR/pre-hydration fallback only — kept brand-name-neutral (no
+// tenant name hardcoded) since no property is known at this stage of the
+// booking flow; the live header below resolves the real organisation name
+// via useBrandSettings(). Mirrors the auth.tsx login page's precedent for
+// a property-agnostic surface.
 export const Route = createFileRoute("/book/")({
   head: () => ({
     meta: [
-      { title: "Book direct — ThesKwoff Hotel" },
+      { title: "Book direct" },
       { name: "description", content: "Reserve rooms directly and unlock our best available rate." },
-      { property: "og:title", content: "Book direct — ThesKwoff Hotel" },
+      { property: "og:title", content: "Book direct" },
       { property: "og:description", content: "Best rate guaranteed on direct bookings." },
     ],
   }),
@@ -23,6 +29,9 @@ export const Route = createFileRoute("/book/")({
 
 function BookIndex() {
   const navigate = useNavigate();
+  // No property is selected yet at this stage — organisation-wide branding
+  // only, exactly like the login page (src/routes/auth.tsx).
+  const { data: brand } = useBrandSettings();
   const today = new Date().toISOString().slice(0, 10);
   const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
   const [propertyId, setPropertyId] = useState<string>("");
@@ -48,7 +57,7 @@ function BookIndex() {
           <Link to="/book" className="flex items-center gap-2">
             <BrandMark className="h-7 w-auto" />
             <div>
-              <div className="font-display text-sm font-semibold">ThesKwoff Hotel</div>
+              <div className="font-display text-sm font-semibold">{brand?.app_name || "ThesKwoff Hotel"}</div>
               <div className="text-[10px] uppercase tracking-widest text-muted-foreground">Direct Booking</div>
             </div>
           </Link>

@@ -4,12 +4,17 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { BrandMark } from "@/components/brand-mark";
+import { useBrandSettings } from "@/hooks/use-brand-settings";
 import { CheckCircle2, Copy } from "lucide-react";
 import { toast } from "sonner";
 import { z } from "zod";
 
+// Static SSR/pre-hydration fallback only — kept neutral; the live header
+// below resolves the actual booked property's name from the same
+// booking_lookup row rendered in the "Hotel" details field further down,
+// so the two can never disagree once the lookup resolves.
 export const Route = createFileRoute("/book/confirmation/$code")({
-  head: () => ({ meta: [{ title: "Booking confirmed — ThesKwoff Hotel" }] }),
+  head: () => ({ meta: [{ title: "Booking confirmed" }] }),
   validateSearch: (s) => z.object({ email: z.string().email() }).parse(s),
   component: Confirmation,
 });
@@ -17,6 +22,9 @@ export const Route = createFileRoute("/book/confirmation/$code")({
 function Confirmation() {
   const { code } = Route.useParams();
   const { email } = Route.useSearch();
+  // Organisation-wide fallback until the booking lookup below resolves the
+  // actual booked property.
+  const { data: brand } = useBrandSettings();
 
   const booking = useQuery({
     queryKey: ["booking-lookup", code, email],
@@ -33,7 +41,9 @@ function Confirmation() {
         <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-4">
           <Link to="/book" className="flex items-center gap-2">
             <BrandMark className="h-7 w-auto" />
-            <span className="font-display font-semibold text-sm">ThesKwoff Hotel</span>
+            <span className="font-display font-semibold text-sm">
+              {booking.data?.property_name || brand?.app_name || "ThesKwoff Hotel"}
+            </span>
           </Link>
         </div>
       </header>

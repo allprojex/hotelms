@@ -7,12 +7,18 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { BrandMark } from "@/components/brand-mark";
+import { useBrandSettings } from "@/hooks/use-brand-settings";
 import { useState } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
 
+// Static SSR/pre-hydration fallback only — kept neutral; this page can
+// service a lookup for any property (no property is known until a
+// confirmation-code + email lookup succeeds), so the live header below
+// resolves the booked property's name once found, falling back to
+// organisation branding until then.
 export const Route = createFileRoute("/book/manage")({
-  head: () => ({ meta: [{ title: "Manage booking — ThesKwoff Hotel" }] }),
+  head: () => ({ meta: [{ title: "Manage booking" }] }),
   validateSearch: (s) => z.object({ code: z.string().optional(), email: z.string().optional() }).parse(s),
   component: Manage,
 });
@@ -20,6 +26,9 @@ export const Route = createFileRoute("/book/manage")({
 function Manage() {
   const initial = Route.useSearch();
   const qc = useQueryClient();
+  // Organisation-wide fallback until a lookup resolves a specific booking's
+  // property (see booking.data?.property_name below).
+  const { data: brand } = useBrandSettings();
   const [code, setCode] = useState(initial.code ?? "");
   const [email, setEmail] = useState(initial.email ?? "");
   const [submitted, setSubmitted] = useState(!!(initial.code && initial.email));
@@ -75,7 +84,9 @@ function Manage() {
         <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-4">
           <Link to="/book" className="flex items-center gap-2">
             <BrandMark className="h-7 w-auto" />
-            <span className="font-display font-semibold text-sm">ThesKwoff Hotel</span>
+            <span className="font-display font-semibold text-sm">
+              {booking.data?.property_name || brand?.app_name || "ThesKwoff Hotel"}
+            </span>
           </Link>
         </div>
       </header>
