@@ -8,10 +8,13 @@ import { describe, expect, it } from "vitest";
 // wired into this route's own test suite; asserts against the real route
 // source so a regression in the actual shipped code fails this file.
 
+// Normalize CRLF -> LF: this file can be checked out with either line
+// ending on Windows depending on git's autocrlf handling, and the
+// multi-line string assertions below embed literal \n.
 const routePage = readFileSync(
   resolve(__dirname, "../src/routes/_authenticated/reservations.index.tsx"),
   "utf8",
-);
+).replace(/\r\n/g, "\n");
 
 describe("reservations date filter — control renders in the right place", () => {
   it("adds a Popover+Calendar date control between the Search input and the Status select, without moving either", () => {
@@ -50,6 +53,13 @@ describe("reservations date filter — control renders in the right place", () =
     expect(routePage).toContain(
       '<SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger>',
     );
+  });
+
+  it("uses a responsive width on the date button (full width below the sm breakpoint, fixed 220px at sm and up) rather than a bare fixed width, so the filter row never overflows a narrow viewport — regression pin for the mobile overflow fix", () => {
+    expect(routePage).toContain(
+      '<Button variant="outline" className="w-full sm:w-[220px] justify-start font-normal">',
+    );
+    expect(routePage).not.toMatch(/<Button variant="outline" className="w-\[220px\]/);
   });
 });
 
