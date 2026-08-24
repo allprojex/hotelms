@@ -271,30 +271,66 @@ SELECT
 -- release's own preflight run performed immediately before applying the
 -- migration. They must match exactly (this migration changes schema/enum/
 -- functions only, it never itself writes a data row).
+--
+-- IMPORTANT — payments.status='void' is NOT a valid absolute-zero check
+-- here (see the payment-baseline query immediately below): the 'void'
+-- status and the payments.status column were introduced by the ALREADY-
+-- SHIPPED full-refund migration (20260822130000), not by this one, and
+-- production can legitimately already contain void payments from that
+-- pre-existing workflow. This migration must PRESERVE whatever void count
+-- already existed, not require it to be zero. There is no automated
+-- preflight/postflight diff mechanism in this toolkit — the query below is
+-- deliberately IDENTICAL in shape/column-order/labels to the preflight's
+-- own "B. Payment baseline" query for exactly this reason: the operator
+-- (or release script) MUST diff this row against the row the preflight run
+-- captured immediately before applying the migration, and treat ANY
+-- difference in total_payments/posted_payments/void_payments/
+-- total_payment_amount as a release-blocking failure, not merely
+-- informational. This comparison is REQUIRED, fail-closed, before the
+-- release can be considered verified — it is not satisfied by this file
+-- running without error.
 -- ------------------------------------------------------------
 SELECT
-  (SELECT count(*) FROM public.reservation_charges) AS reservation_charges_count,
-  (SELECT COALESCE(sum(amount), 0) FROM public.reservation_charges) AS reservation_charges_total,
-  (SELECT count(*) FROM public.payments) AS payments_count,
-  (SELECT COALESCE(sum(amount), 0) FROM public.payments) AS payments_total,
-  (SELECT count(*) FROM public.journal_entries) AS journal_entries_count,
-  (SELECT count(*) FROM public.journal_lines) AS journal_lines_count,
-  (SELECT count(*) FROM public.admin_action_logs) AS admin_action_logs_count;
+  count(*) AS total_payments,
+  count(*) FILTER (WHERE status = 'posted') AS posted_payments,
+  count(*) FILTER (WHERE status = 'void') AS void_payments,
+  sum(amount) AS total_payment_amount
+FROM public.payments;
 
+-- Secondary, informational-only status breakdown (not itself a pass/fail
+-- check — the query above is the one that must match preflight exactly).
 SELECT
   status::text AS status, count(*) AS payment_count
 FROM public.payments GROUP BY status ORDER BY status;
 
--- Absolute (not baseline-relative) checks — must be true regardless of the
--- baseline totals above, because they describe what THIS MIGRATION ITSELF
--- must never do.
+SELECT
+  (SELECT count(*) FROM public.reservation_charges) AS reservation_charges_count,
+  (SELECT COALESCE(sum(amount), 0) FROM public.reservation_charges) AS reservation_charges_total,
+  (SELECT count(*) FROM public.journal_entries) AS journal_entries_count,
+  (SELECT count(*) FROM public.journal_lines) AS journal_lines_count,
+  (SELECT count(*) FROM public.admin_action_logs) AS admin_action_logs_count;
+
+-- Absolute (not baseline-relative) checks — safe to require exactly zero
+-- regardless of production's pre-existing state, because each object/event
+-- type below was introduced BY THIS MIGRATION ITSELF and could not exist
+-- before it:
+--   - reservation_payment_refunds: the table itself did not exist pre-release.
+--   - journal_entries/journal_lines tagged source='payment_refund': this
+--     migration is what adds 'payment_refund' to the journal_source enum —
+--     no pre-existing row could carry a value that didn't exist yet.
+--   - admin_action_logs tagged entity_type='reservation_payment_refund':
+--     this exact literal is introduced by this migration's own RPC and does
+--     not appear anywhere else in this codebase's migration history
+--     (confirmed by search) — no other write path could have produced it.
+-- payments.status='void' is deliberately NOT included here — see the
+-- comment above the payment-baseline query: that status already existed
+-- before this migration and must be preserved, not zeroed.
 SELECT
   'no_write_activity_from_migration_itself' AS check_name,
   (SELECT count(*) FROM public.reservation_payment_refunds) = 0 AS zero_refund_event_rows,
   (SELECT count(*) FROM public.journal_entries WHERE source = 'payment_refund') = 0 AS zero_new_journal_entries,
   (SELECT count(*) FROM public.journal_lines jl JOIN public.journal_entries je ON je.id = jl.entry_id WHERE je.source = 'payment_refund') = 0 AS zero_new_journal_lines,
-  (SELECT count(*) FROM public.admin_action_logs WHERE entity_type = 'reservation_payment_refund') = 0 AS zero_new_audit_records,
-  (SELECT count(*) FROM public.payments WHERE status = 'void') = 0 AS zero_payments_voided_by_migration;
+  (SELECT count(*) FROM public.admin_action_logs WHERE entity_type = 'reservation_payment_refund') = 0 AS zero_new_audit_records;
 
 -- ------------------------------------------------------------
 -- E. Migration history.

@@ -251,23 +251,47 @@ describe("Postflight — old RPC retirement", () => {
 });
 
 describe("Postflight — preservation and migration history", () => {
-  it("re-captures the same financial baseline queries as the preflight, for the operator to diff", () => {
+  it("captures the payment baseline (total/posted/void counts, total amount) in the EXACT SAME query shape/column order/labels as the preflight's own payment-baseline query, so the two rows can be diffed directly", () => {
+    const preflightPaymentBaseline =
+      "SELECT\n  count(*) AS total_payments,\n  count(*) FILTER (WHERE status = 'posted') AS posted_payments,\n  count(*) FILTER (WHERE status = 'void') AS void_payments,\n  sum(amount) AS total_payment_amount\nFROM public.payments;";
+    expect(preflight.replace(/\r\n/g, "\n")).toContain(preflightPaymentBaseline);
+    expect(postflight.replace(/\r\n/g, "\n")).toContain(preflightPaymentBaseline);
+  });
+
+  it("does NOT assert a global payments.status='void' count of zero anywhere — void is a pre-existing status from the already-shipped full-refund migration, not something this migration could ever create or require to be absent", () => {
+    expect(postflight).not.toMatch(/count\(\*\)[^;]*WHERE status = 'void'\)\s*=\s*0/);
+    expect(postflight).not.toContain("zero_payments_voided_by_migration");
+  });
+
+  it("documents, explicitly and fail-closed, that the payment-baseline comparison against preflight is REQUIRED and not satisfied merely by the file running without error (no automated preflight/postflight diff mechanism exists in this toolkit)", () => {
+    expect(postflight).toMatch(/REQUIRED, fail-closed/);
+    expect(postflight).toMatch(/not satisfied by this file\s*\n-- running without error/);
+  });
+
+  it("re-captures the other financial baseline queries (reservation_charges, journal_entries, journal_lines, admin_action_logs) as the preflight, for the operator to diff", () => {
     expect(postflight).toContain("reservation_charges_count");
     expect(postflight).toContain("reservation_charges_total");
-    expect(postflight).toContain("payments_count");
-    expect(postflight).toContain("payments_total");
     expect(postflight).toContain("journal_entries_count");
     expect(postflight).toContain("journal_lines_count");
     expect(postflight).toContain("admin_action_logs_count");
   });
 
-  it("asserts the migration itself created zero refund rows, zero new journal entries/lines, zero new audit records, and voided zero payments", () => {
+  it("asserts the migration itself created zero refund rows, zero new journal entries/lines, and zero new audit records — each because the object/event type did not exist before this migration, never because a pre-existing table's data must be empty", () => {
     expect(postflight).toContain("no_write_activity_from_migration_itself");
     expect(postflight).toContain("zero_refund_event_rows");
     expect(postflight).toContain("zero_new_journal_entries");
     expect(postflight).toContain("zero_new_journal_lines");
     expect(postflight).toContain("zero_new_audit_records");
-    expect(postflight).toContain("zero_payments_voided_by_migration");
+  });
+
+  it("classifies every absolute-zero check with its own justification: reservation_payment_refunds is a brand-new table, 'payment_refund' is a brand-new enum value, and the audit entity_type literal appears nowhere else in this codebase's migration history", () => {
+    expect(postflight).toMatch(/the table itself did not exist pre-release/);
+    expect(postflight).toMatch(
+      /migration is what adds 'payment_refund' to the journal_source enum/,
+    );
+    expect(postflight).toMatch(
+      /does\s*\n--\s*not appear anywhere else in this codebase's migration history/,
+    );
   });
 
   it("confirms the migration's own version is recorded in supabase_migrations.schema_migrations", () => {
