@@ -40,6 +40,29 @@ function ReservationsList() {
   const [status, setStatus] = useState<string>("all");
   const [checkInRange, setCheckInRange] = useState<DateRange | undefined>(undefined);
   const [dateOpen, setDateOpen] = useState(false);
+  // react-day-picker's own range-mode default, once a genuine multi-day
+  // range is already selected, EXTENDS `to` from the range's original
+  // `from` on every subsequent click — it never starts a fresh selection.
+  // (Confirmed directly: clicking a 3rd day after a completed 2-day range
+  // produced {from: <the very first day clicked>, to: <the new click>},
+  // silently re-including everything back to that first day — the
+  // production bug where an old date kept surviving into a new
+  // selection.) rangeConfirmed tracks whether the current range is a real,
+  // completed multi-day range; once it is, the next click is treated as
+  // the first click of an entirely new selection instead of being handed
+  // to the library's own extend behavior.
+  const [rangeConfirmed, setRangeConfirmed] = useState(false);
+  function handleCheckInSelect(newRange: DateRange | undefined, selectedDay: Date) {
+    if (rangeConfirmed) {
+      setCheckInRange({ from: selectedDay, to: undefined });
+      setRangeConfirmed(false);
+      return;
+    }
+    setCheckInRange(newRange);
+    setRangeConfirmed(
+      !!(newRange?.from && newRange?.to && newRange.from.getTime() !== newRange.to.getTime()),
+    );
+  }
 
   const checkInFrom = checkInRange?.from ? toDateKey(checkInRange.from) : null;
   const checkInTo = checkInRange?.to ? toDateKey(checkInRange.to) : checkInFrom;
@@ -109,7 +132,7 @@ function ReservationsList() {
               <Calendar
                 mode="range"
                 selected={checkInRange}
-                onSelect={setCheckInRange}
+                onSelect={handleCheckInSelect}
                 numberOfMonths={1}
                 defaultMonth={checkInRange?.from}
               />
@@ -118,7 +141,7 @@ function ReservationsList() {
                   variant="ghost"
                   size="sm"
                   disabled={!checkInRange?.from}
-                  onClick={() => { setCheckInRange(undefined); setDateOpen(false); }}
+                  onClick={() => { setCheckInRange(undefined); setRangeConfirmed(false); setDateOpen(false); }}
                 >
                   Clear
                 </Button>
