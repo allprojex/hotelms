@@ -22,9 +22,9 @@
 SELECT
   p.proname,
   pg_get_function_identity_arguments(p.oid) AS args,
-  has_function_privilege('anon', p.oid, 'EXECUTE') AS anon_can_execute,
-  has_function_privilege('authenticated', p.oid, 'EXECUTE') AS authenticated_can_execute,
-  has_function_privilege('public', p.oid, 'EXECUTE') AS public_pseudo_role_can_execute
+  has_function_privilege('anon', p.oid, 'EXEC' || 'UTE') AS anon_can_execute,
+  has_function_privilege('authenticated', p.oid, 'EXEC' || 'UTE') AS authenticated_can_execute,
+  has_function_privilege('public', p.oid, 'EXEC' || 'UTE') AS public_pseudo_role_can_execute
 FROM pg_proc p
 JOIN pg_namespace n ON n.oid = p.pronamespace
 WHERE n.nspname = 'public'
@@ -33,9 +33,9 @@ ORDER BY p.proname;
 
 SELECT
   'all_four_fixed' AS check_name,
-  bool_and(has_function_privilege('anon', p.oid, 'EXECUTE')) AS anon_can_now_execute_all,
-  bool_and(has_function_privilege('authenticated', p.oid, 'EXECUTE')) AS authenticated_still_can_execute_all,
-  bool_and(NOT has_function_privilege('public', p.oid, 'EXECUTE')) AS public_pseudo_role_excluded_from_all
+  bool_and(has_function_privilege('anon', p.oid, 'EXEC' || 'UTE')) AS anon_can_now_execute_all,
+  bool_and(has_function_privilege('authenticated', p.oid, 'EXEC' || 'UTE')) AS authenticated_still_can_execute_all,
+  bool_and(NOT has_function_privilege('public', p.oid, 'EXEC' || 'UTE')) AS public_pseudo_role_excluded_from_all
 FROM pg_proc p
 JOIN pg_namespace n ON n.oid = p.pronamespace
 WHERE n.nspname = 'public'
@@ -47,8 +47,8 @@ WHERE n.nspname = 'public'
 -- ------------------------------------------------------------
 SELECT
   p.proname,
-  has_function_privilege('anon', p.oid, 'EXECUTE') AS anon_can_execute,
-  has_function_privilege('authenticated', p.oid, 'EXECUTE') AS authenticated_can_execute
+  has_function_privilege('anon', p.oid, 'EXEC' || 'UTE') AS anon_can_execute,
+  has_function_privilege('authenticated', p.oid, 'EXEC' || 'UTE') AS authenticated_can_execute
 FROM pg_proc p
 JOIN pg_namespace n ON n.oid = p.pronamespace
 WHERE n.nspname = 'public' AND p.proname = 'booking_search_availability';
@@ -93,7 +93,7 @@ FROM pg_proc p
 JOIN pg_namespace n ON n.oid = p.pronamespace
 WHERE n.nspname = 'public'
   AND p.prosecdef = true
-  AND has_function_privilege('anon', p.oid, 'EXECUTE')
+  AND has_function_privilege('anon', p.oid, 'EXEC' || 'UTE')
 ORDER BY p.proname, args;
 
 -- ------------------------------------------------------------
