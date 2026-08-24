@@ -1,0 +1,54 @@
+-- Incident fix: public.booking_lookup(text, text) has been unreachable by
+-- anonymous callers since 2026-07-05, breaking the public /book/manage and
+-- /book/confirmation/$code routes for every real guest (HTTP 401, Postgres
+-- error 42501 "permission denied for function booking_lookup").
+--
+-- Root cause (confirmed against the full migration history and reproduced
+-- byte-for-byte against a local disposable Postgres replaying that exact
+-- history):
+--   1. booking_lookup was created in 20260705033256_...sql, SECURITY
+--      DEFINER, search_path pinned, correctly
+--      `GRANT EXECUTE ... TO anon, authenticated` in that same migration.
+--   2. 20260705091747_...sql ran a blanket
+--      `REVOKE ALL ... FROM PUBLIC, anon, authenticated` over every
+--      SECURITY DEFINER function in `public`, then correctly re-granted
+--      booking_lookup (and the other four booking-flow RPCs) back to
+--      `anon, authenticated` in that SAME migration -- no regression yet.
+--   3. 20260705105030_...sql ("Part 2: Revoke EXECUTE from anon on public
+--      SECURITY DEFINER functions") ran a SECOND, near-identical blanket
+--      `REVOKE EXECUTE ... FROM PUBLIC, anon` loop over every SECURITY
+--      DEFINER function in `public` again -- this time with NO
+--      corresponding re-grant anywhere in that file for booking_lookup,
+--      booking_create, booking_cancel, or booking_modify (booking_search_
+--      availability was ALSO caught by this same loop).
+--   4. A week later, 20260712183400_restore_public_booking_availability_
+--      grant.sql explicitly restored anon+authenticated EXECUTE on
+--      booking_search_availability only -- its own comment even says
+--      "Function replacement can reset explicit grants, so keep the
+--      intended anon/authenticated access here". booking_lookup never
+--      received the equivalent restoration.
+--   5. booking_lookup itself was never redefined again after step 1 (no
+--      DROP+CREATE, no CREATE OR REPLACE) -- confirmed by a full-history
+--      grep. This migration therefore changes no function body, no RLS, no
+--      table -- it is a pure grant restoration, mirroring the exact,
+--      already-shipped precedent in 20260712183400 for the sibling
+--      function that suffered the identical regression.
+--
+-- Security review (function body inspected, not re-authored here): the
+-- function requires an EXACT match on BOTH _confirmation_code AND
+-- lower(_email) (AND, not OR), returns at most one row (LIMIT 1), returns
+-- no payment-instrument/admin-only fields (rate_total is a total charge
+-- amount, not card data), and reservations.confirmation_code carries a
+-- UNIQUE constraint -- so the function cannot leak a different property's
+-- or a different guest's booking, and a code-only or email-only lookup is
+-- structurally impossible (both parameters are required, not optional).
+-- Confirmed live against a local fixture: correct code+email returns
+-- exactly the matching reservation; a wrong code or wrong email returns
+-- zero rows (not an error); a second, different property's reservation
+-- under its own correct code+email resolves independently with no
+-- cross-contamination. The function was safe for anon use when originally
+-- granted in 20260705033256 and remains unchanged today -- this migration
+-- restores exactly that original, intended contract, nothing more.
+REVOKE ALL ON FUNCTION public.booking_lookup(text, text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.booking_lookup(text, text) TO anon;
+GRANT EXECUTE ON FUNCTION public.booking_lookup(text, text) TO authenticated;
