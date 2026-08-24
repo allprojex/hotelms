@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
+import type { DateRange } from "react-day-picker";
 import { supabase } from "@/integrations/supabase/client";
 import { useActiveProperty } from "@/hooks/use-active-property";
 import { Card } from "@/components/ui/card";
@@ -8,9 +9,17 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Search } from "lucide-react";
+import { Plus, Search, Calendar as CalendarIcon } from "lucide-react";
 import { format } from "date-fns";
+
+// DATE column, not a timestamp — always compare/send plain "yyyy-MM-dd"
+// strings (from the Calendar's local-midnight Date objects via date-fns
+// format(), never .toISOString()) so this can't drift a day across
+// timezones the way a UTC round-trip would.
+const toDateKey = (d: Date) => format(d, "yyyy-MM-dd");
 
 export const Route = createFileRoute("/_authenticated/reservations/")({
   head: () => ({ meta: [{ title: "Reservations" }] }),
@@ -29,9 +38,14 @@ function ReservationsList() {
   const propertyId = useActiveProperty();
   const [q, setQ] = useState("");
   const [status, setStatus] = useState<string>("all");
+  const [checkInRange, setCheckInRange] = useState<DateRange | undefined>(undefined);
+  const [dateOpen, setDateOpen] = useState(false);
+
+  const checkInFrom = checkInRange?.from ? toDateKey(checkInRange.from) : null;
+  const checkInTo = checkInRange?.to ? toDateKey(checkInRange.to) : checkInFrom;
 
   const query = useQuery({
-    queryKey: ["reservations", propertyId, status],
+    queryKey: ["reservations", propertyId, status, checkInFrom, checkInTo],
     enabled: !!propertyId,
     queryFn: async () => {
       let sel = supabase.from("reservations")
@@ -40,6 +54,12 @@ function ReservationsList() {
         .order("check_in", { ascending: false })
         .limit(200);
       if (status !== "all") sel = sel.eq("status", status as any);
+      // check_in is a DATE column — gte/lte against plain "yyyy-MM-dd"
+      // strings compares dates directly, inclusive on both ends, with no
+      // timezone interpretation. A single selected date (checkInFrom set,
+      // no explicit "to") uses the same value for both bounds.
+      if (checkInFrom) sel = sel.gte("check_in", checkInFrom);
+      if (checkInTo) sel = sel.lte("check_in", checkInTo);
       const { data, error } = await sel;
       if (error) throw error;
       return data;
@@ -70,6 +90,41 @@ function ReservationsList() {
             <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input placeholder="Search by code, guest name, email…" className="pl-8" value={q} onChange={(e) => setQ(e.target.value)} />
           </div>
+          <Popover open={dateOpen} onOpenChange={setDateOpen}>
+            <PopoverTrigger asChild>
+              <Button variant="outline" className="w-[220px] justify-start font-normal">
+                <CalendarIcon className="h-4 w-4 mr-2 shrink-0" />
+                {checkInRange?.from ? (
+                  checkInRange.to && checkInTo !== checkInFrom ? (
+                    <span className="truncate">{format(checkInRange.from, "MMM d")} – {format(checkInRange.to, "MMM d, yyyy")}</span>
+                  ) : (
+                    <span className="truncate">{format(checkInRange.from, "MMM d, yyyy")}</span>
+                  )
+                ) : (
+                  <span className="truncate text-muted-foreground">Check-in date</span>
+                )}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar
+                mode="range"
+                selected={checkInRange}
+                onSelect={setCheckInRange}
+                numberOfMonths={1}
+                defaultMonth={checkInRange?.from}
+              />
+              <div className="flex items-center justify-end gap-2 border-t p-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={!checkInRange?.from}
+                  onClick={() => { setCheckInRange(undefined); setDateOpen(false); }}
+                >
+                  Clear
+                </Button>
+              </div>
+            </PopoverContent>
+          </Popover>
           <Select value={status} onValueChange={setStatus}>
             <SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger>
             <SelectContent>
