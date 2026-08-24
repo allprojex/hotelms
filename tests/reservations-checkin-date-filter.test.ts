@@ -42,7 +42,7 @@ describe("reservations date filter — control renders in the right place", () =
   it("provides a Clear action that resets the selection and closes the popover, disabled when nothing is selected", () => {
     expect(routePage).toMatch(/disabled=\{!checkInRange\?\.from\}/);
     expect(routePage).toMatch(
-      /onClick=\{\(\) => \{ setCheckInRange\(undefined\); setDateOpen\(false\); \}\}/,
+      /onClick=\{\(\) => \{ setCheckInRange\(undefined\); setRangeConfirmed\(false\); setDateOpen\(false\); \}\}/,
     );
   });
 
@@ -132,6 +132,40 @@ describe("reservations date filter — combines with existing filters via AND, w
   it("the query key includes checkInFrom/checkInTo alongside the existing propertyId/status keys, so React Query refetches correctly on every filter change without a second, conflicting source of truth", () => {
     expect(routePage).toContain(
       'queryKey: ["reservations", propertyId, status, checkInFrom, checkInTo]',
+    );
+  });
+});
+
+describe("reservations date filter — range-reset fix (stale/incorrect results bug)", () => {
+  // Structural pin for the fix committed alongside the real behavioral proof
+  // in tests/reservations-checkin-date-filter-range-bug.test.tsx (which
+  // exercises the actual react-day-picker Calendar component). This file
+  // stays purely structural per this suite's existing convention, but the
+  // bug itself was only proven/fixed via the component-level test.
+  it("wires the Calendar's onSelect to handleCheckInSelect, not a bare setCheckInRange, so a completed range doesn't silently extend on the next click", () => {
+    expect(routePage).toContain("onSelect={handleCheckInSelect}");
+    expect(routePage).not.toMatch(/<Calendar[\s\S]*?onSelect=\{setCheckInRange\}/);
+  });
+
+  it("tracks rangeConfirmed and resets to a fresh single-day selection (selectedDay, not the stale range) once a completed range is clicked again", () => {
+    expect(routePage).toContain("const [rangeConfirmed, setRangeConfirmed] = useState(false);");
+    expect(routePage).toContain(
+      "function handleCheckInSelect(newRange: DateRange | undefined, selectedDay: Date) {",
+    );
+    expect(routePage).toContain("if (rangeConfirmed) {");
+    expect(routePage).toContain("setCheckInRange({ from: selectedDay, to: undefined });");
+    expect(routePage).toContain("setRangeConfirmed(false);");
+  });
+
+  it("only marks a range confirmed once from and to are both set and genuinely different days (a real completed range, not a single click)", () => {
+    expect(routePage).toContain(
+      "!!(newRange?.from && newRange?.to && newRange.from.getTime() !== newRange.to.getTime()),",
+    );
+  });
+
+  it("Clear also resets rangeConfirmed, so the next click after Clear starts a fresh single date instead of extending a phantom prior range", () => {
+    expect(routePage).toMatch(
+      /onClick=\{\(\) => \{ setCheckInRange\(undefined\); setRangeConfirmed\(false\); setDateOpen\(false\); \}\}/,
     );
   });
 });
