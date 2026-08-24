@@ -191,6 +191,48 @@
 --     retry-safe. This makes a client-side id-generation bug loud and
 --     debuggable rather than a silent wrong-money-moved incident.
 --
+-- ------------------------------------------------------------
+-- Replay authorization / validation ordering fix (same PR, pre-merge) —
+-- findings 16-18:
+-- ------------------------------------------------------------
+--
+-- 16. Authorization now runs BEFORE the idempotent-replay lookup, and
+--     therefore before any possible early RETURN of an existing refund
+--     id. The prior ordering checked for a matching existing row (and
+--     could RETURN on a match) before calling has_any_role() at all —
+--     an actor who merely knew payment_id + request_id + a payload that
+--     happened to match a prior successful refund could receive that
+--     refund's id back without ever being authorized to refund anything
+--     on that property. Idempotency is a retry-safety property of an
+--     authorized call, not a bypass of authorization — a replay must be
+--     rejected exactly as a fresh request would be for an unauthorized
+--     or wrong-property actor. Property/reservation are still derived
+--     solely from the locked payment row (never client input); UUID
+--     knowledge is never treated as authorization.
+--
+-- 17. Reason and amount are now fully normalized AND validated (length
+--     5-500, amount > 0, no fractional cents) BEFORE the payload is
+--     compared against an existing row for replay. The prior ordering
+--     compared `ROUND(existing.amount, 2) = ROUND(_amount, 2)` before
+--     `_amount` had been checked for fractional cents at all — a retry
+--     of 12.004 against an existing valid 12.00 refund would ROUND-equal
+--     it and be accepted as the same replay instead of being rejected as
+--     malformed. A malformed retry must fail its OWN validation
+--     regardless of how closely its rounded value resembles a prior
+--     valid request. With `_amount` now confirmed exact-cent before the
+--     comparison is reached, the replay match uses plain NUMERIC equality
+--     (`existing.amount = _amount`), not ROUND on either side.
+--
+-- 18. The `pay.status = 'void'` rejection now runs strictly AFTER the
+--     replay lookup, not before it — it applies only to a genuinely NEW
+--     refund event (the replay lookup found no match). An exact,
+--     authorized, validly-shaped replay of the very refund call that
+--     itself completed a payment's full refund must still return the
+--     SAME existing id (that is what "idempotent" means for a refund
+--     that happened to be the closing one), not be blocked by the
+--     void-status guard that exists to stop a genuinely NEW refund
+--     attempt against an already-fully-refunded payment.
+--
 -- Reporting-date semantics (reviewed, not changed): reports.tsx's daily
 -- revenue series and insights.functions.ts's 7-day trend bucket a
 -- payment's (net-of-refund) contribution under its ORIGINAL received_at
@@ -294,43 +336,25 @@ BEGIN
   SELECT * INTO res FROM public.reservations WHERE id = pay.reservation_id;
   IF res IS NULL THEN RAISE EXCEPTION 'Reservation for this payment was not found'; END IF;
 
-  -- Normalized once, up front (finding 14) — used identically for the
-  -- idempotency payload comparison below, for length validation further
-  -- down, and for the value actually stored, so all three always agree.
-  _trimmed_reason := regexp_replace(btrim(COALESCE(_reason, '')), '\s+', ' ', 'g');
-
-  -- Idempotency key is the FULL payload (property_id, request_id,
-  -- payment_id, amount, normalized reason), not request_id alone (findings
-  -- 14/15). A replay of the exact same call returns the same result,
-  -- re-running no validation, creating no second financial effect. A
-  -- request_id reused with a DIFFERENT payment/amount/reason is a client
-  -- bug — surfaced loudly as a named conflict rather than silently
-  -- returning an unrelated prior refund's id or silently creating a second
-  -- refund under an id meant to make retries safe.
-  SELECT * INTO existing FROM public.reservation_payment_refunds
-    WHERE property_id = res.property_id AND request_id = _request_id;
-  IF existing.id IS NOT NULL THEN
-    IF existing.payment_id = _payment_id
-       AND ROUND(existing.amount, 2) = ROUND(_amount, 2)
-       AND existing.reason = _trimmed_reason THEN
-      RETURN existing.id;
-    ELSE
-      RAISE EXCEPTION 'Request id % was already used for a different refund (payment %, amount %) — reuse a request id only to retry the exact same refund', _request_id, existing.payment_id, existing.amount;
-    END IF;
-  END IF;
-
+  -- Finding 16: authorization runs BEFORE any replay lookup, and therefore
+  -- before any possible early RETURN of an existing refund id. An
+  -- idempotent retry is still a call to a protected financial operation —
+  -- an actor without refund permission on this payment's property must be
+  -- rejected exactly as a fresh request would be, never handed a prior
+  -- refund's id merely for knowing payment_id/request_id/payload. UUID
+  -- knowledge is never treated as authorization.
   IF NOT public.has_any_role(auth.uid(), ARRAY['super_admin','hotel_owner','general_manager','accountant']::app_role[], res.property_id) THEN
     RAISE EXCEPTION 'Not permitted to refund a reservation payment';
   END IF;
 
-  -- Defense against the cross-path scenario (finding 9): a payment already
-  -- fully voided via the retired reverse_reservation_payment() path (or by
-  -- a prior call to this same function) has zero real remaining balance
-  -- regardless of what this table's own SUM shows.
-  IF pay.status = 'void' THEN
-    RAISE EXCEPTION 'Payment has already been fully refunded';
-  END IF;
-
+  -- Finding 17: reason/amount are normalized and FULLY validated before
+  -- the payload is ever compared against an existing row for idempotent
+  -- replay. A malformed retry (fractional cents, non-positive, too-short
+  -- reason) must fail its OWN validation — it must never slip through by
+  -- rounding or truncating into apparent equality with a prior valid
+  -- request (e.g. a 12.004 retry against an existing 12.00 refund must
+  -- raise the fractional-cent error, not be accepted as the same replay).
+  _trimmed_reason := regexp_replace(btrim(COALESCE(_reason, '')), '\s+', ' ', 'g');
   IF char_length(_trimmed_reason) < 5 THEN
     RAISE EXCEPTION 'A refund reason of at least 5 characters is required';
   END IF;
@@ -341,10 +365,47 @@ BEGIN
   IF _amount IS NULL OR _amount <= 0 THEN
     RAISE EXCEPTION 'Refund amount must be greater than zero';
   END IF;
-  -- Finding 11: rejected at the RPC layer before any write; also enforced
-  -- as a hard DB-layer CHECK on reservation_payment_refunds itself.
+  -- Rejected here, before any comparison against a possibly-matching
+  -- existing row; also enforced as a hard DB-layer CHECK on
+  -- reservation_payment_refunds itself.
   IF ROUND(_amount, 2) <> _amount THEN
     RAISE EXCEPTION 'Refund amount cannot have fractional cents';
+  END IF;
+
+  -- Idempotent replay: only reachable once the caller is authorized
+  -- (finding 16) AND the payload is independently valid on its own terms
+  -- (finding 17) — never before either. Idempotency key is the FULL
+  -- payload (property_id, request_id, payment_id, amount, normalized
+  -- reason), not request_id alone. Compared with exact NUMERIC equality —
+  -- `_amount` is already confirmed exact-cent above, so no ROUND is
+  -- needed (or wanted) in this comparison. A request_id reused with a
+  -- DIFFERENT payment/amount/reason is a client bug, surfaced loudly as a
+  -- named conflict rather than silently returning an unrelated prior
+  -- refund's id or silently creating a second refund under an id meant to
+  -- make retries safe.
+  SELECT * INTO existing FROM public.reservation_payment_refunds
+    WHERE property_id = res.property_id AND request_id = _request_id;
+  IF existing.id IS NOT NULL THEN
+    IF existing.payment_id = _payment_id
+       AND existing.amount = _amount
+       AND existing.reason = _trimmed_reason THEN
+      RETURN existing.id;
+    ELSE
+      RAISE EXCEPTION 'Request id % was already used for a different refund (payment %, amount %) — reuse a request id only to retry the exact same refund', _request_id, existing.payment_id, existing.amount;
+    END IF;
+  END IF;
+
+  -- Finding 18: pay.status = 'void' is rejected ONLY once we know this is
+  -- a genuinely NEW refund event (no matching existing row was found
+  -- above) — an exact, authorized, validly-shaped replay of the refund
+  -- that itself completed the payment's full refund must still return the
+  -- SAME existing id via the replay branch above, not be blocked here.
+  -- Also still catches the cross-path scenario (finding 9): a payment
+  -- already fully voided via the retired reverse_reservation_payment()
+  -- path has zero real remaining balance regardless of what this table's
+  -- own SUM shows.
+  IF pay.status = 'void' THEN
+    RAISE EXCEPTION 'Payment has already been fully refunded';
   END IF;
 
   -- Server-authoritative remaining refundable balance — computed fresh
@@ -353,15 +414,15 @@ BEGIN
     FROM public.reservation_payment_refunds WHERE payment_id = pay.id;
   _remaining := ROUND(pay.amount - _already_refunded, 2);
 
-  -- Findings 12/13: exact-cent comparison, no tolerance band. NUMERIC is
-  -- exact decimal arithmetic in Postgres, not float — the 0.005 slack this
-  -- replaces bought no real protection and could in principle let an
-  -- amount slip past the true remaining balance by up to half a cent.
+  -- Exact-cent comparison, no tolerance band. NUMERIC is exact decimal
+  -- arithmetic in Postgres, not float — a 0.005-style slack here would buy
+  -- no real protection and could in principle let an amount slip past the
+  -- true remaining balance by up to half a cent.
   IF _remaining <= 0 THEN
     RAISE EXCEPTION 'Payment has already been fully refunded';
   END IF;
-  IF ROUND(_amount, 2) > _remaining THEN
-    RAISE EXCEPTION 'Refund amount exceeds remaining refundable balance: % remaining, % requested', _remaining, ROUND(_amount,2);
+  IF _amount > _remaining THEN
+    RAISE EXCEPTION 'Refund amount exceeds remaining refundable balance: % remaining, % requested', _remaining, _amount;
   END IF;
 
   SELECT id INTO _period_id FROM public.accounting_periods

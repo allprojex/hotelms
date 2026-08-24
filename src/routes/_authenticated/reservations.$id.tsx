@@ -361,7 +361,8 @@ function ReservationDetail() {
             const alreadyRefunded = alreadyRefundedFor(refundTarget);
             const remaining = remainingRefundableFor(refundTarget);
             const parsedAmount = Number(refundAmount);
-            const amountValid = refundAmount.trim() !== "" && Number.isFinite(parsedAmount) && parsedAmount > 0 && parsedAmount <= remaining + 0.005;
+            const hasExactCents = /^\d+(\.\d{1,2})?$/.test(refundAmount.trim());
+            const amountValid = refundAmount.trim() !== "" && Number.isFinite(parsedAmount) && parsedAmount > 0 && hasExactCents && Math.round(parsedAmount * 100) <= Math.round(remaining * 100);
             const reasonValid = refundReason.trim().length >= 5 && refundReason.trim().length <= 500;
             return (
               <div className="space-y-3">
@@ -383,7 +384,7 @@ function ReservationDetail() {
                     value={refundAmount} onChange={(e) => setRefundAmount(e.target.value)}
                   />
                   {!amountValid && refundAmount.trim() !== "" && (
-                    <p className="text-xs text-destructive mt-1">Enter an amount greater than zero and no more than {remaining.toFixed(2)} remaining.</p>
+                    <p className="text-xs text-destructive mt-1">Enter an amount greater than zero, with at most 2 decimal places, and no more than {remaining.toFixed(2)} remaining.</p>
                   )}
                 </div>
                 <div>
@@ -402,7 +403,8 @@ function ReservationDetail() {
                 if (!refundTarget || refundBusy) return true;
                 const remaining = remainingRefundableFor(refundTarget);
                 const parsedAmount = Number(refundAmount);
-                const amountValid = refundAmount.trim() !== "" && Number.isFinite(parsedAmount) && parsedAmount > 0 && parsedAmount <= remaining + 0.005;
+                const hasExactCents = /^\d+(\.\d{1,2})?$/.test(refundAmount.trim());
+                const amountValid = refundAmount.trim() !== "" && Number.isFinite(parsedAmount) && parsedAmount > 0 && hasExactCents && Math.round(parsedAmount * 100) <= Math.round(remaining * 100);
                 const reasonValid = refundReason.trim().length >= 5 && refundReason.trim().length <= 500;
                 return !amountValid || !reasonValid;
               })()}

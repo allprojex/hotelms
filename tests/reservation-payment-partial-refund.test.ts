@@ -23,6 +23,20 @@ import { describe, expect, it } from "vitest";
 // incident/implementation report for the exact commands and results. That
 // live pass is a manual authoring-time verification (matching this repo's
 // established convention), not re-run by `vitest run`.
+//
+// Replay authorization / validation ordering fix (findings 16-18) — also
+// live-verified against a real local disposable Postgres: an unauthorized
+// actor's exact replay is rejected with no refund id returned and no
+// mutation; a same-property actor holding a role on a DIFFERENT property is
+// rejected identically; a replay with a fractional-cent amount is rejected
+// by amount validation before ever reaching the idempotency comparison
+// (never rounds into apparent equality with a prior valid request); a
+// negative-amount replay and a too-short-reason replay are each rejected by
+// their own validation for the same reason; an exact valid replay and a
+// replay differing only by incidental reason whitespace both return the
+// same refund id with no second financial effect; and an exact, authorized
+// replay of the refund call that itself completed a payment's full refund
+// still returns the same id despite payments.status already being 'void'.
 
 const root = resolve(__dirname, "..");
 function read(path: string): string {
@@ -151,7 +165,7 @@ describe("partial refund — eligibility, amount validation, and remaining-balan
   });
 
   it("rejects an amount exceeding the remaining refundable balance using an exact-cent comparison, with no 0.005 tolerance band — NUMERIC is exact decimal arithmetic, not float", () => {
-    expect(refundFn).toContain("IF ROUND(_amount, 2) > _remaining THEN");
+    expect(refundFn).toContain("IF _amount > _remaining THEN");
     expect(refundFn).toContain("Refund amount exceeds remaining refundable balance");
     expect(refundFn).not.toMatch(/_remaining\s*\+\s*0\.005/);
     expect(refundFn).not.toMatch(/_remaining\s*<=\s*0\.005/);
@@ -160,7 +174,7 @@ describe("partial refund — eligibility, amount validation, and remaining-balan
   it("the remaining-balance check happens strictly after locking the payment row and computing the fresh SUM — never before", () => {
     const lockIdx = refundFn.indexOf("FOR UPDATE");
     const sumIdx = refundFn.indexOf("INTO _already_refunded");
-    const checkIdx = refundFn.indexOf("IF ROUND(_amount, 2) > _remaining");
+    const checkIdx = refundFn.indexOf("IF _amount > _remaining THEN");
     expect(lockIdx).toBeGreaterThan(-1);
     expect(sumIdx).toBeGreaterThan(lockIdx);
     expect(checkIdx).toBeGreaterThan(sumIdx);
@@ -186,34 +200,54 @@ describe("partial refund — concurrency and idempotency", () => {
     );
   });
 
-  it("checks for an existing row under this exact request id BEFORE any other validation, comparing the FULL payload — payment_id, amount, and normalized reason — not just the request id alone", () => {
+  it("authorization runs BEFORE the idempotent-replay lookup, and therefore before any possible early RETURN of an existing refund id — a replay is still a call to a protected financial operation", () => {
     const lockCallIdx = refundFn.indexOf("pg_advisory_xact_lock");
+    const roleCheckIdx = refundFn.indexOf("has_any_role(");
     const existingCheckIdx = refundFn.indexOf(
       "SELECT * INTO existing FROM public.reservation_payment_refunds",
     );
-    const roleCheckIdx = refundFn.indexOf("has_any_role(");
     expect(lockCallIdx).toBeGreaterThan(-1);
-    expect(existingCheckIdx).toBeGreaterThan(lockCallIdx);
-    expect(roleCheckIdx).toBeGreaterThan(existingCheckIdx);
+    expect(roleCheckIdx).toBeGreaterThan(lockCallIdx);
+    expect(existingCheckIdx).toBeGreaterThan(roleCheckIdx);
     expect(refundFn).toContain("IF existing.id IS NOT NULL THEN");
     expect(refundFn).toContain("existing.payment_id = _payment_id");
-    expect(refundFn).toContain("ROUND(existing.amount, 2) = ROUND(_amount, 2)");
+    expect(refundFn).toContain("existing.amount = _amount");
+    expect(refundFn).not.toMatch(/ROUND\(existing\.amount,\s*2\)\s*=\s*ROUND\(_amount,\s*2\)/);
     expect(refundFn).toContain("existing.reason = _trimmed_reason");
     expect(refundFn).toContain("RETURN existing.id;");
   });
 
-  it("normalizes the reason once, up front — trimmed and internal whitespace collapsed — used identically for the idempotency comparison, length validation, and the stored value", () => {
+  it("reason and amount are fully normalized and validated (length, positivity, fractional cents) BEFORE the payload is compared against an existing row — a malformed retry cannot round or truncate into apparent equality with a prior valid request", () => {
+    const roleCheckIdx = refundFn.indexOf("has_any_role(");
     const normalizeIdx = refundFn.indexOf(
       "_trimmed_reason := regexp_replace(btrim(COALESCE(_reason, '')), '\\s+', ' ', 'g');",
     );
-    const idempotencyIdx = refundFn.indexOf("SELECT * INTO existing FROM public.reservation_payment_refunds");
-    expect(normalizeIdx).toBeGreaterThan(-1);
-    expect(idempotencyIdx).toBeGreaterThan(normalizeIdx);
+    const reasonLenIdx = refundFn.indexOf("char_length(_trimmed_reason) < 5");
+    const amountPositiveIdx = refundFn.indexOf("IF _amount IS NULL OR _amount <= 0 THEN");
+    const fractionalCentIdx = refundFn.indexOf("IF ROUND(_amount, 2) <> _amount THEN");
+    const idempotencyIdx = refundFn.indexOf(
+      "SELECT * INTO existing FROM public.reservation_payment_refunds",
+    );
+    expect(roleCheckIdx).toBeGreaterThan(-1);
+    expect(normalizeIdx).toBeGreaterThan(roleCheckIdx);
+    expect(reasonLenIdx).toBeGreaterThan(normalizeIdx);
+    expect(amountPositiveIdx).toBeGreaterThan(reasonLenIdx);
+    expect(fractionalCentIdx).toBeGreaterThan(amountPositiveIdx);
+    expect(idempotencyIdx).toBeGreaterThan(fractionalCentIdx);
   });
 
   it("a request id reused with a different payment/amount/reason raises an explicit, named conflict — never silently returns an unrelated refund's id or silently creates a second refund", () => {
     expect(refundFn).toContain("was already used for a different refund");
     expect(refundFn).toContain("reuse a request id only to retry the exact same refund");
+  });
+
+  it("the payment-status void check runs AFTER the idempotent-replay lookup, applying only to a genuinely new refund event — an exact replay of the refund that itself fully refunded the payment must still return the same id, not be blocked by this guard", () => {
+    const idempotencyIdx = refundFn.indexOf(
+      "SELECT * INTO existing FROM public.reservation_payment_refunds",
+    );
+    const voidCheckIdx = refundFn.indexOf("IF pay.status = 'void' THEN");
+    expect(idempotencyIdx).toBeGreaterThan(-1);
+    expect(voidCheckIdx).toBeGreaterThan(idempotencyIdx);
   });
 
   it("the idempotency key is scoped by property, backed by a real UNIQUE(property_id, request_id) constraint at the DB level, not just the advisory lock", () => {
@@ -359,9 +393,18 @@ describe("partial refund — UI: identifying the payment, amounts, mandatory rea
     expect(reservationPage).toContain("Remaining refundable");
   });
 
-  it("the amount input is bounded to the remaining refundable amount (both visually via max, and in the enable/disable logic)", () => {
+  it("the amount input is bounded to the remaining refundable amount using an exact-cents comparison — no 0.005 tolerance, matching the RPC's exact-cent semantics", () => {
     expect(reservationPage).toContain("max={remaining}");
-    expect(reservationPage).toContain("parsedAmount <= remaining + 0.005");
+    expect(reservationPage).toContain(
+      "Math.round(parsedAmount * 100) <= Math.round(remaining * 100)",
+    );
+    expect(reservationPage).not.toMatch(/parsedAmount\s*<=\s*remaining\s*\+\s*0\.005/);
+  });
+
+  it("rejects fractional-cent input in the refund amount field before it can be submitted", () => {
+    const occurrences = reservationPage.match(/hasExactCents = \/\^\\d\+\(\\\.\\d\{1,2\}\)\?\$\/\.test\(refundAmount\.trim\(\)\)/g) ?? [];
+    expect(occurrences.length).toBeGreaterThanOrEqual(2);
+    expect(reservationPage).toContain("hasExactCents &&");
   });
 
   it("reason remains mandatory (5-500 chars) alongside the new amount validation — submit requires BOTH", () => {
