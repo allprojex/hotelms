@@ -28,12 +28,16 @@ export const getBusinessInsights = createServerFn({ method: "POST" })
         .eq("property_id", data.propertyId)
         .gte("check_in", startStr)
         .lte("check_in", endStr),
-      // status filter: excludes refunded payments from the revenue trend —
-      // see 20260822130000_reservation_payment_refund.sql. Cast to `any`
-      // because `payments.status` is not yet in the generated Supabase
-      // types (matching the ap_payments/ar_receipts precedent).
+      // status filter: excludes FULLY refunded payments from the revenue
+      // trend — see 20260822130000_reservation_payment_refund.sql. A
+      // PARTIALLY refunded payment stays 'posted' (correctly still
+      // included) but its refunded portion is netted out below via
+      // reservation_payment_refunds — see
+      // 20260824130000_reservation_payment_partial_refund.sql. Cast to
+      // `any` because `payments.status` is not yet in the generated
+      // Supabase types (matching the ap_payments/ar_receipts precedent).
       (supabase as any).from("payments")
-        .select("amount, received_at, reservations!inner(property_id)")
+        .select("id, amount, received_at, reservations!inner(property_id)")
         .eq("reservations.property_id", data.propertyId)
         .eq("status", "posted")
         .gte("received_at", startStr),
@@ -41,7 +45,19 @@ export const getBusinessInsights = createServerFn({ method: "POST" })
 
     const totalRooms = roomsRes.count ?? 0;
     const reservations = reservationsRes.data ?? [];
-    const payments = (paymentsRes.data ?? []) as Array<{ amount: number; received_at: string }>;
+    const rawPayments = (paymentsRes.data ?? []) as Array<{ id: string; amount: number; received_at: string }>;
+    const paymentIds = rawPayments.map((p) => p.id);
+    const refundTotalsRes = paymentIds.length > 0
+      ? await (supabase.from as any)("reservation_payment_refunds").select("payment_id, amount").in("payment_id", paymentIds)
+      : { data: [] as any[] };
+    const refundedByPayment = new Map<string, number>();
+    for (const r of refundTotalsRes.data ?? []) {
+      refundedByPayment.set(r.payment_id, (refundedByPayment.get(r.payment_id) ?? 0) + Number(r.amount));
+    }
+    const payments = rawPayments.map((p) => ({
+      ...p,
+      amount: Math.max(0, Number(p.amount) - (refundedByPayment.get(p.id) ?? 0)),
+    }));
 
     const days: Array<{ date: string; arrivals: number; revenue: number; occupancy: number }> = [];
     for (let i = 6; i >= 0; i--) {
