@@ -82,16 +82,33 @@ function DashboardPage() {
         supabase.from("reservations").select("id", { count: "exact", head: true }).eq("property_id", propertyId!).eq("check_in", today).in("status", ["confirmed", "checked_in"]),
         supabase.from("reservations").select("id", { count: "exact", head: true }).eq("property_id", propertyId!).eq("check_out", today).in("status", ["checked_in", "checked_out"]),
         supabase.from("reservations").select("id", { count: "exact", head: true }).eq("property_id", propertyId!).eq("status", "checked_in"),
-        // status filter: excludes refunded payments from "today's revenue" —
-        // see 20260822130000_reservation_payment_refund.sql. `payments.status`
-        // is not yet in the generated Supabase types, so the query builder
-        // is cast to `any` here, matching the established precedent for
-        // ap_payments/ar_receipts (accounting.ap.tsx, accounting.ar.tsx).
-        (supabase as any).from("payments").select("amount, reservations!inner(property_id)").eq("reservations.property_id", propertyId!).eq("status", "posted").gte("received_at", today),
+        // status filter: excludes FULLY refunded payments from "today's
+        // revenue" — see 20260822130000_reservation_payment_refund.sql. A
+        // PARTIALLY refunded payment stays 'posted' (correctly still
+        // included) but its refunded portion is subtracted below via
+        // reservation_payment_refunds — see
+        // 20260824130000_reservation_payment_partial_refund.sql.
+        // `payments.status` is not yet in the generated Supabase types, so
+        // the query builder is cast to `any` here, matching the established
+        // precedent for ap_payments/ar_receipts (accounting.ap.tsx,
+        // accounting.ar.tsx).
+        (supabase as any).from("payments").select("id, amount, reservations!inner(property_id)").eq("reservations.property_id", propertyId!).eq("status", "posted").gte("received_at", today),
       ]);
       const totalRooms = rooms.count ?? 0;
       const occupied = (rooms.data ?? []).filter((r) => r.status === "occupied").length;
-      const revenueToday = (revenue.data ?? []).reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
+      const revenueRows = (revenue.data ?? []) as any[];
+      const revenuePaymentIds = revenueRows.map((r) => r.id as string);
+      const refundTotals = revenuePaymentIds.length > 0
+        ? await (supabase.from as any)("reservation_payment_refunds").select("payment_id, amount").in("payment_id", revenuePaymentIds)
+        : { data: [] as any[] };
+      const refundedByPayment = new Map<string, number>();
+      for (const r of refundTotals.data ?? []) {
+        refundedByPayment.set(r.payment_id, (refundedByPayment.get(r.payment_id) ?? 0) + Number(r.amount));
+      }
+      const revenueToday = revenueRows.reduce(
+        (s: number, r: any) => s + Math.max(0, Number(r.amount || 0) - (refundedByPayment.get(r.id) ?? 0)),
+        0,
+      );
       return {
         totalRooms,
         occupied,

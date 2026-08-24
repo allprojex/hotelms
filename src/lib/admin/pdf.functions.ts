@@ -115,17 +115,33 @@ export const renderAdminPdf = createServerFn({ method: "POST" })
             .eq("id", data.propertyId)
             .maybeSingle(),
           supabase.from("reservation_charges").select("*").eq("reservation_id", data.id),
-          // status filter: a refunded payment must not appear as money
-          // collected on a printed folio — see
-          // 20260822130000_reservation_payment_refund.sql. Cast to `any`
-          // because `payments.status` is not yet in the generated Supabase
-          // types (matching the ap_payments/ar_receipts precedent).
+          // status filter: a FULLY refunded payment must not appear as
+          // money collected on a printed folio — see
+          // 20260822130000_reservation_payment_refund.sql. A PARTIALLY
+          // refunded payment stays 'posted' (correctly still included) but
+          // is printed/summed at its NET remaining amount — see
+          // 20260824130000_reservation_payment_partial_refund.sql. Cast to
+          // `any` because `payments.status` is not yet in the generated
+          // Supabase types (matching the ap_payments/ar_receipts precedent).
           (supabase as any).from("payments").select("*").eq("reservation_id", data.id).eq("status", "posted"),
         ]);
       if (rErr) throw new Error(rErr.message);
       if (!r) throw new Error("Reservation not found for this property");
       const anyR = r as any;
       const anyP = p as any;
+      const rawPayments = ((payments as any[]) ?? []) as any[];
+      const paymentIds = rawPayments.map((x) => x.id as string);
+      const refundTotalsRes = paymentIds.length > 0
+        ? await (supabase.from as any)("reservation_payment_refunds").select("payment_id, amount").in("payment_id", paymentIds)
+        : { data: [] as any[] };
+      const refundedByPayment = new Map<string, number>();
+      for (const rf of refundTotalsRes.data ?? []) {
+        refundedByPayment.set(rf.payment_id, (refundedByPayment.get(rf.payment_id) ?? 0) + Number(rf.amount));
+      }
+      const netPayments = rawPayments.map((x) => ({
+        ...x,
+        netAmount: Math.max(0, Number(x.amount) - (refundedByPayment.get(x.id) ?? 0)),
+      }));
       const lines: import("./pdf-render.server").LineItem[] = [];
       const nights = Math.max(
         1,
@@ -143,12 +159,9 @@ export const renderAdminPdf = createServerFn({ method: "POST" })
       for (const c of (charges as any[]) ?? [])
         lines.push({ description: c.description, amount: Number(c.amount) });
       const totalCharges = lines.reduce((s, l) => s + l.amount, 0);
-      const totalPaid = ((payments as any[]) ?? []).reduce(
-        (s: number, x: any) => s + Number(x.amount),
-        0,
-      );
-      for (const x of (payments as any[]) ?? [])
-        lines.push({ description: `Payment received — ${x.method}`, amount: -Number(x.amount) });
+      const totalPaid = netPayments.reduce((s: number, x: any) => s + x.netAmount, 0);
+      for (const x of netPayments)
+        lines.push({ description: `Payment received — ${x.method}`, amount: -x.netAmount });
       entityCode = anyR.code;
       doc = {
         filename: `folio-${anyR.code}.pdf`,

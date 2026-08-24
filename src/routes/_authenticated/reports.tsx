@@ -25,18 +25,32 @@ function ReportsPage() {
       const [{ data: rooms }, { data: res }, { data: pays }] = await Promise.all([
         supabase.from("rooms").select("id").eq("property_id", propertyId!),
         supabase.from("reservations").select("id,check_in,check_out,rate_total,status").eq("property_id", propertyId!).gte("check_out", startStr).in("status", ["checked_in", "checked_out"]),
-        // status filter: excludes refunded payments from daily revenue — see
-        // 20260822130000_reservation_payment_refund.sql. Cast to `any`
-        // because `payments.status` is not yet in the generated Supabase
-        // types (matching the ap_payments/ar_receipts precedent).
-        (supabase as any).from("payments").select("amount, received_at, reservations!inner(property_id)").eq("reservations.property_id", propertyId!).eq("status", "posted").gte("received_at", startStr),
+        // status filter: excludes FULLY refunded payments from daily
+        // revenue — see 20260822130000_reservation_payment_refund.sql. A
+        // PARTIALLY refunded payment stays 'posted' (correctly still
+        // included) but its refunded portion is netted out below via
+        // reservation_payment_refunds — see
+        // 20260824130000_reservation_payment_partial_refund.sql. Cast to
+        // `any` because `payments.status` is not yet in the generated
+        // Supabase types (matching the ap_payments/ar_receipts precedent).
+        (supabase as any).from("payments").select("id, amount, received_at, reservations!inner(property_id)").eq("reservations.property_id", propertyId!).eq("status", "posted").gte("received_at", startStr),
       ]);
       const roomCount = rooms?.length ?? 0;
+      const payRows = (pays ?? []) as any[];
+      const payIds = payRows.map((p) => p.id as string);
+      const refundTotalsRes = payIds.length > 0
+        ? await (supabase.from as any)("reservation_payment_refunds").select("payment_id, amount").in("payment_id", payIds)
+        : { data: [] as any[] };
+      const refundedByPayment = new Map<string, number>();
+      for (const r of refundTotalsRes.data ?? []) {
+        refundedByPayment.set(r.payment_id, (refundedByPayment.get(r.payment_id) ?? 0) + Number(r.amount));
+      }
+      const netPays = payRows.map((p) => ({ ...p, netAmount: Math.max(0, Number(p.amount) - (refundedByPayment.get(p.id) ?? 0)) }));
       const range = eachDayOfInterval({ start, end });
       const series = range.map((d) => {
         const ds = d.toISOString().slice(0, 10);
         const occ = (res ?? []).filter((r: any) => r.check_in <= ds && r.check_out > ds).length;
-        const rev = (pays ?? []).filter((p: any) => p.received_at.slice(0, 10) === ds).reduce((s: number, p: any) => s + Number(p.amount), 0);
+        const rev = netPays.filter((p: any) => p.received_at.slice(0, 10) === ds).reduce((s: number, p: any) => s + p.netAmount, 0);
         return { day: format(d, "MMM d"), occupancy: roomCount > 0 ? Math.round((occ / roomCount) * 100) : 0, revenue: rev };
       });
       const totalRev = series.reduce((s, d) => s + d.revenue, 0);

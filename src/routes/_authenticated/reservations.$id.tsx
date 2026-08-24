@@ -30,6 +30,15 @@ function ReservationDetail() {
   const navigate = useNavigate();
   const [refundTarget, setRefundTarget] = useState<any>(null);
   const [refundReason, setRefundReason] = useState("");
+  const [refundAmount, setRefundAmount] = useState("");
+  // One id per open dialog "session" — every Refund click while this same
+  // dialog stays open (a double-click that beats the busy-state disable, a
+  // network-layer retry) reuses this SAME id, so the server-side
+  // pg_advisory_xact_lock + UNIQUE(property_id, request_id) idempotency
+  // check collapses them into one financial effect. Regenerated only when a
+  // NEW payment's dialog is opened. Mirrors IssueItemDialog's requestId.
+  const [refundRequestId, setRefundRequestId] = useState<string>("");
+  const [refundBusy, setRefundBusy] = useState(false);
 
   const res = useQuery({
     queryKey: ["reservation", id],
@@ -52,10 +61,48 @@ function ReservationDetail() {
     queryFn: async () => (await supabase.from("payments").select("*").eq("reservation_id", id).order("received_at")).data,
   });
 
+  const paymentIds = (payments.data ?? []).map((p: any) => p.id as string);
+  // Refund history — one row per refund EVENT (see
+  // 20260824130000_reservation_payment_partial_refund.sql). A payment can
+  // have zero, one, or several rows here; "remaining refundable" is always
+  // this payment's own amount minus the sum of its own rows, computed
+  // fresh on every render from the same data React Query already cached —
+  // never a separately-trusted client-side running total.
+  const refunds = useQuery({
+    queryKey: ["payment-refunds", id, paymentIds.join(",")],
+    enabled: paymentIds.length > 0,
+    queryFn: async () =>
+      (await (supabase.from as any)("reservation_payment_refunds")
+        .select("*")
+        .in("payment_id", paymentIds)
+        .order("created_at")).data ?? [],
+  });
+
   const canRefund = useHasAnyRole([...ACCOUNTING_ADMIN_ROLES], res.data?.property_id ?? null);
 
+  function refundsFor(paymentId: string): any[] {
+    return (refunds.data ?? []).filter((r: any) => r.payment_id === paymentId);
+  }
+  // Non-authoritative display copy of the same formula the RPC computes
+  // server-side under a row lock — never trusted as the real check; the
+  // database rejects an over-refund regardless of what this shows.
+  function alreadyRefundedFor(payment: any): number {
+    return refundsFor(payment.id).reduce((s: number, r: any) => s + Number(r.amount), 0);
+  }
+  function remainingRefundableFor(payment: any): number {
+    return Math.max(0, Number(payment.amount) - alreadyRefundedFor(payment));
+  }
+
+  // Actor names for both the new per-event refund history AND the legacy
+  // single-shot reversed_by column (a payment refunded via the retired
+  // reverse_reservation_payment() path before this migration has no rows
+  // in reservation_payment_refunds at all — its history is still shown
+  // from that legacy column so old refunds remain visible, not hidden).
   const refundedByIds = Array.from(
-    new Set((payments.data ?? []).filter((p: any) => p.reversed_by).map((p: any) => p.reversed_by as string)),
+    new Set([
+      ...(refunds.data ?? []).map((r: any) => r.refunded_by as string),
+      ...(payments.data ?? []).filter((p: any) => p.reversed_by).map((p: any) => p.reversed_by as string),
+    ]),
   );
   const refundedByProfiles = useQuery({
     queryKey: ["refunded-by-profiles", refundedByIds.join(",")],
@@ -94,14 +141,17 @@ function ReservationDetail() {
   const r = res.data as any;
 
   const totalCharges = (charges.data ?? []).reduce((s: number, c: any) => s + Number(c.amount), 0);
-  // Refunded (status='void') payments no longer count as cash received —
-  // the original row is preserved (never deleted) but excluded from this
-  // sum, matching every other place reservation payment totals feed
+  // Each payment counts only its NET remaining amount (original amount
+  // minus the sum of its own refund events) — a fully refunded payment
+  // nets to zero exactly like before (status='void' as a fast display
+  // signal, but the real arithmetic is amount-minus-refunds so a partial
+  // refund correctly reduces this by only the refunded portion, not the
+  // payment's whole amount). The original row is preserved (never deleted)
+  // regardless. Matches every other place reservation payment totals feed
   // (dashboard.tsx, reports.tsx, insights.functions.ts, pdf.functions.ts —
-  // all updated alongside this page in the same PR).
+  // all updated alongside this page in this same PR).
   const totalPaid = (payments.data ?? [])
-    .filter((p: any) => p.status !== "void")
-    .reduce((s: number, p: any) => s + Number(p.amount), 0);
+    .reduce((s: number, p: any) => s + remainingRefundableFor(p), 0);
   const balance = totalCharges - totalPaid;
   const currency = r.properties?.currency ?? "GHS";
 
@@ -227,33 +277,70 @@ function ReservationDetail() {
 
           <div className="mt-4 rounded-lg border">
             <div className="border-b px-4 py-2 text-xs font-semibold uppercase text-muted-foreground">Payments</div>
-            {(payments.data ?? []).map((p: any) => (
-              <div key={p.id} className="flex items-center justify-between px-4 py-2 text-sm border-b last:border-0">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="capitalize">{p.method.replace("_", " ")}</span>
-                    {p.status === "void" && <Badge variant="secondary" className="text-[10px] uppercase">Refunded</Badge>}
-                  </div>
-                  <div className="text-xs text-muted-foreground">{format(new Date(p.received_at), "PPp")} {p.reference ? `· ${p.reference}` : ""}</div>
-                  {p.status === "void" && (
-                    <div className="text-[10px] text-destructive mt-0.5">
-                      Refunded {p.reversed_at ? format(new Date(p.reversed_at), "PPp") : ""}
-                      {refundedByName(p.reversed_by) ? ` by ${refundedByName(p.reversed_by)}` : ""}: {p.reversal_reason}
+            {(payments.data ?? []).map((p: any) => {
+              const paymentRefunds = refundsFor(p.id);
+              const alreadyRefunded = alreadyRefundedFor(p);
+              const remaining = remainingRefundableFor(p);
+              const fullyRefunded = p.status === "void" || remaining <= 0.005;
+              const partiallyRefunded = !fullyRefunded && alreadyRefunded > 0.005;
+              return (
+                <div key={p.id} className="flex items-start justify-between gap-3 px-4 py-2 text-sm border-b last:border-0">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="capitalize">{p.method.replace("_", " ")}</span>
+                      {fullyRefunded && <Badge variant="secondary" className="text-[10px] uppercase">Refunded</Badge>}
+                      {partiallyRefunded && <Badge variant="outline" className="text-[10px] uppercase">Partially refunded</Badge>}
                     </div>
-                  )}
-                </div>
-                <div className="flex items-center gap-3">
-                  <div className={`font-medium ${p.status === "void" ? "line-through text-muted-foreground" : ""}`}>
-                    -{Number(p.amount).toFixed(2)}
+                    <div className="text-xs text-muted-foreground">{format(new Date(p.received_at), "PPp")} {p.reference ? `· ${p.reference}` : ""}</div>
+                    {/* Legacy single-shot display — a payment refunded via the
+                       retired reverse_reservation_payment() path before this
+                       feature existed has no reservation_payment_refunds
+                       rows at all; its history is still shown from the
+                       original payments.reversal_* columns rather than
+                       silently disappearing. */}
+                    {fullyRefunded && paymentRefunds.length === 0 && p.reversal_reason && (
+                      <div className="text-[10px] text-destructive mt-0.5">
+                        Refunded {p.reversed_at ? format(new Date(p.reversed_at), "PPp") : ""}
+                        {refundedByName(p.reversed_by) ? ` by ${refundedByName(p.reversed_by)}` : ""}: {p.reversal_reason}
+                      </div>
+                    )}
+                    {paymentRefunds.length > 0 && (
+                      <div className="mt-1 space-y-0.5">
+                        {paymentRefunds.map((r: any) => (
+                          <div key={r.id} className="text-[10px] text-destructive">
+                            Refunded {Number(r.amount).toFixed(2)} · {format(new Date(r.created_at), "PPp")}
+                            {refundedByName(r.refunded_by) ? ` by ${refundedByName(r.refunded_by)}` : ""}: {r.reason}
+                          </div>
+                        ))}
+                        {!fullyRefunded && (
+                          <div className="text-[10px] text-muted-foreground">
+                            {alreadyRefunded.toFixed(2)} refunded of {Number(p.amount).toFixed(2)} · {remaining.toFixed(2)} remaining
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
-                  {p.status !== "void" && canRefund.allowed && (
-                    <Button size="sm" variant="outline" className="h-7" onClick={() => { setRefundReason(""); setRefundTarget(p); }}>
-                      <Undo2 className="h-3 w-3 mr-1" /> Refund
-                    </Button>
-                  )}
+                  <div className="flex items-center gap-3 shrink-0">
+                    <div className={`font-medium ${fullyRefunded ? "line-through text-muted-foreground" : ""}`}>
+                      -{Number(p.amount).toFixed(2)}
+                    </div>
+                    {!fullyRefunded && canRefund.allowed && (
+                      <Button
+                        size="sm" variant="outline" className="h-7"
+                        onClick={() => {
+                          setRefundReason("");
+                          setRefundAmount(remaining.toFixed(2));
+                          setRefundRequestId(crypto.randomUUID());
+                          setRefundTarget(p);
+                        }}
+                      >
+                        <Undo2 className="h-3 w-3 mr-1" /> Refund
+                      </Button>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
             {payments.data?.length === 0 && <div className="px-4 py-6 text-center text-sm text-muted-foreground">No payments yet.</div>}
           </div>
 
@@ -267,45 +354,77 @@ function ReservationDetail() {
 
       <ItemDistributionSection reservation={r} />
 
-      <Dialog open={!!refundTarget} onOpenChange={(v) => { if (!v) setRefundTarget(null); }}>
+      <Dialog open={!!refundTarget} onOpenChange={(v) => { if (!v) { setRefundTarget(null); setRefundAmount(""); setRefundReason(""); } }}>
         <DialogContent>
           <DialogHeader><DialogTitle>Refund payment</DialogTitle></DialogHeader>
-          {refundTarget && (
-            <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-2 text-sm">
-                <div><span className="text-muted-foreground">Amount</span><div className="font-mono">{currency} {Number(refundTarget.amount).toFixed(2)}</div></div>
-                <div><span className="text-muted-foreground">Method</span><div className="capitalize">{refundTarget.method.replace("_", " ")}</div></div>
-                <div><span className="text-muted-foreground">Paid</span><div>{format(new Date(refundTarget.received_at), "PPp")}</div></div>
-                {refundTarget.reference && <div><span className="text-muted-foreground">Reference</span><div className="truncate">{refundTarget.reference}</div></div>}
+          {refundTarget && (() => {
+            const alreadyRefunded = alreadyRefundedFor(refundTarget);
+            const remaining = remainingRefundableFor(refundTarget);
+            const parsedAmount = Number(refundAmount);
+            const hasExactCents = /^\d+(\.\d{1,2})?$/.test(refundAmount.trim());
+            const amountValid = refundAmount.trim() !== "" && Number.isFinite(parsedAmount) && parsedAmount > 0 && hasExactCents && Math.round(parsedAmount * 100) <= Math.round(remaining * 100);
+            const reasonValid = refundReason.trim().length >= 5 && refundReason.trim().length <= 500;
+            return (
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div><span className="text-muted-foreground">Original amount</span><div className="font-mono">{currency} {Number(refundTarget.amount).toFixed(2)}</div></div>
+                  <div><span className="text-muted-foreground">Method</span><div className="capitalize">{refundTarget.method.replace("_", " ")}</div></div>
+                  <div><span className="text-muted-foreground">Already refunded</span><div className="font-mono">{currency} {alreadyRefunded.toFixed(2)}</div></div>
+                  <div><span className="text-muted-foreground">Remaining refundable</span><div className="font-mono font-semibold">{currency} {remaining.toFixed(2)}</div></div>
+                  <div><span className="text-muted-foreground">Paid</span><div>{format(new Date(refundTarget.received_at), "PPp")}</div></div>
+                  {refundTarget.reference && <div><span className="text-muted-foreground">Reference</span><div className="truncate">{refundTarget.reference}</div></div>}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  This is a financial correction: the original payment is preserved and never deleted or edited — only its refunded status changes. A full or partial refund is recorded as its own permanent history event. If this payment was posted to the accounting journal, an offsetting reversal entry is created for the refunded amount. This cannot be undone through the UI.
+                </p>
+                <div>
+                  <Label>Refund amount</Label>
+                  <Input
+                    type="number" step="0.01" min="0.01" max={remaining}
+                    value={refundAmount} onChange={(e) => setRefundAmount(e.target.value)}
+                  />
+                  {!amountValid && refundAmount.trim() !== "" && (
+                    <p className="text-xs text-destructive mt-1">Enter an amount greater than zero, with at most 2 decimal places, and no more than {remaining.toFixed(2)} remaining.</p>
+                  )}
+                </div>
+                <div>
+                  <Label>Reason</Label>
+                  <Textarea rows={3} maxLength={500} value={refundReason} onChange={(e) => setRefundReason(e.target.value)} placeholder="Why is this payment being refunded?" />
+                  <p className="text-xs text-muted-foreground mt-1">{refundReason.trim().length}/500</p>
+                </div>
               </div>
-              <p className="text-xs text-muted-foreground">
-                This is a financial correction: the original payment is preserved and marked refunded — it is never deleted or edited. If this payment was posted to the accounting journal, an offsetting reversal entry is created. This cannot be undone through the UI.
-              </p>
-              <div>
-                <Label>Reason</Label>
-                <Textarea rows={3} maxLength={500} value={refundReason} onChange={(e) => setRefundReason(e.target.value)} placeholder="Why is this payment being refunded?" />
-                <p className="text-xs text-muted-foreground mt-1">{refundReason.trim().length}/500</p>
-              </div>
-            </div>
-          )}
+            );
+          })()}
           <DialogFooter>
             <Button variant="outline" onClick={() => setRefundTarget(null)}>Cancel</Button>
             <Button
               variant="destructive"
-              disabled={refundReason.trim().length < 5 || refundReason.trim().length > 500}
+              disabled={(() => {
+                if (!refundTarget || refundBusy) return true;
+                const remaining = remainingRefundableFor(refundTarget);
+                const parsedAmount = Number(refundAmount);
+                const hasExactCents = /^\d+(\.\d{1,2})?$/.test(refundAmount.trim());
+                const amountValid = refundAmount.trim() !== "" && Number.isFinite(parsedAmount) && parsedAmount > 0 && hasExactCents && Math.round(parsedAmount * 100) <= Math.round(remaining * 100);
+                const reasonValid = refundReason.trim().length >= 5 && refundReason.trim().length <= 500;
+                return !amountValid || !reasonValid;
+              })()}
               onClick={async () => {
-                const { error } = await (supabase.rpc as any)("reverse_reservation_payment", {
-                  _id: refundTarget.id, _reason: refundReason.trim(),
+                setRefundBusy(true);
+                const { error } = await (supabase.rpc as any)("refund_reservation_payment", {
+                  _payment_id: refundTarget.id, _amount: Number(refundAmount), _reason: refundReason.trim(), _request_id: refundRequestId,
                 });
+                setRefundBusy(false);
                 if (error) return toast.error(error.message);
                 toast.success("Payment refunded");
                 setRefundTarget(null);
                 setRefundReason("");
+                setRefundAmount("");
                 qc.invalidateQueries({ queryKey: ["payments", id] });
+                qc.invalidateQueries({ queryKey: ["payment-refunds", id] });
                 qc.invalidateQueries({ queryKey: ["reservation", id] });
               }}
             >
-              <Undo2 className="h-4 w-4 mr-1" /> Refund payment
+              <Undo2 className="h-4 w-4 mr-1" /> {refundBusy ? "Refunding…" : "Refund payment"}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -286,24 +286,39 @@ describe("reservation payment refund — SECURITY DEFINER / ACL", () => {
 });
 
 describe("reservation payment refund — UI (4/5/18/19/20/21)", () => {
-  it("19. the refund action is wired into the real production reservation route, gated by role and by the payment's own status", () => {
-    expect(reservationPage).toContain('(supabase.rpc as any)("reverse_reservation_payment"');
-    expect(reservationPage).toContain('p.status !== "void" && canRefund.allowed');
+  // NOTE ON THIS DESCRIBE BLOCK: superseded by
+  // 20260824130000_reservation_payment_partial_refund.sql, which replaces
+  // this page's single-shot full-refund dialog with a partial-refund-aware
+  // one calling refund_reservation_payment() instead of
+  // reverse_reservation_payment() — see
+  // tests/reservation-payment-partial-refund.test.ts for the full coverage
+  // of the new flow. The assertions below are updated to match the current
+  // UI; every assertion about the OLD migration file/function's own
+  // content elsewhere in this file is untouched and still valid, since
+  // that file and function were not modified.
+  it("19. the refund action is wired into the real production reservation route, gated by role and by whether any refundable balance remains", () => {
+    expect(reservationPage).toContain('(supabase.rpc as any)("refund_reservation_payment"');
+    expect(reservationPage).toContain("!fullyRefunded && canRefund.allowed");
   });
 
-  it("20. a void payment never renders a Refund trigger again — the same status check that shows the REFUNDED badge hides the button", () => {
-    expect(reservationPage).toContain('p.status === "void" && <Badge variant="secondary"');
+  it("20. a fully refunded payment never renders a Refund trigger again — the same computed flag that shows the Refunded badge hides the button", () => {
+    expect(reservationPage).toContain("fullyRefunded && <Badge variant=\"secondary\"");
   });
 
-  it("the confirmation dialog shows amount, method, paid date, an explicit financial-correction warning, and requires a reason 5-500 chars before enabling submit", () => {
+  it("the confirmation dialog shows original amount, already refunded, remaining refundable, method, paid date, an explicit financial-correction warning, and requires both a valid amount and a reason 5-500 chars before enabling submit", () => {
     expect(reservationPage).toContain("refundTarget.amount");
     expect(reservationPage).toContain("refundTarget.method");
     expect(reservationPage).toContain("refundTarget.received_at");
+    expect(reservationPage).toContain("alreadyRefundedFor(refundTarget)");
+    expect(reservationPage).toContain("remainingRefundableFor(refundTarget)");
     expect(reservationPage).toMatch(/financial correction/);
-    expect(reservationPage).toContain("disabled={refundReason.trim().length < 5 || refundReason.trim().length > 500}");
+    expect(reservationPage).toContain("const reasonValid = refundReason.trim().length >= 5 && refundReason.trim().length <= 500;");
   });
 
-  it("21. shows refund date and reason on the refunded payment row, and — where resolvable — the refunding staff member", () => {
+  it("21. shows refund history (amount, date, reason, and — where resolvable — the refunding staff member) per payment, plus a legacy single-shot display for payments refunded before this feature existed", () => {
+    expect(reservationPage).toContain("paymentRefunds.map((r: any)");
+    expect(reservationPage).toContain("refundedByName(r.refunded_by)");
+    // Legacy display for pre-existing void payments with no new-table rows.
     expect(reservationPage).toContain("p.reversed_at");
     expect(reservationPage).toContain("p.reversal_reason");
     expect(reservationPage).toContain("refundedByName(p.reversed_by)");
@@ -313,15 +328,17 @@ describe("reservation payment refund — UI (4/5/18/19/20/21)", () => {
     expect(reservationPage).toContain("(payments.data ?? []).map((p: any) =>");
   });
 
-  it("refresh: a successful refund invalidates the payments and reservation queries", () => {
-    const rpcCallIdx = reservationPage.indexOf('(supabase.rpc as any)("reverse_reservation_payment"');
+  it("refresh: a successful refund invalidates the payments, payment-refunds, and reservation queries", () => {
+    const rpcCallIdx = reservationPage.indexOf('(supabase.rpc as any)("refund_reservation_payment"');
+    expect(rpcCallIdx).toBeGreaterThan(-1);
     const afterRpc = reservationPage.slice(rpcCallIdx);
     expect(afterRpc).toContain('qc.invalidateQueries({ queryKey: ["payments", id] });');
+    expect(afterRpc).toContain('qc.invalidateQueries({ queryKey: ["payment-refunds", id] });');
     expect(afterRpc).toContain('qc.invalidateQueries({ queryKey: ["reservation", id] });');
   });
 
-  it("4/5. totalPaid/balance exclude void payments — a refunded payment no longer counts as cash received on this page", () => {
-    expect(reservationPage).toContain('.filter((p: any) => p.status !== "void")');
+  it("4/5. totalPaid/balance count only each payment's NET remaining amount — a fully refunded payment nets to zero exactly as before, a partially refunded payment counts only its unrefunded portion", () => {
+    expect(reservationPage).toContain(".reduce((s: number, p: any) => s + remainingRefundableFor(p), 0);");
   });
 
   it("does not open the dialog pre-filled and auto-submit — Cancel always returns to a clean closed state without calling the RPC", () => {
