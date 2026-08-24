@@ -130,6 +130,86 @@
 --     reporting is a direct, required consequence of allowing partial
 --     refunds to exist at all — not a separate, optional concern.
 --
+-- ------------------------------------------------------------
+-- Financial-integrity review pass (same PR, pre-merge) — findings 11-15:
+-- ------------------------------------------------------------
+--
+-- 11. Fractional-cent rejection: the original draft validated only
+--     `_amount > 0`, at the RPC layer alone. A caller (or a future bug
+--     in a client that does its own proration) could submit a
+--     sub-cent amount, e.g. 12.005, which NUMERIC's exact decimal
+--     arithmetic would then carry silently into journal_lines and the
+--     refund ledger. Hardened at TWO layers: the RPC now RAISEs before
+--     any write if `ROUND(_amount,2) <> _amount`, AND
+--     reservation_payment_refunds gets its own
+--     CHECK (amount = ROUND(amount, 2)) so a fractional-cent value can
+--     never be persisted even by a future code path that bypasses the
+--     RPC (there is none today, but the CHECK is the actual DB-layer
+--     guarantee, not just an RPC-layer courtesy check).
+--
+-- 12. No more 0.005 tolerance on over-refund / already-refunded checks:
+--     the original draft used `_remaining <= 0.005` and
+--     `_amount > _remaining + 0.005`, presumably defending against
+--     float-style rounding drift. NUMERIC in Postgres is exact decimal
+--     arithmetic, not float — that tolerance band was dead weight that
+--     could, in principle, let a MULTI-CENT amount slip past the
+--     boundary undetected (e.g. a hypothetical accumulation of several
+--     0.005-sized errors). Replaced with an exact, ROUND(...,2)-only
+--     comparison: `_remaining <= 0` and `ROUND(_amount,2) >
+--     _remaining` (both sides already forced to 2dp). No amount can
+--     ever cross the true remaining balance, not even by half a cent.
+--
+-- 13. Exact full-refund detection: same issue as #12, mirrored in the
+--     payments.status → 'void' transition. Was
+--     `(_already_refunded + _amount) >= pay.amount - 0.005`; now
+--     `ROUND(_already_refunded + _amount, 2) >= ROUND(pay.amount, 2)`
+--     — status flips to void only at the exact cent, never half a
+--     cent early or late.
+--
+-- 14. Idempotency key widened from (property_id, request_id) alone to
+--     the full payload — (property_id, request_id, payment_id, amount,
+--     normalized reason). The original draft returned the prior
+--     refund's id for ANY replay of a known request_id, even one
+--     submitted with a different payment_id/amount/reason — e.g. a
+--     client bug that reused a UUID, or a copy-pasted request_id
+--     across two genuinely different refund actions, would have
+--     silently returned the WRONG refund id while creating no new
+--     financial effect for the real request, an outcome indistinguishable
+--     from success at the call site. Reason normalization is
+--     `regexp_replace(btrim(coalesce(_reason,'')), '\s+', ' ', 'g')` —
+--     computed once, used identically for the stored value, the
+--     length-validation, and the replay comparison, so a request
+--     differing only in incidental whitespace still counts as the same
+--     payload.
+--
+-- 15. Explicit conflict on payload mismatch: a request_id reused with a
+--     DIFFERENT payment_id/amount/reason now RAISEs a named error
+--     ("...was already used for a different refund...") instead of
+--     either silently returning the old id (the bug in #14) or
+--     silently proceeding to create a second, differently-valued
+--     refund under a request_id that was supposed to make it
+--     retry-safe. This makes a client-side id-generation bug loud and
+--     debuggable rather than a silent wrong-money-moved incident.
+--
+-- Reporting-date semantics (reviewed, not changed): reports.tsx's daily
+-- revenue series and insights.functions.ts's 7-day trend bucket a
+-- payment's (net-of-refund) contribution under its ORIGINAL received_at
+-- day, using the CURRENT total refunded against it — not the date any
+-- refund itself was processed. A refund recorded today against a payment
+-- from last week retroactively lowers last week's already-reported
+-- revenue the next time that report is generated. This is NOT a new
+-- behavior introduced by partial refunds: the pre-existing full-refund
+-- path already does this today via the `status = 'posted'` filter (a
+-- payment fully voided today already disappears entirely from a past
+-- day's revenue on next render). This migration's reporting fix
+-- (finding 10) extends the SAME established restatement semantics to
+-- partial refunds for consistency — a payment's net contribution to its
+-- own original day, continuously restated as of "now" — rather than
+-- inventing point-in-time-frozen historical reporting, which this
+-- codebase has never had and which is out of scope here. dashboard.tsx's
+-- "today" figure and the folio PDF are unaffected by this distinction:
+-- both always reflect current state, not a stored historical snapshot.
+--
 -- ============================================================
 -- PART 0 — journal_source enum: 'payment_refund' is a new source tag (see
 -- finding 3), not one of the values journal_source (20260705035515) already
@@ -151,6 +231,10 @@ CREATE TABLE public.reservation_payment_refunds (
   property_id UUID NOT NULL REFERENCES public.properties(id) ON DELETE CASCADE,
   payment_id UUID NOT NULL REFERENCES public.payments(id) ON DELETE RESTRICT,
   amount NUMERIC NOT NULL CHECK (amount > 0),
+  -- Finding 11: fractional cents are rejected by the RPC before this row is
+  -- ever reached, but this CHECK is the actual database-layer guarantee —
+  -- no future write path, RPC or otherwise, can persist a sub-cent amount.
+  CONSTRAINT reservation_payment_refunds_amount_no_fractional_cents CHECK (amount = ROUND(amount, 2)),
   reason TEXT NOT NULL,
   reversal_entry_id UUID REFERENCES public.journal_entries(id) ON DELETE SET NULL,
   refunded_by UUID NOT NULL REFERENCES auth.users(id),
@@ -182,8 +266,8 @@ CREATE OR REPLACE FUNCTION public.refund_reservation_payment(
 RETURNS UUID
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 DECLARE
-  pay RECORD; res RECORD; jl RECORD; orig_entry RECORD;
-  _existing_id UUID; _refund_id UUID; _entry_id UUID;
+  pay RECORD; res RECORD; jl RECORD; orig_entry RECORD; existing RECORD;
+  _refund_id UUID; _entry_id UUID;
   _period_id UUID; _trimmed_reason TEXT;
   _already_refunded NUMERIC; _remaining NUMERIC;
   _orig_debit_total NUMERIC; _orig_credit_total NUMERIC; _orig_line_count INT;
@@ -210,14 +294,29 @@ BEGIN
   SELECT * INTO res FROM public.reservations WHERE id = pay.reservation_id;
   IF res IS NULL THEN RAISE EXCEPTION 'Reservation for this payment was not found'; END IF;
 
-  -- Idempotent replay: this exact request already succeeded (or a
-  -- concurrent call just finished it while we waited on the lock above) —
-  -- return the same result, re-running no validation, creating no second
-  -- financial effect.
-  SELECT id INTO _existing_id FROM public.reservation_payment_refunds
+  -- Normalized once, up front (finding 14) — used identically for the
+  -- idempotency payload comparison below, for length validation further
+  -- down, and for the value actually stored, so all three always agree.
+  _trimmed_reason := regexp_replace(btrim(COALESCE(_reason, '')), '\s+', ' ', 'g');
+
+  -- Idempotency key is the FULL payload (property_id, request_id,
+  -- payment_id, amount, normalized reason), not request_id alone (findings
+  -- 14/15). A replay of the exact same call returns the same result,
+  -- re-running no validation, creating no second financial effect. A
+  -- request_id reused with a DIFFERENT payment/amount/reason is a client
+  -- bug — surfaced loudly as a named conflict rather than silently
+  -- returning an unrelated prior refund's id or silently creating a second
+  -- refund under an id meant to make retries safe.
+  SELECT * INTO existing FROM public.reservation_payment_refunds
     WHERE property_id = res.property_id AND request_id = _request_id;
-  IF _existing_id IS NOT NULL THEN
-    RETURN _existing_id;
+  IF existing.id IS NOT NULL THEN
+    IF existing.payment_id = _payment_id
+       AND ROUND(existing.amount, 2) = ROUND(_amount, 2)
+       AND existing.reason = _trimmed_reason THEN
+      RETURN existing.id;
+    ELSE
+      RAISE EXCEPTION 'Request id % was already used for a different refund (payment %, amount %) — reuse a request id only to retry the exact same refund', _request_id, existing.payment_id, existing.amount;
+    END IF;
   END IF;
 
   IF NOT public.has_any_role(auth.uid(), ARRAY['super_admin','hotel_owner','general_manager','accountant']::app_role[], res.property_id) THEN
@@ -232,7 +331,6 @@ BEGIN
     RAISE EXCEPTION 'Payment has already been fully refunded';
   END IF;
 
-  _trimmed_reason := btrim(COALESCE(_reason, ''));
   IF char_length(_trimmed_reason) < 5 THEN
     RAISE EXCEPTION 'A refund reason of at least 5 characters is required';
   END IF;
@@ -243,18 +341,27 @@ BEGIN
   IF _amount IS NULL OR _amount <= 0 THEN
     RAISE EXCEPTION 'Refund amount must be greater than zero';
   END IF;
+  -- Finding 11: rejected at the RPC layer before any write; also enforced
+  -- as a hard DB-layer CHECK on reservation_payment_refunds itself.
+  IF ROUND(_amount, 2) <> _amount THEN
+    RAISE EXCEPTION 'Refund amount cannot have fractional cents';
+  END IF;
 
   -- Server-authoritative remaining refundable balance — computed fresh
   -- under the payment row's own lock above, never trusted from the client.
   SELECT COALESCE(SUM(amount), 0) INTO _already_refunded
     FROM public.reservation_payment_refunds WHERE payment_id = pay.id;
-  _remaining := pay.amount - _already_refunded;
+  _remaining := ROUND(pay.amount - _already_refunded, 2);
 
-  IF _remaining <= 0.005 THEN
+  -- Findings 12/13: exact-cent comparison, no tolerance band. NUMERIC is
+  -- exact decimal arithmetic in Postgres, not float — the 0.005 slack this
+  -- replaces bought no real protection and could in principle let an
+  -- amount slip past the true remaining balance by up to half a cent.
+  IF _remaining <= 0 THEN
     RAISE EXCEPTION 'Payment has already been fully refunded';
   END IF;
-  IF _amount > _remaining + 0.005 THEN
-    RAISE EXCEPTION 'Refund amount exceeds remaining refundable balance: % remaining, % requested', ROUND(_remaining,2), ROUND(_amount,2);
+  IF ROUND(_amount, 2) > _remaining THEN
+    RAISE EXCEPTION 'Refund amount exceeds remaining refundable balance: % remaining, % requested', _remaining, ROUND(_amount,2);
   END IF;
 
   SELECT id INTO _period_id FROM public.accounting_periods
@@ -328,13 +435,14 @@ BEGIN
   );
 
   -- Status flips to 'void' only once the running total reaches the full
-  -- original amount (within a half-cent tolerance) — otherwise the payment
-  -- stays 'posted' (see finding 4/10: no 'partially_refunded' status is
-  -- introduced; the real remaining balance always comes from this table's
-  -- own SUM, never from the status column alone). Original amount, method,
-  -- reference, received_by, received_at are never touched — only status.
+  -- original amount AT THE EXACT CENT (finding 13, no tolerance band) —
+  -- otherwise the payment stays 'posted' (see finding 4/10: no
+  -- 'partially_refunded' status is introduced; the real remaining balance
+  -- always comes from this table's own SUM, never from the status column
+  -- alone). Original amount, method, reference, received_by, received_at
+  -- are never touched — only status.
   UPDATE public.payments
-    SET status = CASE WHEN (_already_refunded + _amount) >= pay.amount - 0.005 THEN 'void'::public.reservation_payment_status ELSE pay.status END
+    SET status = CASE WHEN ROUND(_already_refunded + _amount, 2) >= ROUND(pay.amount, 2) THEN 'void'::public.reservation_payment_status ELSE pay.status END
     WHERE id = pay.id;
 
   INSERT INTO public.admin_action_logs(

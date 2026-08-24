@@ -134,7 +134,7 @@ describe("partial refund — eligibility, amount validation, and remaining-balan
     expect(refundFn).toContain(
       "SELECT COALESCE(SUM(amount), 0) INTO _already_refunded\n    FROM public.reservation_payment_refunds WHERE payment_id = pay.id;",
     );
-    expect(refundFn).toContain("_remaining := pay.amount - _already_refunded;");
+    expect(refundFn).toContain("_remaining := ROUND(pay.amount - _already_refunded, 2);");
   });
 
   it("rejects zero and negative amounts", () => {
@@ -142,15 +142,25 @@ describe("partial refund — eligibility, amount validation, and remaining-balan
     expect(refundFn).toContain("Refund amount must be greater than zero");
   });
 
-  it("rejects an amount exceeding the remaining refundable balance, with the actual remaining/requested figures in the message", () => {
-    expect(refundFn).toContain("IF _amount > _remaining + 0.005 THEN");
+  it("rejects a fractional-cent amount at the RPC layer, and again at the database layer via a hard CHECK constraint — not just a courtesy check", () => {
+    expect(refundFn).toContain("IF ROUND(_amount, 2) <> _amount THEN");
+    expect(refundFn).toContain("Refund amount cannot have fractional cents");
+    expect(migration).toContain(
+      "CONSTRAINT reservation_payment_refunds_amount_no_fractional_cents CHECK (amount = ROUND(amount, 2))",
+    );
+  });
+
+  it("rejects an amount exceeding the remaining refundable balance using an exact-cent comparison, with no 0.005 tolerance band — NUMERIC is exact decimal arithmetic, not float", () => {
+    expect(refundFn).toContain("IF ROUND(_amount, 2) > _remaining THEN");
     expect(refundFn).toContain("Refund amount exceeds remaining refundable balance");
+    expect(refundFn).not.toMatch(/_remaining\s*\+\s*0\.005/);
+    expect(refundFn).not.toMatch(/_remaining\s*<=\s*0\.005/);
   });
 
   it("the remaining-balance check happens strictly after locking the payment row and computing the fresh SUM — never before", () => {
     const lockIdx = refundFn.indexOf("FOR UPDATE");
     const sumIdx = refundFn.indexOf("INTO _already_refunded");
-    const checkIdx = refundFn.indexOf("IF _amount > _remaining");
+    const checkIdx = refundFn.indexOf("IF ROUND(_amount, 2) > _remaining");
     expect(lockIdx).toBeGreaterThan(-1);
     expect(sumIdx).toBeGreaterThan(lockIdx);
     expect(checkIdx).toBeGreaterThan(sumIdx);
@@ -176,18 +186,34 @@ describe("partial refund — concurrency and idempotency", () => {
     );
   });
 
-  it("checks for an existing row under this exact request id BEFORE any other validation, and returns its id unchanged — a replay never creates a second financial effect", () => {
+  it("checks for an existing row under this exact request id BEFORE any other validation, comparing the FULL payload — payment_id, amount, and normalized reason — not just the request id alone", () => {
     const lockCallIdx = refundFn.indexOf("pg_advisory_xact_lock");
     const existingCheckIdx = refundFn.indexOf(
-      "SELECT id INTO _existing_id FROM public.reservation_payment_refunds",
+      "SELECT * INTO existing FROM public.reservation_payment_refunds",
     );
     const roleCheckIdx = refundFn.indexOf("has_any_role(");
     expect(lockCallIdx).toBeGreaterThan(-1);
     expect(existingCheckIdx).toBeGreaterThan(lockCallIdx);
     expect(roleCheckIdx).toBeGreaterThan(existingCheckIdx);
-    expect(refundFn).toContain(
-      "IF _existing_id IS NOT NULL THEN\n    RETURN _existing_id;\n  END IF;",
+    expect(refundFn).toContain("IF existing.id IS NOT NULL THEN");
+    expect(refundFn).toContain("existing.payment_id = _payment_id");
+    expect(refundFn).toContain("ROUND(existing.amount, 2) = ROUND(_amount, 2)");
+    expect(refundFn).toContain("existing.reason = _trimmed_reason");
+    expect(refundFn).toContain("RETURN existing.id;");
+  });
+
+  it("normalizes the reason once, up front — trimmed and internal whitespace collapsed — used identically for the idempotency comparison, length validation, and the stored value", () => {
+    const normalizeIdx = refundFn.indexOf(
+      "_trimmed_reason := regexp_replace(btrim(COALESCE(_reason, '')), '\\s+', ' ', 'g');",
     );
+    const idempotencyIdx = refundFn.indexOf("SELECT * INTO existing FROM public.reservation_payment_refunds");
+    expect(normalizeIdx).toBeGreaterThan(-1);
+    expect(idempotencyIdx).toBeGreaterThan(normalizeIdx);
+  });
+
+  it("a request id reused with a different payment/amount/reason raises an explicit, named conflict — never silently returns an unrelated refund's id or silently creates a second refund", () => {
+    expect(refundFn).toContain("was already used for a different refund");
+    expect(refundFn).toContain("reuse a request id only to retry the exact same refund");
   });
 
   it("the idempotency key is scoped by property, backed by a real UNIQUE(property_id, request_id) constraint at the DB level, not just the advisory lock", () => {
@@ -254,10 +280,11 @@ describe("partial refund — original-payment immutability", () => {
     expect(updates).toHaveLength(1);
   });
 
-  it("status only flips to 'void' once the running total reaches the full original amount — otherwise it is left exactly as it was (still 'posted' for a genuine partial)", () => {
+  it("status only flips to 'void' once the running total reaches the full original amount at the exact cent — no tolerance band — otherwise it is left exactly as it was (still 'posted' for a genuine partial)", () => {
     expect(refundFn).toContain(
-      "(_already_refunded + _amount) >= pay.amount - 0.005 THEN 'void'::public.reservation_payment_status ELSE pay.status END",
+      "ROUND(_already_refunded + _amount, 2) >= ROUND(pay.amount, 2) THEN 'void'::public.reservation_payment_status ELSE pay.status END",
     );
+    expect(refundFn).not.toMatch(/pay\.amount\s*-\s*0\.005/);
   });
 
   it("never mutates or deletes original journal_lines — only reads them to build new, separate reversal lines", () => {
