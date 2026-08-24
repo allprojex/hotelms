@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { BrandMark } from "@/components/brand-mark";
+import { useBrandSettings } from "@/hooks/use-brand-settings";
 import { ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -21,8 +22,11 @@ const searchSchema = z.object({
   rate: z.coerce.number(),
 });
 
+// Static SSR/pre-hydration fallback only — kept neutral; the live header
+// below resolves the actual selected property's name once its public
+// properties row loads (falling back to organisation branding until then).
 export const Route = createFileRoute("/book/checkout/$roomTypeId")({
-  head: () => ({ meta: [{ title: "Checkout — ThesKwoff Hotel" }] }),
+  head: () => ({ meta: [{ title: "Checkout" }] }),
   validateSearch: (s) => searchSchema.parse(s),
   component: Checkout,
 });
@@ -31,6 +35,9 @@ function Checkout() {
   const { roomTypeId } = Route.useParams();
   const { propertyId, checkIn, checkOut, guests, rate } = Route.useSearch();
   const navigate = useNavigate();
+  // Organisation-wide fallback for the moment before the property row
+  // (fetched below, scoped to this exact propertyId) has loaded.
+  const { data: brand } = useBrandSettings();
   const nights = Math.max(1, Math.round((new Date(checkOut).getTime() - new Date(checkIn).getTime()) / 86400000));
   const total = rate * nights;
 
@@ -88,7 +95,9 @@ function Checkout() {
         <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-4">
           <Link to="/book" className="flex items-center gap-2">
             <BrandMark className="h-7 w-auto" />
-            <span className="font-display font-semibold text-sm">ThesKwoff Hotel</span>
+            <span className="font-display font-semibold text-sm">
+              {property.data?.name || brand?.app_name || "ThesKwoff Hotel"}
+            </span>
           </Link>
         </div>
       </header>

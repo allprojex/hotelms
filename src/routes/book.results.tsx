@@ -5,6 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { BrandMark } from "@/components/brand-mark";
+import { useBrandSettings } from "@/hooks/use-brand-settings";
 import { ArrowLeft, BedDouble, Users, Sparkles, ImageOff } from "lucide-react";
 import { z } from "zod";
 import { useMemo } from "react";
@@ -17,8 +18,11 @@ const searchSchema = z.object({
   guests: z.coerce.number().min(1).max(10).default(1),
 });
 
+// Static SSR/pre-hydration fallback only — kept neutral; the live header
+// below resolves the actual selected property's name once its public
+// properties row loads (falling back to organisation branding until then).
 export const Route = createFileRoute("/book/results")({
-  head: () => ({ meta: [{ title: "Available rooms — ThesKwoff Hotel" }] }),
+  head: () => ({ meta: [{ title: "Available rooms" }] }),
   validateSearch: (s) => searchSchema.parse(s),
   component: BookResults,
 });
@@ -26,6 +30,9 @@ export const Route = createFileRoute("/book/results")({
 function BookResults() {
   const { propertyId, checkIn, checkOut, guests } = Route.useSearch();
   const navigate = useNavigate();
+  // Organisation-wide fallback for the moment before the property row
+  // (fetched below, scoped to this exact propertyId) has loaded.
+  const { data: brand } = useBrandSettings();
 
   const property = useQuery({
     queryKey: ["public-prop", propertyId],
@@ -60,7 +67,9 @@ function BookResults() {
         <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-4">
           <Link to="/book" className="flex items-center gap-2">
             <BrandMark className="h-7 w-auto" />
-            <span className="font-display font-semibold text-sm">ThesKwoff Hotel</span>
+            <span className="font-display font-semibold text-sm">
+              {property.data?.name || brand?.app_name || "ThesKwoff Hotel"}
+            </span>
           </Link>
           <Link to="/book/manage" className="text-sm text-primary hover:underline">Manage booking</Link>
         </div>
