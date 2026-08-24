@@ -92,7 +92,7 @@ function ReservationsList() {
           </div>
           <Popover open={dateOpen} onOpenChange={setDateOpen}>
             <PopoverTrigger asChild>
-              <Button variant="outline" className="w-[220px] justify-start font-normal">
+              <Button variant="outline" className="w-full sm:w-[220px] justify-start font-normal">
                 <CalendarIcon className="h-4 w-4 mr-2 shrink-0" />
                 {checkInRange?.from ? (
                   checkInRange.to && checkInTo !== checkInFrom ? (
