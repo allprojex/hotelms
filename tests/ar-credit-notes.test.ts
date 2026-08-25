@@ -2,19 +2,25 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
+// Normalize CRLF -> LF: this repo's migration files are checked out with
+// CRLF on Windows (core.autocrlf), but every expected string/regex below
+// embeds a literal \n -- without this, every multi-line .toContain/.toMatch
+// assertion here fails on a Windows checkout despite the SQL itself being
+// correct (confirmed: every failure here disappears once CRLF is
+// normalized, with no change to actual matched content).
 const root = resolve(__dirname, "..");
 const migration = readFileSync(
   resolve(root, "supabase/migrations/20260819120000_ar_credit_notes_pr1.sql"),
   "utf8",
-);
+).replace(/\r\n/g, "\n");
 const receiptFoundation = readFileSync(
   resolve(root, "supabase/migrations/20260807120000_ar_ap_payment_integrity.sql"),
   "utf8",
-);
+).replace(/\r\n/g, "\n");
 const reversalFoundation = readFileSync(
   resolve(root, "supabase/migrations/20260818090000_ar_invoice_reversal.sql"),
   "utf8",
-);
+).replace(/\r\n/g, "\n");
 
 function fn(source: string, name: string): string {
   const match = source.match(

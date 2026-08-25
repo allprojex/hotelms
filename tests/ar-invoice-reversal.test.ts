@@ -2,11 +2,13 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
+// Normalize CRLF -> LF: this migration is checked out with CRLF on Windows
+// (core.autocrlf), but some expected strings below embed a literal \n.
 const root = resolve(__dirname, "..");
 const migration = readFileSync(
   resolve(root, "supabase/migrations/20260818090000_ar_invoice_reversal.sql"),
   "utf8",
-);
+).replace(/\r\n/g, "\n");
 const arPage = readFileSync(resolve(root, "src/routes/_authenticated/accounting.ar.tsx"), "utf8");
 const arStatementCalc = readFileSync(
   resolve(root, "src/lib/accounting/ar-statement-calc.ts"),

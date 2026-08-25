@@ -11,8 +11,10 @@ const hardeningPath = path.join(
   root,
   "supabase/migrations/20260812130000_ar_customer_function_acl_hardening.sql",
 );
-const foundation = fs.readFileSync(foundationPath, "utf8");
-const hardening = fs.readFileSync(hardeningPath, "utf8");
+// Normalize CRLF -> LF: this migration is checked out with CRLF on Windows
+// (core.autocrlf), but the expected strings below embed a literal \n.
+const foundation = fs.readFileSync(foundationPath, "utf8").replace(/\r\n/g, "\n");
+const hardening = fs.readFileSync(hardeningPath, "utf8").replace(/\r\n/g, "\n");
 
 describe("AR customer function ACL hardening", () => {
   const invoiceSignature =
