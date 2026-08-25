@@ -2,15 +2,24 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
+// Normalize line endings before matching. These assertions pin multi-line
+// source shapes (e.g. a `.from(...)` with `.createSignedUrl(` chained onto the next line), and a Windows checkout with core.autocrlf=true stores
+// those files with CRLF -- so a "\n"-joined expectation fails for a purely
+// platform-dependent reason while the source is byte-for-byte correct. Same
+// convention as tests/reservations-checkin-date-filter.test.ts.
+function normalizeEol(source: string): string {
+  return source.replace(/\r\n/g, "\n");
+}
+
 function read(relPath: string): string {
-  return readFileSync(resolve(__dirname, "..", relPath), "utf8");
+  return normalizeEol(readFileSync(resolve(__dirname, "..", relPath), "utf8"));
 }
 
 const migrationPath = resolve(
   __dirname,
   "../supabase/migrations/20260824090000_hotel_gallery_photo_vault.sql",
 );
-const sql = readFileSync(migrationPath, "utf8");
+const sql = normalizeEol(readFileSync(migrationPath, "utf8"));
 const signedUrlModule = read("src/lib/gallery/signed-url.ts");
 const galleryFunctions = read("src/lib/gallery/gallery.functions.ts");
 const imageCard = read("src/components/gallery/gallery-image-card.tsx");
