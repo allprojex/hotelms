@@ -151,21 +151,75 @@ function ItemDialog({ propertyId, cats, existing, trigger, onDone }: any) {
     unit: existing?.unit ?? "each", cost: existing?.cost ?? 0, sale_price: existing?.sale_price ?? 0,
     reorder_level: existing?.reorder_level ?? 0, active: existing?.active ?? true,
   });
+  // Expiry belongs to a stock BATCH, never to the item master (see
+  // inventory_stock_batches / import_inventory_item's own guard: an expiry
+  // date is only meaningful attached to a real opening quantity + location
+  // — never a fake zero-quantity batch created just to hold a date). Create
+  // only: on Edit, an item can already have several batches with different
+  // expiries, so no single field here could represent that truthfully.
+  const [expiryDate, setExpiryDate] = useState("");
+  const [openingQuantity, setOpeningQuantity] = useState("");
+  const [locationId, setLocationId] = useState("");
+  const locs = useQuery({
+    queryKey: ["inv-locations-for-item-dialog", propertyId],
+    enabled: !!propertyId && !existing,
+    queryFn: async () => (await (supabase.from as any)("stock_locations").select("id, name").eq("property_id", propertyId).order("name")).data ?? [],
+  });
   const [imageSelection, setImageSelection] = useState<ProductImageSelection>(null);
   const imageFieldRef = useRef<ProductImageFieldHandle>(null);
+  const openingStockRequired = !existing && expiryDate.trim() !== "";
+  const openingStockValid = !openingStockRequired || (Number(openingQuantity) > 0 && !!locationId);
   async function save() {
     if (!propertyId) return;
-    const payload: any = { ...f, property_id: propertyId, category_id: f.category_id || null };
-    // Generating/uploading an AI or file image never writes to the item by
-    // itself — it only becomes part of the payload here, on explicit Save.
-    if (imageSelection) {
-      payload.image_path = imageSelection.path;
-      payload.image_source = imageSelection.source;
-      payload.image_updated_at = new Date().toISOString();
+    let itemId: string;
+    if (existing) {
+      // Edit: item-master fields only — never touches expiry_date, which
+      // lives exclusively on inventory_stock_batches and may differ across
+      // that item's several batches (see the Batches tab for those).
+      const payload: any = {
+        sku: f.sku, name: f.name, category_id: f.category_id || null, unit: f.unit,
+        cost: f.cost, sale_price: f.sale_price, reorder_level: f.reorder_level, active: f.active,
+      };
+      if (imageSelection) {
+        payload.image_path = imageSelection.path;
+        payload.image_source = imageSelection.source;
+        payload.image_updated_at = new Date().toISOString();
+      }
+      const { error } = await (supabase.from as any)("inventory_items").update(payload).eq("id", existing.id);
+      if (error) return toast.error(error.message);
+      itemId = existing.id;
+    } else {
+      if (!openingStockValid) return toast.error("Opening quantity and a stock location are required to record an expiry date.");
+      // import_inventory_item() atomically creates the item and, only when
+      // a genuine opening quantity + location are given, its opening
+      // item_stock (via the same apply_stock_delta() every other stock
+      // mutation uses) and ONE inventory_stock_batches row carrying the
+      // expiry — never a fake zero-quantity batch. Same authorization
+      // (super_admin/hotel_owner/general_manager) as inv_items_write RLS,
+      // so this doesn't narrow who can create items.
+      const { data, error } = await (supabase.rpc as any)("import_inventory_item", {
+        _property_id: propertyId,
+        _name: f.name,
+        _sku: f.sku,
+        _category: cats.find((c: any) => c.id === f.category_id)?.name ?? null,
+        _unit: f.unit,
+        _cost: f.cost,
+        _sale_price: f.sale_price,
+        _reorder_level: f.reorder_level,
+        _location_name: locationId ? (locs.data ?? []).find((l: any) => l.id === locationId)?.name ?? null : null,
+        _opening_quantity: openingQuantity ? Number(openingQuantity) : null,
+        _expiry_date: expiryDate || null,
+      });
+      if (error) return toast.error(error.message);
+      if (data?.skipped) return toast.error("An item with this SKU already exists.");
+      itemId = data.item_id;
+      if (imageSelection) {
+        const { error: imgError } = await (supabase.from as any)("inventory_items")
+          .update({ image_path: imageSelection.path, image_source: imageSelection.source, image_updated_at: new Date().toISOString() })
+          .eq("id", itemId);
+        if (imgError) return toast.error(imgError.message);
+      }
     }
-    const q = existing ? (supabase.from as any)("inventory_items").update(payload).eq("id", existing.id) : (supabase.from as any)("inventory_items").insert(payload);
-    const { error } = await q;
-    if (error) return toast.error(error.message);
     // Save succeeded: retain the selected image, clean up only a dangling
     // AI preview that was generated but never applied via Use Image.
     imageFieldRef.current?.cleanupUnsaved(imageSelection?.path ?? existing?.image_path ?? null);
@@ -180,6 +234,7 @@ function ItemDialog({ propertyId, cats, existing, trigger, onDone }: any) {
           // drop any unsaved temp image, but never the pre-existing saved one.
           imageFieldRef.current?.cleanupUnsaved(existing?.image_path ?? null);
           setImageSelection(null);
+          setExpiryDate(""); setOpeningQuantity(""); setLocationId("");
         }
         setOpen(v);
       }}
@@ -205,6 +260,42 @@ function ItemDialog({ propertyId, cats, existing, trigger, onDone }: any) {
           <div><Label>Sale price</Label><Input type="number" step="0.01" value={f.sale_price} onChange={(e) => setF({ ...f, sale_price: +e.target.value })} /></div>
           <div><Label>Reorder level</Label><Input type="number" step="0.01" value={f.reorder_level} onChange={(e) => setF({ ...f, reorder_level: +e.target.value })} /></div>
         </div>
+        {!existing ? (
+          <div className="space-y-2 rounded-md border p-3">
+            <div>
+              <Label>Expiry date (optional)</Label>
+              <div className="flex items-center gap-2">
+                <Input type="date" value={expiryDate} onChange={(e) => setExpiryDate(e.target.value)} className="w-auto" />
+                {expiryDate && <Button type="button" variant="outline" size="sm" onClick={() => setExpiryDate("")}>Clear</Button>}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">Leave empty if the item does not expire.</p>
+            </div>
+            {expiryDate && (
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <Label>Opening quantity</Label>
+                  <Input type="number" step="0.001" min="0" value={openingQuantity} onChange={(e) => setOpeningQuantity(e.target.value)} />
+                </div>
+                <div>
+                  <Label>Stock location</Label>
+                  <Select value={locationId} onValueChange={setLocationId}>
+                    <SelectTrigger><SelectValue placeholder="Select a location" /></SelectTrigger>
+                    <SelectContent>
+                      {(locs.data ?? []).map((l: any) => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <p className="text-xs text-muted-foreground sm:col-span-2">
+                  An expiry date is recorded against the stock it arrives with — enter the quantity and location this expiry applies to.
+                </p>
+              </div>
+            )}
+          </div>
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            Batch expiry is managed in the Batches tab — this item may have several batches with different expiry dates.
+          </p>
+        )}
         <ProductImageField
           ref={imageFieldRef}
           key={open ? (existing?.id ?? "new") : "closed"}
@@ -215,7 +306,7 @@ function ItemDialog({ propertyId, cats, existing, trigger, onDone }: any) {
           category={cats.find((c: any) => c.id === f.category_id)?.name}
           onChange={setImageSelection}
         />
-        <DialogFooter><Button onClick={save}>Save</Button></DialogFooter>
+        <DialogFooter><Button onClick={save} disabled={!openingStockValid}>Save</Button></DialogFooter>
       </DialogContent>
     </Dialog>
   );

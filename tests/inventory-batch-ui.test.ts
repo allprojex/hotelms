@@ -46,16 +46,23 @@ describe("ReceiveDialog — captures optional per-line expiry on receiving", () 
   });
 });
 
-describe("Item creation form -- deliberately NOT given a single expiry field", () => {
-  it("ItemDialog's field state has no expiry_date (would collapse multiple batch expiries to one item-level date)", () => {
+describe("Item creation form -- expiry is captured but never collapsed to a single item-level date", () => {
+  // Superseded design note: this originally asserted ItemDialog mentioned
+  // expiry nowhere at all, because at the time there was no safe way to
+  // attach an entered date to a real batch. That safe path now exists
+  // (import_inventory_item() -- see tests/inventory-item-expiry.test.ts for
+  // full coverage), so New Item legitimately captures expiry today. What
+  // must still hold, permanently, is the reason the original ban existed:
+  // no raw expiry_date field/column on the item master itself, and no
+  // single field on Edit that could silently overwrite several batches'
+  // differing expiry dates.
+  it("ItemDialog's Edit-item payload never includes expiry_date (would collapse multiple batch expiries to one item-level date)", () => {
     const start = settings.indexOf("function ItemDialog(");
-    // Bounded to the next section-comment marker, not just the next
-    // `function` keyword -- a comment block ahead of BatchesTab legitimately
-    // mentions "expiration"/"expiry" while explaining that module, and a
-    // plain "\nfunction " search would swallow that comment into the slice.
     const end = settings.indexOf("\n// ----------", start + 1);
     const body = settings.slice(start, end === -1 ? undefined : end);
-    expect(body).not.toMatch(/expiry/i);
+    const editPayload = body.match(/const payload: any = \{[\s\S]*?\};/)?.[0] ?? "";
+    expect(editPayload.length).toBeGreaterThan(0);
+    expect(editPayload).not.toMatch(/expiry/i);
   });
 });
 
