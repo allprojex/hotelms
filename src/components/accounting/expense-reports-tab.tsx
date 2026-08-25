@@ -161,9 +161,17 @@ export function ExpenseReportsTab({
   function buildDefinition(): ReportDefinition<any> {
     const reportLabel =
       EXPENSE_REPORT_TYPES.find((r) => r.value === reportType)?.label ?? reportType;
+    // EXPENSE_REPORT_TYPES labels are already complete report names ("Expense
+    // register", "Approved expenses"), so prefixing them produced titles like
+    // "Expense Expense register". Use the label as the title, with an
+    // "Expenses " lead-in only for the grouped views whose labels are
+    // prepositional ("By category" -> "Expenses by category").
+    const reportTitle = GROUPED_TYPES.has(reportType)
+      ? `Expenses ${reportLabel.toLocaleLowerCase()}`
+      : reportLabel;
     if (GROUPED_TYPES.has(reportType)) {
       return {
-        title: `Expenses ${reportLabel}`,
+        title: reportTitle,
         slug: `expenses-${reportType}`,
         dateRange: { from, to },
         columns: [
@@ -176,7 +184,7 @@ export function ExpenseReportsTab({
     }
     if (reportType === "approval-history") {
       return {
-        title: "Expense approval history",
+        title: reportTitle,
         slug: "expense-approval-history",
         dateRange: { from, to },
         columns: [
@@ -195,7 +203,7 @@ export function ExpenseReportsTab({
     }
     if (reportType === "corrections-reversals") {
       return {
-        title: "Corrections & reversals register",
+        title: reportTitle,
         slug: "expense-corrections-reversals",
         dateRange: { from, to },
         columns: [
@@ -218,7 +226,7 @@ export function ExpenseReportsTab({
       };
     }
     return {
-      title: `Expense ${reportLabel}`,
+      title: reportTitle,
       slug: `expenses-${reportType}`,
       dateRange: { from, to },
       columns: [

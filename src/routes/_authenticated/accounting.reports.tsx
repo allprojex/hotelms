@@ -14,6 +14,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Download, Printer, BarChart3 } from "lucide-react";
 import { format, startOfMonth, endOfMonth } from "date-fns";
 import { AccountingWorkspaceShell } from "@/components/accounting/accounting-workspace-nav";
+import { formatMoney, safeCurrencyCode } from "@/lib/accounting/domain";
 
 export const Route = createFileRoute("/_authenticated/accounting/reports")({
   head: () => ({ meta: [{ title: "Financial Reports · Accounting" }] }),
@@ -33,7 +34,7 @@ const exportFinancialReport = createClientOnlyFn(
   },
 );
 
-const fmt = (n: number) => n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
 
 function ReportsPage() {
   const propertyId = useActiveProperty();
@@ -68,6 +69,23 @@ function ReportsPage() {
     enabled: !!propertyId,
   });
 
+  // Single source of truth for money on these reports: the property's own
+  // base currency, the same column the FX/journal/analytics surfaces read.
+  const property = useQuery({
+    queryKey: ["report-property-currency", propertyId],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("properties")
+        .select("name, base_currency")
+        .eq("id", propertyId!)
+        .maybeSingle();
+      return data;
+    },
+    enabled: !!propertyId,
+  });
+  const currency = safeCurrencyCode(property.data?.base_currency);
+  const money = (n: number) => formatMoney(n, currency);
+
   if (!propertyId) return <div className="p-6 text-muted-foreground">Select a property.</div>;
 
   const plRev = (pl.data ?? []).filter((r: any) => r.type === "revenue");
@@ -96,7 +114,7 @@ function ReportsPage() {
       { key: "code", label: "Code", value: (r: any) => r.code },
       { key: "account", label: "Account", value: (r: any) => r.name },
       { key: "type", label: "Type", value: (r: any) => r.type },
-      { key: "amount", label: "Amount", value: (r: any) => fmt(Number(r.amount)) },
+      { key: "amount", label: "Amount", value: (r: any) => money(Number(r.amount)) },
     ],
     rows: pl.data ?? [],
   };
@@ -110,7 +128,7 @@ function ReportsPage() {
       { key: "code", label: "Code", value: (r: any) => r.code },
       { key: "account", label: "Account", value: (r: any) => r.name },
       { key: "type", label: "Type", value: (r: any) => r.type },
-      { key: "balance", label: "Balance", value: (r: any) => fmt(Number(r.balance)) },
+      { key: "balance", label: "Balance", value: (r: any) => money(Number(r.balance)) },
     ],
     rows: bs.data ?? [],
   };
@@ -122,9 +140,9 @@ function ReportsPage() {
       { key: "code", label: "Code", value: (r: any) => r.code },
       { key: "account", label: "Account", value: (r: any) => r.name },
       { key: "type", label: "Type", value: (r: any) => r.type },
-      { key: "debit", label: "Debit", value: (r: any) => fmt(Number(r.debit_total)) },
-      { key: "credit", label: "Credit", value: (r: any) => fmt(Number(r.credit_total)) },
-      { key: "balance", label: "Balance", value: (r: any) => fmt(Number(r.balance)) },
+      { key: "debit", label: "Debit", value: (r: any) => money(Number(r.debit_total)) },
+      { key: "credit", label: "Credit", value: (r: any) => money(Number(r.credit_total)) },
+      { key: "balance", label: "Balance", value: (r: any) => money(Number(r.balance)) },
     ],
     rows: tb.data ?? [],
   };
@@ -167,10 +185,10 @@ function ReportsPage() {
               </div>
             </CardHeader>
             <CardContent className="text-sm space-y-4">
-              <Section title="Revenue" rows={plRev} total={totalRev} />
-              <Section title="Expenses" rows={plExp} total={totalExp} />
+              <Section title="Revenue" rows={plRev} total={totalRev} currency={currency} />
+              <Section title="Expenses" rows={plExp} total={totalExp} currency={currency} />
               <div className="flex justify-between font-semibold pt-2 border-t-2">
-                <span>Net Income</span><span className={`font-mono ${totalRev - totalExp < 0 ? "text-destructive" : "text-emerald-600 dark:text-emerald-400"}`}>{fmt(totalRev - totalExp)}</span>
+                <span>Net Income</span><span className={`font-mono ${totalRev - totalExp < 0 ? "text-destructive" : "text-emerald-600 dark:text-emerald-400"}`}>{money(totalRev - totalExp)}</span>
               </div>
             </CardContent>
           </Card>
@@ -197,13 +215,13 @@ function ReportsPage() {
             </CardHeader>
             <CardContent className="text-sm grid md:grid-cols-2 gap-6">
               <div className="space-y-4">
-                <SectionBS title="Assets" rows={bsAssets} total={totalAssets} />
+                <SectionBS title="Assets" rows={bsAssets} total={totalAssets} currency={currency} />
               </div>
               <div className="space-y-4">
-                <SectionBS title="Liabilities" rows={bsLiab} total={totalLiab} />
-                <SectionBS title="Equity" rows={bsEq} total={totalEq} />
+                <SectionBS title="Liabilities" rows={bsLiab} total={totalLiab} currency={currency} />
+                <SectionBS title="Equity" rows={bsEq} total={totalEq} currency={currency} />
                 <div className="flex justify-between font-semibold pt-2 border-t-2">
-                  <span>Total L + E</span><span className="font-mono">{fmt(totalLiab + totalEq)}</span>
+                  <span>Total L + E</span><span className="font-mono">{money(totalLiab + totalEq)}</span>
                 </div>
               </div>
             </CardContent>
@@ -237,16 +255,16 @@ function ReportsPage() {
                 <div key={r.account_id} className="grid grid-cols-[80px_1fr_100px_100px_100px] gap-2 py-1 border-b last:border-0">
                   <span className="font-mono text-xs">{r.code}</span>
                   <span>{r.name}</span>
-                  <span className="text-right font-mono">{fmt(Number(r.debit_total))}</span>
-                  <span className="text-right font-mono">{fmt(Number(r.credit_total))}</span>
-                  <span className="text-right font-mono">{fmt(Number(r.balance))}</span>
+                  <span className="text-right font-mono">{money(Number(r.debit_total))}</span>
+                  <span className="text-right font-mono">{money(Number(r.credit_total))}</span>
+                  <span className="text-right font-mono">{money(Number(r.balance))}</span>
                 </div>
               ))}
               <div className="grid grid-cols-[80px_1fr_100px_100px_100px] gap-2 py-2 font-semibold border-t-2">
                 <span></span><span>Totals</span>
-                <span className="text-right font-mono">{fmt(tbDr)}</span>
-                <span className="text-right font-mono">{fmt(tbCr)}</span>
-                <span className="text-right font-mono">{fmt(tbDr - tbCr)}</span>
+                <span className="text-right font-mono">{money(tbDr)}</span>
+                <span className="text-right font-mono">{money(tbCr)}</span>
+                <span className="text-right font-mono">{money(tbDr - tbCr)}</span>
               </div>
             </CardContent>
           </Card>
@@ -260,35 +278,37 @@ function ReportsPage() {
   );
 }
 
-function Section({ title, rows, total }: { title: string; rows: any[]; total: number }) {
+function Section({ title, rows, total, currency }: { title: string; rows: any[]; total: number; currency: string }) {
+  const money = (n: number) => formatMoney(n, currency);
   return (
     <div>
       <div className="font-medium mb-1">{title}</div>
       {rows.map((r) => (
         <div key={r.account_id} className="flex justify-between py-0.5">
           <span className="text-muted-foreground"><span className="font-mono text-xs">{r.code}</span> {r.name}</span>
-          <span className="font-mono">{fmt(Number(r.amount))}</span>
+          <span className="font-mono">{money(Number(r.amount))}</span>
         </div>
       ))}
       <div className="flex justify-between font-semibold pt-1 border-t mt-1">
-        <span>Total {title}</span><span className="font-mono">{fmt(total)}</span>
+        <span>Total {title}</span><span className="font-mono">{money(total)}</span>
       </div>
     </div>
   );
 }
 
-function SectionBS({ title, rows, total }: { title: string; rows: any[]; total: number }) {
+function SectionBS({ title, rows, total, currency }: { title: string; rows: any[]; total: number; currency: string }) {
+  const money = (n: number) => formatMoney(n, currency);
   return (
     <div>
       <div className="font-medium mb-1">{title}</div>
       {rows.map((r) => (
         <div key={r.account_id} className="flex justify-between py-0.5">
           <span className="text-muted-foreground"><span className="font-mono text-xs">{r.code}</span> {r.name}</span>
-          <span className="font-mono">{fmt(Number(r.balance))}</span>
+          <span className="font-mono">{money(Number(r.balance))}</span>
         </div>
       ))}
       <div className="flex justify-between font-semibold pt-1 border-t mt-1">
-        <span>Total {title}</span><span className="font-mono">{fmt(total)}</span>
+        <span>Total {title}</span><span className="font-mono">{money(total)}</span>
       </div>
     </div>
   );
