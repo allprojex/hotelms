@@ -73,20 +73,20 @@ describe("reservations date filter — semantics: inclusive check_in range, neve
     );
   });
 
-  it("applies the filter as an inclusive gte/lte pair against check_in — never a strict gt/lt, never against created_at, check_out, or a payment/booking date column", () => {
-    expect(routePage).toContain('sel = sel.gte("check_in", checkInFrom)');
-    expect(routePage).toContain('sel = sel.lte("check_in", checkInTo)');
-    expect(routePage).not.toMatch(/\.gt\(\s*"check_in"/);
-    expect(routePage).not.toMatch(/\.lt\(\s*"check_in"/);
-    expect(routePage).not.toMatch(
-      /(gte|lte|gt|lt|eq)\(\s*"(created_at|check_out|received_at|booked_at)"/,
-    );
+  it("passes checkInFrom/checkInTo straight through to the search_reservations RPC as _check_in_from/_check_in_to — the actual inclusive gte/lte-against-check_in semantics now live in that migration (see tests/reservations-reporting-pagination.test.ts), never reimplemented as a second client-side date filter", () => {
+    expect(routePage).toContain("_check_in_from: checkInFrom,");
+    expect(routePage).toContain("_check_in_to: checkInTo,");
   });
 
-  it("clearing the date (checkInRange undefined) means checkInFrom/checkInTo are both null, so no gte/lte clause is ever added — all dates return", () => {
-    const queryFnBody = routePage.match(/queryFn: async \(\) => \{[\s\S]*?\n {4}\},/)?.[0] ?? "";
-    expect(queryFnBody).toMatch(/if \(checkInFrom\) sel = sel\.gte/);
-    expect(queryFnBody).toMatch(/if \(checkInTo\) sel = sel\.lte/);
+  it("clearing the date (checkInRange undefined) means checkInFrom/checkInTo are both null, sent straight through as null RPC args — the RPC's own null-check (not a client-side conditional clause) is what makes all dates return", () => {
+    expect(routePage).toContain(
+      "const checkInFrom = checkInRange?.from ? toDateKey(checkInRange.from) : null;",
+    );
+    expect(routePage).toContain(
+      "const checkInTo = checkInRange?.to ? toDateKey(checkInRange.to) : checkInFrom;",
+    );
+    expect(routePage).toContain("_check_in_from: checkInFrom,");
+    expect(routePage).toContain("_check_in_to: checkInTo,");
   });
 });
 
@@ -97,41 +97,54 @@ describe("reservations date filter — timezone safety", () => {
     expect(routePage).toContain('const toDateKey = (d: Date) => format(d, "yyyy-MM-dd");');
   });
 
-  it("sends the filter as a plain date string directly to a DATE column comparison, not a Date object or timestamp", () => {
-    expect(routePage).toMatch(/gte\("check_in", checkInFrom\)/);
-    expect(routePage).toMatch(/lte\("check_in", checkInTo\)/);
+  it("sends the filter as plain date strings (checkInFrom/checkInTo) to the RPC, never a Date object or timestamp", () => {
+    expect(routePage).toContain("_check_in_from: checkInFrom,");
+    expect(routePage).toContain("_check_in_to: checkInTo,");
   });
 });
 
 describe("reservations date filter — combines with existing filters via AND, without disturbing them", () => {
-  it("status and the new date filter are both applied as separate conditions on the SAME scoped Supabase query — combining as AND by construction, and neither resets the other (independent useState)", () => {
-    expect(routePage).toContain('if (status !== "all") sel = sel.eq("status", status as any);');
+  // Reporting PR2 moved status/date/search filtering from client-side query
+  // chaining into the search_reservations RPC (see
+  // tests/reservations-reporting-pagination.test.ts for the migration-level
+  // AND-semantics proof). What this file still pins is that the CLIENT
+  // continues to pass all three as independent, unconditional arguments to
+  // that single RPC call -- neither resets the other, and none is dropped.
+  it("status and the date filter are both independent useState, both passed unconditionally into the same filterArgs object sent to the RPC — combining as AND inside that one call, and neither resets the other", () => {
     expect(routePage).toContain('const [status, setStatus] = useState<string>("all");');
     expect(routePage).toContain(
       "const [checkInRange, setCheckInRange] = useState<DateRange | undefined>(undefined);",
     );
+    const filterArgsBlock = routePage.slice(
+      routePage.indexOf("const filterArgs = {"),
+      routePage.indexOf("const query = useQuery"),
+    );
+    expect(filterArgsBlock).toContain("_status: status,");
+    expect(filterArgsBlock).toContain("_check_in_from: checkInFrom,");
+    expect(filterArgsBlock).toContain("_check_in_to: checkInTo,");
   });
 
-  it("search remains its own independent client-side filter over whatever the (status+date)-scoped query already returned — unchanged logic, so it still combines as AND with both server-side filters", () => {
-    expect(routePage).toContain(
-      "const filtered = (query.data ?? []).filter((r: any) => {\n    if (!q) return true;",
+  it("search is now sent to the same RPC/filterArgs as status and date (server-side, not a separate client-side array filter) — still combines as AND with both, now enforced by the single RPC call rather than a second pass over already-fetched rows", () => {
+    expect(routePage).not.toMatch(/const filtered = \(query\.data/);
+    const filterArgsBlock = routePage.slice(
+      routePage.indexOf("const filterArgs = {"),
+      routePage.indexOf("const query = useQuery"),
     );
+    expect(filterArgsBlock).toContain("_search: debouncedQ || null,");
     expect(routePage).toContain('const [q, setQ] = useState("");');
   });
 
-  it("property scoping is applied unconditionally, before any status/date branch, and is never removed or made optional", () => {
-    const queryFnBody = routePage.match(/queryFn: async \(\) => \{[\s\S]*?\n {4}\},/)?.[0] ?? "";
-    const propIdx = queryFnBody.indexOf('.eq("property_id", propertyId!)');
-    const statusIdx = queryFnBody.indexOf('if (status !== "all")');
-    const dateIdx = queryFnBody.indexOf("if (checkInFrom)");
-    expect(propIdx).toBeGreaterThan(-1);
-    expect(propIdx).toBeLessThan(statusIdx);
-    expect(propIdx).toBeLessThan(dateIdx);
+  it("property scoping (_property_id) is always present in filterArgs, unconditionally — never dropped or made optional for any status/date/search combination", () => {
+    const filterArgsBlock = routePage.slice(
+      routePage.indexOf("const filterArgs = {"),
+      routePage.indexOf("const query = useQuery"),
+    );
+    expect(filterArgsBlock).toContain("_property_id: propertyId!,");
   });
 
-  it("the query key includes checkInFrom/checkInTo alongside the existing propertyId/status keys, so React Query refetches correctly on every filter change without a second, conflicting source of truth", () => {
+  it("the query key includes debouncedQ/status/checkInFrom/checkInTo/page alongside propertyId, so React Query refetches correctly on every filter or page change without a second, conflicting source of truth", () => {
     expect(routePage).toContain(
-      'queryKey: ["reservations", propertyId, status, checkInFrom, checkInTo]',
+      'queryKey: ["reservations-report", propertyId, debouncedQ, status, checkInFrom, checkInTo, page],',
     );
   });
 });
