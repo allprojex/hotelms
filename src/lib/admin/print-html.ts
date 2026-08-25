@@ -5,8 +5,18 @@ export function openPrintView(opts: {
   bodyHtml: string;
   landscape?: boolean;
 }) {
-  const w = window.open("", "_blank", "noopener,width=1024,height=768");
+  // "noopener" in the features string makes window.open() itself return
+  // null (the caller is given no reference to a window it has no opener
+  // link to) -- fatal here, since this function needs that reference to
+  // write the report into the new window. The target is always "" (a
+  // blank, same-origin window we fully control, never third-party
+  // content), so the classic reverse-tabnabbing risk noopener defends
+  // against doesn't apply -- but we still sever the back-reference
+  // defensively, the same way, just after obtaining the handle instead of
+  // through the features string that broke it.
+  const w = window.open("", "_blank", "width=1024,height=768");
   if (!w) return;
+  w.opener = null;
   const size = opts.landscape ? "landscape" : "portrait";
   w.document.write(`<!doctype html><html><head><meta charset="utf-8" />
     <title>${escapeHtml(opts.title)}</title>
