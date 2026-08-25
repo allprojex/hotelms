@@ -1,15 +1,17 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
+import { createClientOnlyFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
 import { useActiveProperty } from "@/hooks/use-active-property";
 import { ExpenseReportsTab } from "@/components/accounting/expense-reports-tab";
+import type { ReportDefinition, ReportFormat } from "@/lib/reports/report-core";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Download, BarChart3 } from "lucide-react";
+import { Download, Printer, BarChart3 } from "lucide-react";
 import { format, startOfMonth, endOfMonth } from "date-fns";
 import { AccountingWorkspaceShell } from "@/components/accounting/accounting-workspace-nav";
 
@@ -22,15 +24,15 @@ export const Route = createFileRoute("/_authenticated/accounting/reports")({
   ),
 });
 
-function toCSV(rows: string[][]) {
-  return rows.map((r) => r.map((c) => (/[",\n]/.test(c) ? `"${c.replace(/"/g, '""')}"` : c)).join(",")).join("\n");
-}
-function download(name: string, csv: string) {
-  const blob = new Blob([csv], { type: "text/csv" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a"); a.href = url; a.download = name; a.click();
-  URL.revokeObjectURL(url);
-}
+// jspdf/xlsx are browser-only and heavy -- load them only when an export is
+// actually requested, exactly like ExpenseReportsTab's exportExpenseReport.
+const exportFinancialReport = createClientOnlyFn(
+  async (definition: ReportDefinition<any>, exportFormat: ReportFormat) => {
+    const { exportReport } = await import("@/lib/reports/report-export.client");
+    return exportReport(definition, exportFormat);
+  },
+);
+
 const fmt = (n: number) => n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 function ReportsPage() {
@@ -83,6 +85,50 @@ function ReportsPage() {
   const tbDr = (tb.data ?? []).reduce((s: number, r: any) => s + Math.max(0, Number(r.balance)), 0);
   const tbCr = (tb.data ?? []).reduce((s: number, r: any) => s + Math.max(0, -Number(r.balance)), 0);
 
+  // Each export uses the exact same query-driven array (pl.data / bs.data /
+  // tb.data) the on-screen sections above are built from -- never a second,
+  // independently-derived dataset that could drift from what's visible.
+  const plDefinition: ReportDefinition<any> = {
+    title: "Profit & Loss",
+    slug: "profit-loss",
+    dateRange: { from, to },
+    columns: [
+      { key: "code", label: "Code", value: (r: any) => r.code },
+      { key: "account", label: "Account", value: (r: any) => r.name },
+      { key: "type", label: "Type", value: (r: any) => r.type },
+      { key: "amount", label: "Amount", value: (r: any) => fmt(Number(r.amount)) },
+    ],
+    rows: pl.data ?? [],
+  };
+  const bsDefinition: ReportDefinition<any> = {
+    // Balance Sheet is a point-in-time report ("as of {to}"), not a range --
+    // the "as of" date is folded into the title instead of a from/to pair
+    // that would misleadingly render as a one-day range.
+    title: `Balance Sheet · as of ${to}`,
+    slug: "balance-sheet",
+    columns: [
+      { key: "code", label: "Code", value: (r: any) => r.code },
+      { key: "account", label: "Account", value: (r: any) => r.name },
+      { key: "type", label: "Type", value: (r: any) => r.type },
+      { key: "balance", label: "Balance", value: (r: any) => fmt(Number(r.balance)) },
+    ],
+    rows: bs.data ?? [],
+  };
+  const tbDefinition: ReportDefinition<any> = {
+    title: "Trial Balance",
+    slug: "trial-balance",
+    dateRange: { from, to },
+    columns: [
+      { key: "code", label: "Code", value: (r: any) => r.code },
+      { key: "account", label: "Account", value: (r: any) => r.name },
+      { key: "type", label: "Type", value: (r: any) => r.type },
+      { key: "debit", label: "Debit", value: (r: any) => fmt(Number(r.debit_total)) },
+      { key: "credit", label: "Credit", value: (r: any) => fmt(Number(r.credit_total)) },
+      { key: "balance", label: "Balance", value: (r: any) => fmt(Number(r.balance)) },
+    ],
+    rows: tb.data ?? [],
+  };
+
   return (
     <div className="p-4 md:p-6 space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-3">
@@ -105,10 +151,20 @@ function ReportsPage() {
           <Card>
             <CardHeader className="pb-2 flex-row items-center justify-between space-y-0">
               <CardTitle className="text-sm">P&L · {from} → {to}</CardTitle>
-              <Button variant="outline" size="sm" onClick={() => download(`pl-${from}-${to}.csv`,
-                toCSV([["Code", "Account", "Type", "Amount"], ...(pl.data ?? []).map((r: any) => [r.code, r.name, r.type, fmt(Number(r.amount))])]))}>
-                <Download className="h-3 w-3 mr-1" /> CSV
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" onClick={() => exportFinancialReport(plDefinition, "csv")}>
+                  <Download className="h-3 w-3 mr-1" /> CSV
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => exportFinancialReport(plDefinition, "xlsx")}>
+                  <Download className="h-3 w-3 mr-1" /> XLSX
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => exportFinancialReport(plDefinition, "pdf")}>
+                  <Download className="h-3 w-3 mr-1" /> PDF
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => exportFinancialReport(plDefinition, "print")}>
+                  <Printer className="h-3 w-3 mr-1" /> Print
+                </Button>
+              </div>
             </CardHeader>
             <CardContent className="text-sm space-y-4">
               <Section title="Revenue" rows={plRev} total={totalRev} />
@@ -124,10 +180,20 @@ function ReportsPage() {
           <Card>
             <CardHeader className="pb-2 flex-row items-center justify-between space-y-0">
               <CardTitle className="text-sm">Balance Sheet · as of {to}</CardTitle>
-              <Button variant="outline" size="sm" onClick={() => download(`bs-${to}.csv`,
-                toCSV([["Code", "Account", "Type", "Balance"], ...(bs.data ?? []).map((r: any) => [r.code, r.name, r.type, fmt(Number(r.balance))])]))}>
-                <Download className="h-3 w-3 mr-1" /> CSV
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" onClick={() => exportFinancialReport(bsDefinition, "csv")}>
+                  <Download className="h-3 w-3 mr-1" /> CSV
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => exportFinancialReport(bsDefinition, "xlsx")}>
+                  <Download className="h-3 w-3 mr-1" /> XLSX
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => exportFinancialReport(bsDefinition, "pdf")}>
+                  <Download className="h-3 w-3 mr-1" /> PDF
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => exportFinancialReport(bsDefinition, "print")}>
+                  <Printer className="h-3 w-3 mr-1" /> Print
+                </Button>
+              </div>
             </CardHeader>
             <CardContent className="text-sm grid md:grid-cols-2 gap-6">
               <div className="space-y-4">
@@ -148,10 +214,20 @@ function ReportsPage() {
           <Card>
             <CardHeader className="pb-2 flex-row items-center justify-between space-y-0">
               <CardTitle className="text-sm">Trial Balance · {from} → {to}</CardTitle>
-              <Button variant="outline" size="sm" onClick={() => download(`tb-${from}-${to}.csv`,
-                toCSV([["Code", "Account", "Type", "Debit", "Credit"], ...(tb.data ?? []).map((r: any) => [r.code, r.name, r.type, fmt(Number(r.debit_total)), fmt(Number(r.credit_total))])]))}>
-                <Download className="h-3 w-3 mr-1" /> CSV
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" onClick={() => exportFinancialReport(tbDefinition, "csv")}>
+                  <Download className="h-3 w-3 mr-1" /> CSV
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => exportFinancialReport(tbDefinition, "xlsx")}>
+                  <Download className="h-3 w-3 mr-1" /> XLSX
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => exportFinancialReport(tbDefinition, "pdf")}>
+                  <Download className="h-3 w-3 mr-1" /> PDF
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => exportFinancialReport(tbDefinition, "print")}>
+                  <Printer className="h-3 w-3 mr-1" /> Print
+                </Button>
+              </div>
             </CardHeader>
             <CardContent className="text-sm">
               <div className="grid grid-cols-[80px_1fr_100px_100px_100px] gap-2 py-1 text-xs font-medium border-b">

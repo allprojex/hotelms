@@ -6,10 +6,13 @@ import {
   authorizeExpenseReportAction,
   getExpenseReportData,
 } from "@/lib/accounting/expense-reports.functions";
-import type { ReportDefinition, ReportFormat } from "@/lib/reports/report-core";
+import { filterReportRows, type ReportDefinition, type ReportFormat } from "@/lib/reports/report-core";
 import { formatMoney } from "@/lib/accounting/domain";
+import { ACCOUNTING_ADMIN_ROLES } from "@/lib/accounting/permissions";
+import { usePermission } from "@/hooks/use-permission";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -25,7 +28,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Download, Printer } from "lucide-react";
+import { Download, Printer, Search } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 
@@ -75,8 +78,26 @@ export function ExpenseReportsTab({
   to: string;
 }) {
   const [reportType, setReportType] = useState<string>("register");
+  const [search, setSearch] = useState("");
   const authorizeFn = useServerFn(authorizeExpenseReportAction);
   const dataFn = useServerFn(getExpenseReportData);
+  // Same module/capability pair the server already asserts in
+  // authorizeExpenseReportAction (via authorizeReportAction's
+  // module: reportKey, capability: action) -- this only mirrors that
+  // existing, already-enforced check on the client so unauthorized users
+  // never see a button whose click the server would reject anyway.
+  const canExport = usePermission({
+    propertyId,
+    module: "expense_reports",
+    capability: "export",
+    defaultRoles: ACCOUNTING_ADMIN_ROLES,
+  });
+  const canPrint = usePermission({
+    propertyId,
+    module: "expense_reports",
+    capability: "print",
+    defaultRoles: ACCOUNTING_ADMIN_ROLES,
+  });
 
   const baseType = GROUPED_TYPES.has(reportType) ? "register" : reportType;
   const report = useQuery({
@@ -105,6 +126,38 @@ export function ExpenseReportsTab({
       )
     : [];
 
+  // One filtered dataset feeds both the on-screen table and every export
+  // format below -- Search can never make the exported rows drift from what
+  // is visible, since there is no second, export-only derivation.
+  function searchValuesFor(row: any): unknown[] {
+    if (GROUPED_TYPES.has(reportType)) return [row.label];
+    if (reportType === "approval-history") {
+      return [row.expense?.expense_number, row.action, row.actor?.full_name, row.reason];
+    }
+    if (reportType === "corrections-reversals") {
+      return [
+        row.expense?.expense_number,
+        row.reason,
+        row.status,
+        row.requester?.full_name,
+        row.reversal?.expense_number,
+      ];
+    }
+    return [
+      row.expense_number,
+      row.category?.name,
+      row.vendor?.name,
+      row.cost_centre?.name,
+      row.status,
+      row.payment_reference,
+    ];
+  }
+  const filteredRows = filterReportRows({
+    rows: GROUPED_TYPES.has(reportType) ? grouped : rows,
+    search,
+    searchValues: searchValuesFor,
+  });
+
   function buildDefinition(): ReportDefinition<any> {
     const reportLabel =
       EXPENSE_REPORT_TYPES.find((r) => r.value === reportType)?.label ?? reportType;
@@ -118,7 +171,7 @@ export function ExpenseReportsTab({
           { key: "count", label: "Count", value: (r: any) => r.count },
           { key: "total", label: "Total", value: (r: any) => formatMoney(r.total, r.currency) },
         ],
-        rows: grouped,
+        rows: filteredRows,
       };
     }
     if (reportType === "approval-history") {
@@ -137,7 +190,7 @@ export function ExpenseReportsTab({
           { key: "actor", label: "Actor", value: (r: any) => r.actor?.full_name ?? "" },
           { key: "reason", label: "Reason", value: (r: any) => r.reason ?? "" },
         ],
-        rows,
+        rows: filteredRows,
       };
     }
     if (reportType === "corrections-reversals") {
@@ -161,7 +214,7 @@ export function ExpenseReportsTab({
             value: (r: any) => r.reversal?.expense_number ?? "",
           },
         ],
-        rows,
+        rows: filteredRows,
       };
     }
     return {
@@ -186,7 +239,7 @@ export function ExpenseReportsTab({
           value: (r: any) => formatMoney(r.total_amount, r.currency),
         },
       ],
-      rows,
+      rows: filteredRows,
     };
   }
 
@@ -225,18 +278,33 @@ export function ExpenseReportsTab({
               ))}
             </SelectContent>
           </Select>
-          <Button variant="outline" size="sm" onClick={() => handleExport("csv")}>
-            <Download className="h-3 w-3 mr-1" /> CSV
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => handleExport("xlsx")}>
-            <Download className="h-3 w-3 mr-1" /> XLSX
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => handleExport("pdf")}>
-            <Download className="h-3 w-3 mr-1" /> PDF
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => handleExport("print")}>
-            <Printer className="h-3 w-3 mr-1" /> Print
-          </Button>
+          <div className="relative">
+            <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Search…"
+              className="h-8 w-40 pl-7"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+          {canExport.allowed && (
+            <>
+              <Button variant="outline" size="sm" onClick={() => handleExport("csv")}>
+                <Download className="h-3 w-3 mr-1" /> CSV
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => handleExport("xlsx")}>
+                <Download className="h-3 w-3 mr-1" /> XLSX
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => handleExport("pdf")}>
+                <Download className="h-3 w-3 mr-1" /> PDF
+              </Button>
+            </>
+          )}
+          {canPrint.allowed && (
+            <Button variant="outline" size="sm" onClick={() => handleExport("print")}>
+              <Printer className="h-3 w-3 mr-1" /> Print
+            </Button>
+          )}
         </div>
       </CardHeader>
       <CardContent className="text-sm">
@@ -251,7 +319,7 @@ export function ExpenseReportsTab({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {grouped.map((g: any) => (
+              {filteredRows.map((g: any) => (
                 <TableRow key={g.label}>
                   <TableCell>{g.label}</TableCell>
                   <TableCell>{g.count}</TableCell>
@@ -260,7 +328,7 @@ export function ExpenseReportsTab({
                   </TableCell>
                 </TableRow>
               ))}
-              {grouped.length === 0 && (
+              {filteredRows.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={3} className="text-center text-muted-foreground py-6">
                     No data for this range.
@@ -281,7 +349,7 @@ export function ExpenseReportsTab({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {rows.map((r: any) => (
+              {filteredRows.map((r: any) => (
                 <TableRow key={r.id}>
                   <TableCell className="text-xs">
                     {format(new Date(r.created_at), "MMM d, HH:mm")}
@@ -292,7 +360,7 @@ export function ExpenseReportsTab({
                   <TableCell className="text-xs">{r.reason ?? "—"}</TableCell>
                 </TableRow>
               ))}
-              {rows.length === 0 && (
+              {filteredRows.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={5} className="text-center text-muted-foreground py-6">
                     No history for this range.
@@ -313,7 +381,7 @@ export function ExpenseReportsTab({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {rows.map((r: any) => (
+              {filteredRows.map((r: any) => (
                 <TableRow key={r.id}>
                   <TableCell className="font-mono text-xs">{r.expense?.expense_number}</TableCell>
                   <TableCell className="text-xs max-w-xs truncate">{r.reason}</TableCell>
@@ -322,7 +390,7 @@ export function ExpenseReportsTab({
                   <TableCell className="text-xs">{r.reversal?.expense_number ?? "—"}</TableCell>
                 </TableRow>
               ))}
-              {rows.length === 0 && (
+              {filteredRows.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={5} className="text-center text-muted-foreground py-6">
                     No corrections for this range.
@@ -343,7 +411,7 @@ export function ExpenseReportsTab({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {rows.map((r: any) => (
+              {filteredRows.map((r: any) => (
                 <TableRow key={r.id}>
                   <TableCell className="font-mono text-xs">{r.expense_number}</TableCell>
                   <TableCell className="text-xs">{r.expense_date}</TableCell>
@@ -354,7 +422,7 @@ export function ExpenseReportsTab({
                   </TableCell>
                 </TableRow>
               ))}
-              {rows.length === 0 && (
+              {filteredRows.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={5} className="text-center text-muted-foreground py-6">
                     No expenses for this range.
