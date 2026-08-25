@@ -5,35 +5,23 @@ import { resolvePermission } from "@/lib/permissions";
 import { PASSKEY_ADMIN_ROLES, PASSKEY_PERMISSIONS } from "@/lib/security/passkey-permissions";
 
 const root = resolve(__dirname, "..");
-const migration = readFileSync(
-  resolve(root, "supabase/migrations/20260801120000_webauthn_passkey_security.sql"),
-  "utf8",
-);
-const enrollmentFns = readFileSync(
-  resolve(root, "src/lib/security/passkey-enrollment.functions.ts"),
-  "utf8",
-);
-const registrationFns = readFileSync(
-  resolve(root, "src/lib/security/passkey-registration.functions.ts"),
-  "utf8",
-);
-const authenticationFns = readFileSync(
-  resolve(root, "src/lib/security/passkey-authentication.functions.ts"),
-  "utf8",
-);
-const credentialFns = readFileSync(
-  resolve(root, "src/lib/security/passkey-credentials.functions.ts"),
-  "utf8",
-);
-const ownPage = readFileSync(
-  resolve(root, "src/routes/_authenticated/security.passkeys.tsx"),
-  "utf8",
-);
-const adminPage = readFileSync(
-  resolve(root, "src/routes/_authenticated/admin_.security.passkeys.tsx"),
-  "utf8",
-);
-const authRoute = readFileSync(resolve(root, "src/routes/auth.tsx"), "utf8");
+// Normalize line endings before matching. These assertions pin multi-line
+// source shapes (e.g. a GRANT whose argument list wraps), and a Windows checkout with core.autocrlf=true stores
+// those files with CRLF -- so a "\n"-joined expectation fails for a purely
+// platform-dependent reason while the source is byte-for-byte correct. Same
+// convention as tests/reservations-checkin-date-filter.test.ts.
+function readSource(relPath: string): string {
+  return readFileSync(resolve(root, relPath), "utf8").replace(/\r\n/g, "\n");
+}
+
+const migration = readSource("supabase/migrations/20260801120000_webauthn_passkey_security.sql");
+const enrollmentFns = readSource("src/lib/security/passkey-enrollment.functions.ts");
+const registrationFns = readSource("src/lib/security/passkey-registration.functions.ts");
+const authenticationFns = readSource("src/lib/security/passkey-authentication.functions.ts");
+const credentialFns = readSource("src/lib/security/passkey-credentials.functions.ts");
+const ownPage = readSource("src/routes/_authenticated/security.passkeys.tsx");
+const adminPage = readSource("src/routes/_authenticated/admin_.security.passkeys.tsx");
+const authRoute = readSource("src/routes/auth.tsx");
 const GENERIC_FAILURE_TOKEN = 'GENERIC_FAILURE = "Passkey sign-in failed"';
 
 describe("Phase 5: no raw biometric data is ever stored", () => {

@@ -1,14 +1,33 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import { inventoryItemSearchText, matchesSearch } from "../src/lib/search-filter";
 
 // Source-convention tests (no jsdom/RTL in this repo's test setup -- see
 // tests/global-search.test.ts's header for the established precedent).
-
+//
+// Line endings are normalized: a Windows checkout with core.autocrlf=true
+// stores this file with CRLF, which shifts every byte offset below and made a
+// fixed-width slice window fall short of its target for a purely platform-
+// dependent reason.
 const source = readFileSync(
   resolve(__dirname, "../src/routes/_authenticated/reservations.$id.tsx"),
   "utf8",
-);
+).replace(/\r\n/g, "\n");
+
+/**
+ * Slice one component out of the route file by its own boundaries rather than
+ * a fixed byte budget -- a hard-coded `start + N` silently stops covering its
+ * assertion the moment the component grows (or the checkout uses CRLF), which
+ * is exactly how the picker assertion below started failing while the source
+ * was correct.
+ */
+function componentBody(name: string, nextName?: string): string {
+  const start = source.indexOf(`function ${name}`);
+  expect(start, `${name} not found in reservations.$id.tsx`).toBeGreaterThan(-1);
+  const end = nextName ? source.indexOf(`function ${nextName}`, start) : source.length;
+  return source.slice(start, end === -1 ? source.length : end);
+}
 
 describe("Room Items section — placement and check-in gating", () => {
   it("is rendered on the reservation detail page, after the Folio card", () => {
@@ -49,8 +68,7 @@ describe("Role gating — UI-side only, matching the RPCs' own server-side role 
 
 describe("Item picker — searchable, active-only, property-scoped, avoids the known cmdk opaque-value pitfall", () => {
   it("searches inventory_items scoped to the reservation's property and active=true only", () => {
-    const start = source.indexOf("function ItemDistributionPicker");
-    const body = source.slice(start, start + 1500);
+    const body = componentBody("ItemDistributionPicker", "ReturnItemDialog");
     expect(body).toMatch(/\("inventory_items"\)/);
     expect(body).toContain('.eq("property_id", propertyId)');
     expect(body).toContain('.eq("active", true)');
@@ -64,10 +82,56 @@ describe("Item picker — searchable, active-only, property-scoped, avoids the k
   });
 
   it("uses shouldFilter={false} with a human-searchable CommandItem.value (not an opaque id alone) -- the exact fix from the dashboard-search cmdk bug (PR #52)", () => {
-    const start = source.indexOf("function ItemDistributionPicker");
-    const body = source.slice(start, start + 2000);
+    const body = componentBody("ItemDistributionPicker", "ReturnItemDialog");
     expect(body).toContain("shouldFilter={false}");
     expect(body).toMatch(/value=\{`\$\{inventoryItemSearchText\(it\)\} \$\{it\.id\}`\}/);
+  });
+});
+
+describe("Item picker filtering — behaviour of the predicate the picker actually uses", () => {
+  // The picker disables cmdk's built-in filter (shouldFilter={false}) and does
+  // its own matching with matchesSearch(inventoryItemSearchText(it), query).
+  // These exercise those real shipped helpers, so a regression in the matching
+  // rules fails here on behaviour, not on source text.
+  const items = [
+    { id: "i1", name: "Bath Towel", sku: "TWL-001", item_categories: { name: "Linen" } },
+    { id: "i2", name: "Hand Soap", sku: "SOAP-020", item_categories: { name: "Toiletries" } },
+    { id: "i3", name: "Kettle", sku: null, item_categories: null },
+  ];
+  const pick = (query: string) =>
+    items.filter((it) => matchesSearch(inventoryItemSearchText(it), query)).map((it) => it.id);
+
+  it("matches on name, SKU and category", () => {
+    expect(pick("towel")).toEqual(["i1"]);
+    expect(pick("SOAP-020")).toEqual(["i2"]);
+    expect(pick("Toiletries")).toEqual(["i2"]);
+  });
+
+  it("is case-insensitive and matches partial words", () => {
+    expect(pick("BATH")).toEqual(["i1"]);
+    expect(pick("twl")).toEqual(["i1"]);
+    expect(pick("lin")).toEqual(["i1"]);
+  });
+
+  it("an empty query hides nothing -- every configurable item stays selectable", () => {
+    expect(pick("")).toEqual(["i1", "i2", "i3"]);
+    expect(pick("   ")).toEqual(["i1", "i2", "i3"]);
+  });
+
+  it("an item with no SKU or category is still searchable by name, never dropped", () => {
+    expect(pick("kettle")).toEqual(["i3"]);
+    expect(inventoryItemSearchText(items[2])).toBe("Kettle");
+  });
+
+  it("a non-matching query yields no rows rather than an unfiltered list", () => {
+    expect(pick("no-such-item")).toEqual([]);
+  });
+
+  it("the value passed to CommandItem stays unique per item while remaining human-searchable", () => {
+    const values = items.map((it) => `${inventoryItemSearchText(it)} ${it.id}`);
+    expect(new Set(values).size).toBe(items.length);
+    expect(values[0]).toContain("Bath Towel");
+    expect(values[0]).toContain("i1");
   });
 });
 
