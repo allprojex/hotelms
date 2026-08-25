@@ -344,9 +344,17 @@ describe("Phase AR/AP-1: audit logging", () => {
     expect(apPaymentsFns).toContain("ap_payment.recorded");
   });
 
-  it("does not restructure the existing AP bill create/post flows — only the payment insert moved behind a server function", () => {
+  it("bill create/post flows: post is unchanged, create was later hardened to an atomic RPC (20260822120000) — never a direct client insert into ap_bills/ap_bill_lines", () => {
     expect(apPage).toContain('supabase.rpc("post_ap_bill"');
-    expect(apPage).toContain('supabase.from("ap_bills").insert(');
+    // create_ap_bill() replaced the two-step raw insert on 2026-08-22 to fix
+    // a genuine partial-write bug (a zero-line bill could be left behind if
+    // the second insert failed) and to let direct INSERT/UPDATE/DELETE
+    // grants on ap_bills/ap_bill_lines be revoked from authenticated. A
+    // plain insert() is no longer possible (grants revoked) or desirable
+    // (would reintroduce the partial-write risk) -- see
+    // supabase/migrations/20260822120000_ap_posting_reversal_hardening.sql.
+    expect(apPage).toContain('supabase.rpc as any)("create_ap_bill"');
+    expect(apPage).not.toContain('supabase.from("ap_bills").insert(');
   });
 });
 
