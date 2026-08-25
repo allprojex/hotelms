@@ -1,6 +1,8 @@
 // Server-only executor for scheduled analytics exports.
 // Called by both the authenticated "Run now" server fn and the pg_cron endpoint.
 
+import { execCurrency, execMoney, execNumber } from "@/lib/analytics-format";
+
 type SummaryRow = Record<string, unknown>;
 
 function isoDate(d: Date) { return d.toISOString().slice(0, 10); }
@@ -25,8 +27,11 @@ function toCsv(rows: SummaryRow[], cols: string[]): string {
 }
 
 function fmtNum(v: unknown, suffix = ""): string {
-  if (v == null) return "—";
-  return Number(v).toLocaleString(undefined, { maximumFractionDigits: 2 }) + suffix;
+  return execNumber(v, suffix);
+}
+
+function fmtMoney(v: unknown, currency: string): string {
+  return execMoney(v, currency);
 }
 
 function escapeHtml(s: unknown): string {
@@ -34,9 +39,11 @@ function escapeHtml(s: unknown): string {
     c === "&" ? "&amp;" : c === "<" ? "&lt;" : c === ">" ? "&gt;" : c === '"' ? "&quot;" : "&#39;");
 }
 
-function buildHtmlReport(propertyName: string, from: string, to: string, kpis: any,
-  daily: any[], sources: any[], top: any[]): string {
+export function buildHtmlReport(propertyName: string, from: string, to: string, kpis: any,
+  daily: any[], sources: any[], top: any[], baseCurrency?: unknown): string {
   const e = escapeHtml;
+  const currency = execCurrency(baseCurrency);
+  const cur = (v: unknown) => fmtMoney(v, currency);
   return `<!doctype html><html><head><meta charset="utf-8"><title>Executive Report ${e(from)}_${e(to)}</title>
 <style>
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#111;margin:32px;background:#fff;}
@@ -51,26 +58,26 @@ th,td{border:1px solid #ddd;padding:6px 8px;text-align:left;} th{background:#f5f
 <h1>Executive Report</h1>
 <div class="muted">${e(propertyName)} · ${e(from)} → ${e(to)} · Generated ${e(new Date().toUTCString())}</div>
 <div class="kpis">
-  <div class="kpi"><div class="l">Total revenue</div><div class="v">$${e(fmtNum(kpis?.revenue))}</div></div>
+  <div class="kpi"><div class="l">Total revenue</div><div class="v">${e(cur(kpis?.revenue))}</div></div>
   <div class="kpi"><div class="l">Occupancy</div><div class="v">${e(fmtNum(kpis?.occupancy_pct, "%"))}</div></div>
-  <div class="kpi"><div class="l">ADR</div><div class="v">$${e(fmtNum(kpis?.adr))}</div></div>
-  <div class="kpi"><div class="l">RevPAR</div><div class="v">$${e(fmtNum(kpis?.revpar))}</div></div>
-  <div class="kpi"><div class="l">Room revenue</div><div class="v">$${e(fmtNum(kpis?.room_revenue))}</div></div>
-  <div class="kpi"><div class="l">POS revenue</div><div class="v">$${e(fmtNum(kpis?.pos_revenue))}</div></div>
+  <div class="kpi"><div class="l">ADR</div><div class="v">${e(cur(kpis?.adr))}</div></div>
+  <div class="kpi"><div class="l">RevPAR</div><div class="v">${e(cur(kpis?.revpar))}</div></div>
+  <div class="kpi"><div class="l">Room revenue</div><div class="v">${e(cur(kpis?.room_revenue))}</div></div>
+  <div class="kpi"><div class="l">POS revenue</div><div class="v">${e(cur(kpis?.pos_revenue))}</div></div>
   <div class="kpi"><div class="l">Cancellations</div><div class="v">${e(fmtNum(kpis?.cancellation_rate, "%"))}</div></div>
   <div class="kpi"><div class="l">Avg LOS</div><div class="v">${e(fmtNum(kpis?.avg_los))} nts</div></div>
 </div>
 <h2>Revenue by source</h2>
 <table><thead><tr><th>Source</th><th>Reservations</th><th>Revenue</th></tr></thead><tbody>
-${sources.map((r) => `<tr><td>${e(r.source)}</td><td>${e(r.reservations)}</td><td>$${e(fmtNum(r.revenue))}</td></tr>`).join("")}
+${sources.map((r) => `<tr><td>${e(r.source)}</td><td>${e(r.reservations)}</td><td>${e(cur(r.revenue))}</td></tr>`).join("")}
 </tbody></table>
 <h2>Top room types</h2>
 <table><thead><tr><th>Room type</th><th>Nights</th><th>Revenue</th></tr></thead><tbody>
-${top.map((r) => `<tr><td>${e(r.room_type)}</td><td>${e(r.nights)}</td><td>$${e(fmtNum(r.revenue))}</td></tr>`).join("")}
+${top.map((r) => `<tr><td>${e(r.room_type)}</td><td>${e(r.nights)}</td><td>${e(cur(r.revenue))}</td></tr>`).join("")}
 </tbody></table>
 <h2>Daily revenue</h2>
 <table><thead><tr><th>Day</th><th>Rooms</th><th>POS</th><th>Total</th></tr></thead><tbody>
-${daily.map((r) => `<tr><td>${e(r.day)}</td><td>$${e(fmtNum(r.room_revenue))}</td><td>$${e(fmtNum(r.pos_revenue))}</td><td>$${e(fmtNum(r.total))}</td></tr>`).join("")}
+${daily.map((r) => `<tr><td>${e(r.day)}</td><td>${e(cur(r.room_revenue))}</td><td>${e(cur(r.pos_revenue))}</td><td>${e(cur(r.total))}</td></tr>`).join("")}
 </tbody></table>
 </body></html>`;
 }
@@ -146,13 +153,15 @@ export async function runScheduledExport(
       supabaseAdmin.rpc("exec_analytics_revenue_by_day", args),
       supabaseAdmin.rpc("exec_analytics_revenue_by_source", args),
       supabaseAdmin.rpc("exec_analytics_top_room_types", args),
-      supabaseAdmin.from("properties").select("name").eq("id", schedule.property_id).maybeSingle(),
+      supabaseAdmin.from("properties").select("name, base_currency").eq("id", schedule.property_id).maybeSingle(),
     ]);
     const kpis: any = kpisRes.data?.[0] ?? {};
     const daily = dailyRes.data ?? [];
     const sources = sourcesRes.data ?? [];
     const top = topRes.data ?? [];
     const propName = propRes.data?.name ?? "Property";
+    // Money on the scheduled report follows the same property base currency as the screen.
+    const currency = execCurrency((propRes.data as { base_currency?: string } | null)?.base_currency);
 
     const dailyCsv = toCsv(daily as any[], ["day", "room_revenue", "pos_revenue", "total"]);
     const sourceCsv = toCsv(sources as any[], ["source", "reservations", "revenue"]);
@@ -161,7 +170,7 @@ export async function runScheduledExport(
       Object.entries(kpis).map(([metric, value]) => ({ metric, value })),
       ["metric", "value"],
     );
-    const html = buildHtmlReport(propName, from, to, kpis, daily as any[], sources as any[], top as any[]);
+    const html = buildHtmlReport(propName, from, to, kpis, daily as any[], sources as any[], top as any[], currency);
 
     const combinedCsv = `# KPIs\n${kpisCsv}\n\n# Daily revenue\n${dailyCsv}\n\n# Revenue by source\n${sourceCsv}\n\n# Top room types\n${topCsv}\n`;
 
@@ -174,7 +183,7 @@ export async function runScheduledExport(
     }
 
     const emailHtml = `<p>Executive analytics report for <strong>${propName}</strong> covering ${from} → ${to} is attached.</p>
-<p>Total revenue: <strong>$${fmtNum(kpis.revenue)}</strong> · Occupancy: <strong>${fmtNum(kpis.occupancy_pct, "%")}</strong> · RevPAR: <strong>$${fmtNum(kpis.revpar)}</strong></p>`;
+<p>Total revenue: <strong>${fmtMoney(kpis.revenue, currency)}</strong> · Occupancy: <strong>${fmtNum(kpis.occupancy_pct, "%")}</strong> · RevPAR: <strong>${fmtMoney(kpis.revpar, currency)}</strong></p>`;
 
     const send = await sendReportEmail({
       recipients: schedule.recipients,
