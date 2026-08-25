@@ -17,8 +17,25 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { useBrandSettings } from "@/hooks/use-brand-settings";
 import { BrandColorVars } from "@/components/brand-color-vars";
 
-const FALLBACK_FAVICON =
-  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%230b2d22'/%3E%3Ctext x='32' y='42' text-anchor='middle' font-family='Arial,sans-serif' font-size='30' font-weight='700' fill='%23f4d58d'%3ETS%3C/text%3E%3C/svg%3E";
+// Absolute origin used only for crawler-facing absolute asset URLs (og:image).
+// Matches SITE_URL in .env.production.example / the canonical production domain
+// recorded in scripts/prod/production.config.json; www and apex both serve this
+// same deployment, so the image resolves from either host.
+const SITE_ORIGIN = "https://theskwoffhotel.com";
+
+// Static browser-icon set generated from the approved brand logo
+// (scripts/branding/generate-favicons.ps1 -> public/). These are the
+// pre-hydration and crawler-facing icons — Google and other crawlers do not
+// run the client-side branding override below, and never fetched the previous
+// inline data: URI at all, so this static set is what shows up in search
+// results and on a cold tab.
+const STATIC_FAVICON_LINKS = [
+  { rel: "icon", href: "/favicon.ico", sizes: "48x48" },
+  { rel: "icon", href: "/favicon-32x32.png", type: "image/png", sizes: "32x32" },
+  { rel: "icon", href: "/favicon-16x16.png", type: "image/png", sizes: "16x16" },
+  { rel: "apple-touch-icon", href: "/apple-touch-icon.png", sizes: "180x180" },
+  { rel: "manifest", href: "/site.webmanifest" },
+];
 
 function BrandFavicon() {
   const { data: brandSettings } = useBrandSettings();
@@ -27,13 +44,23 @@ function BrandFavicon() {
     const faviconUrl = brandSettings?.favicon_url || brandSettings?.logo_url;
     if (!faviconUrl) return;
 
-    let favicon = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
-    if (!favicon) {
-      favicon = document.createElement("link");
-      favicon.rel = "icon";
-      document.head.appendChild(favicon);
+    // head() declares several icon links (.ico + 32px + 16px PNG), so
+    // overriding only the first would leave the browser free to select one of
+    // the remaining static ones instead of the tenant's uploaded favicon.
+    const links = Array.from(document.querySelectorAll<HTMLLinkElement>('link[rel="icon"]'));
+    if (links.length === 0) {
+      const created = document.createElement("link");
+      created.rel = "icon";
+      created.href = faviconUrl;
+      document.head.appendChild(created);
+      return;
     }
-    favicon.href = faviconUrl;
+    for (const link of links) {
+      link.href = faviconUrl;
+      // type/sizes describe the static PNGs, not whatever file was uploaded.
+      link.removeAttribute("type");
+      link.removeAttribute("sizes");
+    }
   }, [brandSettings?.favicon_url, brandSettings?.logo_url]);
 
   return null;
@@ -137,21 +164,13 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         name: "twitter:description",
         content: "Enterprise cloud hotel property management system by ThesKwoff Hotel.",
       },
-      {
-        property: "og:image",
-        content:
-          "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/1d025826-7eba-4bfe-8b5d-2a9435361e4f",
-      },
-      {
-        name: "twitter:image",
-        content:
-          "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/1d025826-7eba-4bfe-8b5d-2a9435361e4f",
-      },
+      // Social/search preview card, served from this deployment rather than
+      // the scaffold's original external upload bucket. Absolute because
+      // crawlers do not resolve relative og:image URLs.
+      { property: "og:image", content: `${SITE_ORIGIN}/og-image.png` },
+      { name: "twitter:image", content: `${SITE_ORIGIN}/og-image.png` },
     ],
-    links: [
-      { rel: "stylesheet", href: appCss },
-      { rel: "icon", href: FALLBACK_FAVICON, type: "image/svg+xml" },
-    ],
+    links: [{ rel: "stylesheet", href: appCss }, ...STATIC_FAVICON_LINKS],
   }),
   shellComponent: RootShell,
   component: RootComponent,
