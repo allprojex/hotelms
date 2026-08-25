@@ -1,9 +1,12 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { createClientOnlyFn } from "@tanstack/react-start";
 import type { DateRange } from "react-day-picker";
 import { supabase } from "@/integrations/supabase/client";
 import { useActiveProperty } from "@/hooks/use-active-property";
+import { DEFAULT_PAGE_SIZE, pageRange, totalPages as computeTotalPages } from "@/lib/query-state";
+import type { ReportDefinition, ReportFormat } from "@/lib/reports/report-core";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,7 +15,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Search, Calendar as CalendarIcon } from "lucide-react";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
+import { Plus, Search, Calendar as CalendarIcon, Download, Printer } from "lucide-react";
 import { format } from "date-fns";
 
 // DATE column, not a timestamp — always compare/send plain "yyyy-MM-dd"
@@ -34,12 +45,61 @@ const STATUS_COLORS: Record<string, "default" | "secondary" | "outline" | "destr
   no_show: "destructive",
 };
 
+type ReservationRow = {
+  id: string;
+  code: string;
+  check_in: string;
+  check_out: string;
+  adults: number;
+  children: number;
+  status: string;
+  rate_total: number;
+  guest_first_name: string;
+  guest_last_name: string;
+  guest_email: string | null;
+  room_type_name: string;
+  room_number: string | null;
+};
+
+// jspdf/xlsx are browser-only and heavy -- load them only when an export is
+// actually requested, same pattern as ExpenseReportsTab/accounting.reports.
+const exportReservationsReport = createClientOnlyFn(
+  async (definition: ReportDefinition<ReservationRow>, exportFormat: ReportFormat) => {
+    const { exportReport } = await import("@/lib/reports/report-export.client");
+    return exportReport(definition, exportFormat);
+  },
+);
+
+function reservationColumns(): readonly { key: string; label: string; value: (r: ReservationRow) => unknown }[] {
+  return [
+    { key: "code", label: "Reservation code", value: (r) => r.code },
+    { key: "guest", label: "Guest", value: (r) => `${r.guest_first_name} ${r.guest_last_name}`.trim() },
+    { key: "email", label: "Email", value: (r) => r.guest_email ?? "" },
+    { key: "roomType", label: "Room type", value: (r) => r.room_type_name },
+    { key: "room", label: "Room", value: (r) => r.room_number ?? "Unassigned" },
+    { key: "checkIn", label: "Check-in", value: (r) => r.check_in },
+    { key: "checkOut", label: "Check-out", value: (r) => r.check_out },
+    { key: "status", label: "Status", value: (r) => r.status },
+    { key: "adults", label: "Adults", value: (r) => r.adults },
+    { key: "children", label: "Children", value: (r) => r.children },
+    { key: "total", label: "Total", value: (r) => Number(r.rate_total) },
+  ];
+}
+
+// A safety cap on the export fetch only (never on the paginated list query).
+// Current production scale for any one property's reservation history is on
+// the order of hundreds of rows -- this gives wide headroom without being
+// literally unbounded.
+const EXPORT_ROW_CAP = 5000;
+
 function ReservationsList() {
   const propertyId = useActiveProperty();
   const [q, setQ] = useState("");
+  const [debouncedQ, setDebouncedQ] = useState("");
   const [status, setStatus] = useState<string>("all");
   const [checkInRange, setCheckInRange] = useState<DateRange | undefined>(undefined);
   const [dateOpen, setDateOpen] = useState(false);
+  const [page, setPage] = useState(1);
   // react-day-picker's own range-mode default, once a genuine multi-day
   // range is already selected, EXTENDS `to` from the range's original
   // `from` on every subsequent click — it never starts a fresh selection.
@@ -67,35 +127,89 @@ function ReservationsList() {
   const checkInFrom = checkInRange?.from ? toDateKey(checkInRange.from) : null;
   const checkInTo = checkInRange?.to ? toDateKey(checkInRange.to) : checkInFrom;
 
+  // Search is server-side (it must match guest name/email across the whole
+  // filtered set, not just whatever page happens to be on screen) -- debounce
+  // it so every keystroke doesn't fire its own request.
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => {
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => setDebouncedQ(q.trim()), 300);
+    return () => clearTimeout(debounceRef.current);
+  }, [q]);
+
+  // A stale/out-of-range page must never survive a filter change -- reset to
+  // page 1 whenever the effective filter set (property, search, status, or
+  // date range) changes, exactly like query-state.ts's updateListFilters.
+  useEffect(() => {
+    setPage(1);
+  }, [propertyId, debouncedQ, status, checkInFrom, checkInTo]);
+
+  const filterArgs = {
+    _property_id: propertyId!,
+    _search: debouncedQ || null,
+    _status: status,
+    _check_in_from: checkInFrom,
+    _check_in_to: checkInTo,
+  };
+
   const query = useQuery({
-    queryKey: ["reservations", propertyId, status, checkInFrom, checkInTo],
+    queryKey: ["reservations-report", propertyId, debouncedQ, status, checkInFrom, checkInTo, page],
     enabled: !!propertyId,
     queryFn: async () => {
-      let sel = supabase.from("reservations")
-        .select("id, code, check_in, check_out, adults, children, status, rate_total, guests(first_name,last_name,email), room_types(name), rooms(number)")
-        .eq("property_id", propertyId!)
-        .order("check_in", { ascending: false })
-        .limit(200);
-      if (status !== "all") sel = sel.eq("status", status as any);
-      // check_in is a DATE column — gte/lte against plain "yyyy-MM-dd"
-      // strings compares dates directly, inclusive on both ends, with no
-      // timezone interpretation. A single selected date (checkInFrom set,
-      // no explicit "to") uses the same value for both bounds.
-      if (checkInFrom) sel = sel.gte("check_in", checkInFrom);
-      if (checkInTo) sel = sel.lte("check_in", checkInTo);
-      const { data, error } = await sel;
+      const { from, to } = pageRange(page, DEFAULT_PAGE_SIZE);
+      // search_reservations() predates the generated Supabase types (added
+      // in this same change) -- (supabase.rpc as any) matches this repo's
+      // established convention for a freshly-added RPC.
+      const { data, error, count } = await (supabase.rpc as any)(
+        "search_reservations",
+        filterArgs,
+        { count: "exact" },
+      ).range(from, to);
       if (error) throw error;
-      return data;
+      return { rows: (data ?? []) as ReservationRow[], total: count ?? 0 };
     },
   });
 
-  const filtered = (query.data ?? []).filter((r: any) => {
-    if (!q) return true;
-    const s = q.toLowerCase();
-    return r.code.toLowerCase().includes(s)
-      || `${r.guests?.first_name ?? ""} ${r.guests?.last_name ?? ""}`.toLowerCase().includes(s)
-      || (r.guests?.email ?? "").toLowerCase().includes(s);
-  });
+  const rows = query.data?.rows ?? [];
+  const total = query.data?.total ?? 0;
+  const pageCount = computeTotalPages(total, DEFAULT_PAGE_SIZE);
+
+  async function fetchAllFiltered(): Promise<ReservationRow[]> {
+    const { data, error } = await (supabase.rpc as any)("search_reservations", filterArgs).limit(
+      EXPORT_ROW_CAP,
+    );
+    if (error) throw error;
+    return (data ?? []) as ReservationRow[];
+  }
+
+  function filterSummary(): string {
+    const parts: string[] = [];
+    if (debouncedQ) parts.push(`Search: "${debouncedQ}"`);
+    if (status !== "all") parts.push(`Status: ${status.replace("_", " ")}`);
+    if (checkInFrom) parts.push(checkInTo !== checkInFrom ? `Check-in: ${checkInFrom} to ${checkInTo}` : `Check-in: ${checkInFrom}`);
+    return parts.length > 0 ? parts.join(" · ") : "All reservations";
+  }
+
+  async function handleExport(exportFormat: ReportFormat) {
+    const allRows = await fetchAllFiltered();
+    const definition: ReportDefinition<ReservationRow> = {
+      title: "Reservations",
+      slug: "reservations",
+      dateRange: checkInFrom ? { from: checkInFrom, to: checkInTo ?? checkInFrom } : null,
+      columns: reservationColumns(),
+      rows: allRows,
+    };
+    // filterSummary() (search/status terms) isn't part of ReportDefinition's
+    // shape -- folded into the PDF/print subtitle via the title itself when
+    // any filter beyond date range is active, so the exported file still
+    // states what it represents without inventing a new definition field.
+    if (debouncedQ || status !== "all") {
+      definition.title = `Reservations — ${filterSummary()}`;
+    }
+    await exportReservationsReport(definition, exportFormat);
+  }
+
+  if (!propertyId) return <div className="p-6 text-muted-foreground">Select a property.</div>;
 
   return (
     <div className="space-y-4">
@@ -159,6 +273,18 @@ function ReservationsList() {
               <SelectItem value="no_show">No-show</SelectItem>
             </SelectContent>
           </Select>
+          <Button variant="outline" size="sm" onClick={() => handleExport("csv")}>
+            <Download className="h-3 w-3 mr-1" /> CSV
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => handleExport("xlsx")}>
+            <Download className="h-3 w-3 mr-1" /> XLSX
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => handleExport("pdf")}>
+            <Download className="h-3 w-3 mr-1" /> PDF
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => handleExport("print")}>
+            <Printer className="h-3 w-3 mr-1" /> Print
+          </Button>
         </div>
       </Card>
 
@@ -176,16 +302,19 @@ function ReservationsList() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filtered.map((r: any) => (
+            {query.isLoading && (
+              <TableRow><TableCell colSpan={7} className="py-8 text-center text-muted-foreground">Loading…</TableCell></TableRow>
+            )}
+            {!query.isLoading && rows.map((r) => (
               <TableRow key={r.id} className="cursor-pointer hover:bg-muted/50" onClick={() => (window.location.href = `/reservations/${r.id}`)}>
                 <TableCell className="font-mono text-xs">{r.code}</TableCell>
                 <TableCell>
-                  <div className="font-medium">{r.guests?.first_name} {r.guests?.last_name}</div>
-                  <div className="text-xs text-muted-foreground">{r.guests?.email}</div>
+                  <div className="font-medium">{r.guest_first_name} {r.guest_last_name}</div>
+                  <div className="text-xs text-muted-foreground">{r.guest_email}</div>
                 </TableCell>
                 <TableCell>
-                  <div>{r.room_types?.name}</div>
-                  <div className="text-xs text-muted-foreground">{r.rooms?.number ? `Room ${r.rooms.number}` : "Unassigned"}</div>
+                  <div>{r.room_type_name}</div>
+                  <div className="text-xs text-muted-foreground">{r.room_number ? `Room ${r.room_number}` : "Unassigned"}</div>
                 </TableCell>
                 <TableCell>{format(new Date(r.check_in), "MMM d, yyyy")}</TableCell>
                 <TableCell>{format(new Date(r.check_out), "MMM d, yyyy")}</TableCell>
@@ -193,12 +322,71 @@ function ReservationsList() {
                 <TableCell className="text-right font-medium">{Number(r.rate_total).toFixed(2)}</TableCell>
               </TableRow>
             ))}
-            {filtered.length === 0 && (
+            {!query.isLoading && rows.length === 0 && (
               <TableRow><TableCell colSpan={7} className="py-8 text-center text-muted-foreground">No reservations found.</TableCell></TableRow>
             )}
           </TableBody>
         </Table>
       </Card>
+
+      {total > 0 && (
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <p className="text-sm text-muted-foreground">
+            {total} reservation{total === 1 ? "" : "s"} · page {page} of {pageCount}
+          </p>
+          <Pagination className="mx-0 w-auto justify-end">
+            <PaginationContent>
+              <PaginationItem>
+                <PaginationPrevious
+                  href="#"
+                  aria-disabled={page <= 1}
+                  className={page <= 1 ? "pointer-events-none opacity-50" : ""}
+                  onClick={(e) => { e.preventDefault(); if (page > 1) setPage(page - 1); }}
+                />
+              </PaginationItem>
+              {pageNumbers(page, pageCount).map((entry, i) =>
+                entry === "ellipsis" ? (
+                  <PaginationItem key={`e${i}`}><span className="px-2 text-muted-foreground">…</span></PaginationItem>
+                ) : (
+                  <PaginationItem key={entry}>
+                    <PaginationLink
+                      href="#"
+                      isActive={entry === page}
+                      onClick={(e) => { e.preventDefault(); setPage(entry); }}
+                    >
+                      {entry}
+                    </PaginationLink>
+                  </PaginationItem>
+                ),
+              )}
+              <PaginationItem>
+                <PaginationNext
+                  href="#"
+                  aria-disabled={page >= pageCount}
+                  className={page >= pageCount ? "pointer-events-none opacity-50" : ""}
+                  onClick={(e) => { e.preventDefault(); if (page < pageCount) setPage(page + 1); }}
+                />
+              </PaginationItem>
+            </PaginationContent>
+          </Pagination>
+        </div>
+      )}
     </div>
   );
+}
+
+// A bounded window of page numbers around the current page (max 2 either
+// side), always including page 1 and the last page, with an ellipsis where
+// the window doesn't reach them -- keeps the control usable regardless of
+// how many pages a heavily-filtered or unfiltered report produces.
+export function pageNumbers(current: number, total: number): (number | "ellipsis")[] {
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+  const result: (number | "ellipsis")[] = [1];
+  const start = Math.max(2, current - 1);
+  const end = Math.min(total - 1, current + 1);
+  if (start > 2) result.push("ellipsis");
+  for (let p = start; p <= end; p++) result.push(p);
+  if (end < total - 1) result.push("ellipsis");
+  result.push(total);
+  return result;
 }
