@@ -31,6 +31,7 @@ import {
   deleteExportSchedule, listExportRuns, runExportScheduleNow,
 } from "@/lib/analytics-exports.functions";
 import { useHasAnyRole, EXEC_ROLES } from "@/hooks/use-user-roles";
+import { execCurrency, execMoney, execNumber } from "@/lib/analytics-format";
 import { AccessDenied } from "@/components/access-denied";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -96,6 +97,15 @@ function AnalyticsPage() {
   const top = useQuery({ queryKey: ["exec-top", args], enabled,
     queryFn: () => topFn({ data: args }) });
 
+  // Single source of truth for money on this surface: the property's base currency.
+  const property = useQuery({
+    queryKey: ["exec-property", propertyId], enabled: !!propertyId,
+    queryFn: async () => (await supabase.from("properties")
+      .select("name, base_currency").eq("id", propertyId!).maybeSingle()).data,
+  });
+  const currency = execCurrency(property.data?.base_currency);
+  const money = (v: unknown) => execMoney(v, currency);
+
   const dailyData = useMemo(() =>
     (daily.data ?? []).map((r: any) => ({
       day: r.day, rooms: Number(r.room_revenue), pos: Number(r.pos_revenue), total: Number(r.total),
@@ -132,11 +142,14 @@ function AnalyticsPage() {
 
   async function exportPdf() {
     if (!(await guardExport())) return;
-    const propName = propertyId
-      ? (await supabase.from("properties").select("name").eq("id", propertyId).maybeSingle()).data?.name ?? "Property"
-      : "Property";
+    const propRow = property.data ?? (propertyId
+      ? (await supabase.from("properties").select("name, base_currency").eq("id", propertyId).maybeSingle()).data
+      : null);
+    const propName = propRow?.name ?? "Property";
+    const printCurrency = execCurrency(propRow?.base_currency);
     const k = kpis.data ?? {} as any;
-    const fmt = (v: any, s = "") => v == null ? "—" : Number(v).toLocaleString(undefined, { maximumFractionDigits: 2 }) + s;
+    const fmt = (v: unknown, s = "") => execNumber(v, s);
+    const cur = (v: unknown) => execMoney(v, printCurrency);
     const esc = (s: unknown) => String(s ?? "").replace(/[&<>"']/g, (c) =>
       c === "&" ? "&amp;" : c === "<" ? "&lt;" : c === ">" ? "&gt;" : c === '"' ? "&quot;" : "&#39;");
     const html = `<!doctype html><html><head><meta charset="utf-8"><title>Executive Report ${esc(range)}</title>
@@ -154,26 +167,26 @@ th,td{border:1px solid #ddd;padding:6px 8px;text-align:left;} th{background:#f5f
 <h1>Executive Report</h1>
 <div class="muted">${esc(propName)} · ${esc(from)} → ${esc(to)} · Generated ${esc(new Date().toLocaleString())}</div>
 <div class="kpis">
-  <div class="kpi"><div class="l">Total revenue</div><div class="v">$${esc(fmt(k.revenue))}</div></div>
+  <div class="kpi"><div class="l">Total revenue</div><div class="v">${esc(cur(k.revenue))}</div></div>
   <div class="kpi"><div class="l">Occupancy</div><div class="v">${esc(fmt(k.occupancy_pct, "%"))}</div></div>
-  <div class="kpi"><div class="l">ADR</div><div class="v">$${esc(fmt(k.adr))}</div></div>
-  <div class="kpi"><div class="l">RevPAR</div><div class="v">$${esc(fmt(k.revpar))}</div></div>
-  <div class="kpi"><div class="l">Room revenue</div><div class="v">$${esc(fmt(k.room_revenue))}</div></div>
-  <div class="kpi"><div class="l">POS revenue</div><div class="v">$${esc(fmt(k.pos_revenue))}</div></div>
+  <div class="kpi"><div class="l">ADR</div><div class="v">${esc(cur(k.adr))}</div></div>
+  <div class="kpi"><div class="l">RevPAR</div><div class="v">${esc(cur(k.revpar))}</div></div>
+  <div class="kpi"><div class="l">Room revenue</div><div class="v">${esc(cur(k.room_revenue))}</div></div>
+  <div class="kpi"><div class="l">POS revenue</div><div class="v">${esc(cur(k.pos_revenue))}</div></div>
   <div class="kpi"><div class="l">Cancellations</div><div class="v">${esc(fmt(k.cancellation_rate, "%"))}</div></div>
   <div class="kpi"><div class="l">Avg LOS</div><div class="v">${esc(fmt(k.avg_los))} nts</div></div>
 </div>
 <h2>Revenue by source</h2>
 <table><thead><tr><th>Source</th><th>Reservations</th><th>Revenue</th></tr></thead><tbody>
-${(sources.data ?? []).map((r: any) => `<tr><td>${esc(r.source)}</td><td>${esc(r.reservations)}</td><td>$${esc(fmt(r.revenue))}</td></tr>`).join("")}
+${(sources.data ?? []).map((r: any) => `<tr><td>${esc(r.source)}</td><td>${esc(r.reservations)}</td><td>${esc(cur(r.revenue))}</td></tr>`).join("")}
 </tbody></table>
 <h2>Top room types</h2>
 <table><thead><tr><th>Room type</th><th>Nights</th><th>Revenue</th></tr></thead><tbody>
-${(top.data ?? []).map((r: any) => `<tr><td>${esc(r.room_type)}</td><td>${esc(r.nights)}</td><td>$${esc(fmt(r.revenue))}</td></tr>`).join("")}
+${(top.data ?? []).map((r: any) => `<tr><td>${esc(r.room_type)}</td><td>${esc(r.nights)}</td><td>${esc(cur(r.revenue))}</td></tr>`).join("")}
 </tbody></table>
 <h2>Daily revenue</h2>
 <table><thead><tr><th>Day</th><th>Rooms</th><th>POS</th><th>Total</th></tr></thead><tbody>
-${(daily.data ?? []).map((r: any) => `<tr><td>${esc(r.day)}</td><td>$${esc(fmt(r.room_revenue))}</td><td>$${esc(fmt(r.pos_revenue))}</td><td>$${esc(fmt(r.total))}</td></tr>`).join("")}
+${(daily.data ?? []).map((r: any) => `<tr><td>${esc(r.day)}</td><td>${esc(cur(r.room_revenue))}</td><td>${esc(cur(r.pos_revenue))}</td><td>${esc(cur(r.total))}</td></tr>`).join("")}
 </tbody></table>
 <script>window.onload=()=>{setTimeout(()=>window.print(),300);};</script>
 </body></html>`;
@@ -222,12 +235,12 @@ ${(daily.data ?? []).map((r: any) => `<tr><td>${esc(r.day)}</td><td>$${esc(fmt(r
       {!propertyId && <p className="text-sm text-muted-foreground">Select a property to view analytics.</p>}
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <Kpi label="Total revenue" value={kpis.data?.revenue} loading={kpis.isLoading} money />
+        <Kpi label="Total revenue" value={kpis.data?.revenue} loading={kpis.isLoading} currency={currency} />
         <Kpi label="Occupancy" value={kpis.data?.occupancy_pct} loading={kpis.isLoading} suffix="%" />
-        <Kpi label="ADR" value={kpis.data?.adr} loading={kpis.isLoading} money />
-        <Kpi label="RevPAR" value={kpis.data?.revpar} loading={kpis.isLoading} money />
-        <Kpi label="Room revenue" value={kpis.data?.room_revenue} loading={kpis.isLoading} money />
-        <Kpi label="POS revenue" value={kpis.data?.pos_revenue} loading={kpis.isLoading} money />
+        <Kpi label="ADR" value={kpis.data?.adr} loading={kpis.isLoading} currency={currency} />
+        <Kpi label="RevPAR" value={kpis.data?.revpar} loading={kpis.isLoading} currency={currency} />
+        <Kpi label="Room revenue" value={kpis.data?.room_revenue} loading={kpis.isLoading} currency={currency} />
+        <Kpi label="POS revenue" value={kpis.data?.pos_revenue} loading={kpis.isLoading} currency={currency} />
         <Kpi label="Cancellation rate" value={kpis.data?.cancellation_rate} loading={kpis.isLoading} suffix="%" />
         <Kpi label="Avg length of stay" value={kpis.data?.avg_los} loading={kpis.isLoading} suffix=" nts" />
       </div>
@@ -247,7 +260,7 @@ ${(daily.data ?? []).map((r: any) => `<tr><td>${esc(r.day)}</td><td>$${esc(fmt(r
                 <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
                 <XAxis dataKey="day" fontSize={11} />
                 <YAxis fontSize={11} />
-                <Tooltip contentStyle={{ background: "hsl(var(--popover))", border: "1px solid hsl(var(--border))" }} />
+                <Tooltip formatter={(v: number) => money(v)} contentStyle={{ background: "hsl(var(--popover))", border: "1px solid hsl(var(--border))" }} />
                 <Area type="monotone" dataKey="rooms" stroke="hsl(var(--primary))" fill="url(#gRooms)" />
                 <Area type="monotone" dataKey="pos" stroke="hsl(var(--chart-2, 200 70% 50%))" fillOpacity={0.15} />
               </AreaChart>
@@ -266,7 +279,7 @@ ${(daily.data ?? []).map((r: any) => `<tr><td>${esc(r.day)}</td><td>$${esc(fmt(r
                   <Pie data={sourceData} dataKey="value" nameKey="name" innerRadius={50} outerRadius={90} paddingAngle={2}>
                     {sourceData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                   </Pie>
-                  <Tooltip />
+                  <Tooltip formatter={(v: number) => money(v)} />
                   <Legend />
                 </PieChart>
               </ResponsiveContainer>
@@ -283,7 +296,7 @@ ${(daily.data ?? []).map((r: any) => `<tr><td>${esc(r.day)}</td><td>$${esc(fmt(r
                   <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
                   <XAxis dataKey="name" fontSize={11} />
                   <YAxis fontSize={11} />
-                  <Tooltip contentStyle={{ background: "hsl(var(--popover))", border: "1px solid hsl(var(--border))" }} />
+                  <Tooltip formatter={(v: number) => money(v)} contentStyle={{ background: "hsl(var(--popover))", border: "1px solid hsl(var(--border))" }} />
                   <Bar dataKey="revenue" fill="hsl(var(--primary))" radius={[4,4,0,0]} />
                 </BarChart>
               </ResponsiveContainer>
@@ -304,7 +317,7 @@ ${(daily.data ?? []).map((r: any) => `<tr><td>${esc(r.day)}</td><td>$${esc(fmt(r
                 <TableRow key={r.source}>
                   <TableCell className="capitalize">{r.source}</TableCell>
                   <TableCell className="text-right">{r.reservations}</TableCell>
-                  <TableCell className="text-right font-mono">{Number(r.revenue).toFixed(2)}</TableCell>
+                  <TableCell className="text-right font-mono">{money(r.revenue)}</TableCell>
                 </TableRow>
               ))}
               {sources.data?.length === 0 && <TableRow><TableCell colSpan={3} className="py-6 text-center text-muted-foreground">No reservations in this period.</TableCell></TableRow>}
@@ -575,14 +588,14 @@ function ScheduleDialog({ propertyId, schedule, open, onOpenChange, onSaved }: {
   );
 }
 
-function Kpi({ label, value, loading, money, suffix }: { label: string; value: any; loading: boolean; money?: boolean; suffix?: string }) {
+function Kpi({ label, value, loading, currency, suffix }: { label: string; value: any; loading: boolean; currency?: string; suffix?: string }) {
   return (
     <Card>
       <CardContent className="p-4">
         <div className="text-xs text-muted-foreground">{label}</div>
         {loading ? <Skeleton className="h-7 w-24 mt-1" /> : (
           <div className="text-2xl font-semibold mt-1">
-            {money && "GHS "}{value != null ? Number(value).toLocaleString(undefined, { maximumFractionDigits: 2 }) : "—"}{suffix}
+            {currency ? execMoney(value, currency) : execNumber(value, suffix)}
           </div>
         )}
       </CardContent>
