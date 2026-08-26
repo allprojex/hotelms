@@ -67,7 +67,13 @@ describe("Reservations list — real server-side pagination replaces the old .li
   });
 
   it("fetches only the current page via pageRange()/DEFAULT_PAGE_SIZE, chained onto the RPC call", () => {
-    expect(routePage).toContain('import { DEFAULT_PAGE_SIZE, pageRange, totalPages as computeTotalPages } from "@/lib/query-state";');
+    // The import became a multi-line list when the scoped-page helpers were
+    // added, so assert the names come from the shared toolkit rather than
+    // pinning one exact import line.
+    for (const name of ["DEFAULT_PAGE_SIZE", "pageRange", "totalPages as computeTotalPages"]) {
+      expect(routePage).toContain(name);
+    }
+    expect(routePage).toMatch(/from "@\/lib\/query-state";/);
     expect(routePage).toContain("const { from, to } = pageRange(page, DEFAULT_PAGE_SIZE);");
     expect(routePage).toMatch(/\.range\(from, to\)/);
   });
@@ -78,7 +84,18 @@ describe("Reservations list — real server-side pagination replaces the old .li
   });
 
   it("page state resets to 1 whenever property, search, status, or date range changes", () => {
-    expect(routePage).toMatch(
+    // Originally an effect: useEffect(() => setPage(1), [<filters>]). That ran
+    // one commit AFTER the render which had already queried with the new
+    // filters and the OLD page, producing a single out-of-range request
+    // (PostgREST 416) in production. The reset is now a derivation in the same
+    // render, so the stale pair never reaches a query key.
+    // Behavioural proof of the reset lives in
+    // tests/reservations-filter-page-reset.test.ts.
+    expect(routePage).toContain(
+      "const filterScope = filterScopeKey([propertyId, debouncedQ, status, checkInFrom, checkInTo]);",
+    );
+    expect(routePage).toContain("const page = scopedPage(pageState, filterScope);");
+    expect(routePage).not.toMatch(
       /useEffect\(\(\) => \{\s*setPage\(1\);\s*\}, \[propertyId, debouncedQ, status, checkInFrom, checkInTo\]\);/,
     );
   });

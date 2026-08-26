@@ -5,7 +5,14 @@ import { createClientOnlyFn } from "@tanstack/react-start";
 import type { DateRange } from "react-day-picker";
 import { supabase } from "@/integrations/supabase/client";
 import { useActiveProperty } from "@/hooks/use-active-property";
-import { DEFAULT_PAGE_SIZE, pageRange, totalPages as computeTotalPages } from "@/lib/query-state";
+import {
+  DEFAULT_PAGE_SIZE,
+  filterScopeKey,
+  pageRange,
+  scopedPage,
+  totalPages as computeTotalPages,
+  type ScopedPage,
+} from "@/lib/query-state";
 import type { ReportDefinition, ReportFormat } from "@/lib/reports/report-core";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -99,7 +106,10 @@ function ReservationsList() {
   const [status, setStatus] = useState<string>("all");
   const [checkInRange, setCheckInRange] = useState<DateRange | undefined>(undefined);
   const [dateOpen, setDateOpen] = useState(false);
-  const [page, setPage] = useState(1);
+  // The page is stored together with the filter scope it was chosen in (see
+  // scopedPage()) rather than on its own, so a filter change resets it by
+  // derivation in the same render -- never one commit later from an effect.
+  const [pageState, setPageState] = useState<ScopedPage>({ scope: "", page: 1 });
   // react-day-picker's own range-mode default, once a genuine multi-day
   // range is already selected, EXTENDS `to` from the range's original
   // `from` on every subsequent click — it never starts a fresh selection.
@@ -137,12 +147,16 @@ function ReservationsList() {
     return () => clearTimeout(debounceRef.current);
   }, [q]);
 
-  // A stale/out-of-range page must never survive a filter change -- reset to
-  // page 1 whenever the effective filter set (property, search, status, or
-  // date range) changes, exactly like query-state.ts's updateListFilters.
-  useEffect(() => {
-    setPage(1);
-  }, [propertyId, debouncedQ, status, checkInFrom, checkInTo]);
+  // A stale/out-of-range page must never survive a filter change. Resetting
+  // from an effect was one commit too late: the render that first saw the new
+  // filters still carried the OLD page into the query key, so a single request
+  // went out for a range the new result set might not have (PostgREST 416)
+  // before the reset landed. Deriving the page from the current filter scope
+  // closes that window entirely -- there is no render in which new filters and
+  // a stale page coexist.
+  const filterScope = filterScopeKey([propertyId, debouncedQ, status, checkInFrom, checkInTo]);
+  const page = scopedPage(pageState, filterScope);
+  const setPage = (next: number) => setPageState({ scope: filterScope, page: next });
 
   const filterArgs = {
     _property_id: propertyId!,
