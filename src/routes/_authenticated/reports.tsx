@@ -5,6 +5,7 @@ import { useActiveProperty } from "@/hooks/use-active-property";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { subDays, format, eachDayOfInterval } from "date-fns";
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, LineChart, Line, CartesianGrid } from "recharts";
+import { execCurrency, execMoney, execNumber } from "@/lib/analytics-format";
 
 export const Route = createFileRoute("/_authenticated/reports")({
   head: () => ({ meta: [{ title: "Reports" }] }),
@@ -66,6 +67,28 @@ function ReportsPage() {
     },
   });
 
+  // Single source of truth for money on this surface: the active property's own
+  // base_currency, the same column /analytics and the accounting reports read.
+  // The property id is in the query key, so switching property refetches and can
+  // never render property A's currency against property B's figures.
+  const property = useQuery({
+    queryKey: ["reports-property-currency", propertyId],
+    enabled: !!propertyId,
+    queryFn: async () => {
+      const { data: row } = await supabase
+        .from("properties")
+        .select("name, base_currency")
+        .eq("id", propertyId!)
+        .maybeSingle();
+      return row;
+    },
+  });
+  // Until base_currency has resolved we render the placeholder rather than a
+  // figure in the fallback currency, which would be wrong for a non-GHS property.
+  const currency = execCurrency(property.data?.base_currency);
+  const money = (value: unknown) =>
+    property.isPending ? execMoney(null, currency) : execMoney(value, currency);
+
   const d = data.data;
 
   return (
@@ -76,10 +99,10 @@ function ReportsPage() {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Stat title="Revenue" value={(d?.totalRev ?? 0).toFixed(2)} />
-        <Stat title="Avg Occupancy" value={`${d?.avgOcc ?? 0}%`} />
-        <Stat title="ADR" value={(d?.adr ?? 0).toFixed(2)} sub="Avg daily rate" />
-        <Stat title="RevPAR" value={(d?.revpar ?? 0).toFixed(2)} sub="Revenue / available room" />
+        <Stat title="Revenue" value={money(d?.totalRev)} />
+        <Stat title="Avg Occupancy" value={execNumber(d?.avgOcc, "%")} />
+        <Stat title="ADR" value={money(d?.adr)} sub="Avg daily rate" />
+        <Stat title="RevPAR" value={money(d?.revpar)} sub="Revenue / available room" />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
@@ -91,21 +114,21 @@ function ReportsPage() {
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
                 <XAxis dataKey="day" stroke="var(--color-muted-foreground)" fontSize={11} />
                 <YAxis stroke="var(--color-muted-foreground)" fontSize={11} unit="%" />
-                <Tooltip contentStyle={{ background: "var(--color-card)", border: "1px solid var(--color-border)", borderRadius: 8 }} />
+                <Tooltip formatter={(v: number) => execNumber(v, "%")} contentStyle={{ background: "var(--color-card)", border: "1px solid var(--color-border)", borderRadius: 8 }} />
                 <Line type="monotone" dataKey="occupancy" stroke="var(--color-primary)" strokeWidth={2} dot={false} />
               </LineChart>
             </ResponsiveContainer>
           </CardContent>
         </Card>
         <Card>
-          <CardHeader><CardTitle className="text-base">Daily revenue</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="text-base">Daily revenue ({currency})</CardTitle></CardHeader>
           <CardContent className="h-72">
             <ResponsiveContainer>
               <BarChart data={d?.series ?? []}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
                 <XAxis dataKey="day" stroke="var(--color-muted-foreground)" fontSize={11} />
                 <YAxis stroke="var(--color-muted-foreground)" fontSize={11} />
-                <Tooltip contentStyle={{ background: "var(--color-card)", border: "1px solid var(--color-border)", borderRadius: 8 }} />
+                <Tooltip formatter={(v: number) => money(v)} contentStyle={{ background: "var(--color-card)", border: "1px solid var(--color-border)", borderRadius: 8 }} />
                 <Bar dataKey="revenue" fill="var(--color-primary)" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
