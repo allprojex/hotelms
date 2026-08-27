@@ -265,11 +265,15 @@ describe("Branding Phase 1 — browser identity stays organisation-wide only", (
     expect(brandTitleFn).not.toContain("useEffectiveBranding");
   });
 
-  it("BrandFavicon (pre-existing) still sources from useBrandSettings only — untouched", () => {
-    const brandFaviconFn = rootRoute.match(/function BrandFavicon\(\)[\s\S]*?\n\}/)?.[0];
-    expect(brandFaviconFn).toBeDefined();
-    expect(brandFaviconFn).toContain("useBrandSettings");
-    expect(brandFaviconFn).not.toContain("useEffectiveBranding");
+  // BrandFavicon moved out of __root.tsx into its own component, mounted from
+  // the authenticated layout only: running it globally also ran it on /auth,
+  // where it replaced the crawler-facing icon set with a signed cross-origin
+  // Supabase JPEG and cost the site its Google search favicon. Its branding
+  // source is unchanged — still organisation-wide, never property-aware.
+  it("BrandFavicon still sources from useBrandSettings only — organisation-wide, not property-aware", () => {
+    const brandFaviconComponent = read(resolve(root, "src/components/brand-favicon.tsx"));
+    expect(brandFaviconComponent).toContain("useBrandSettings");
+    expect(brandFaviconComponent).not.toContain("useEffectiveBranding");
   });
 
   it("BrandTitle re-applies on every client-side navigation (re-asserts after TanStack Router's HeadContent resets the static per-route title)", () => {
@@ -278,10 +282,15 @@ describe("Branding Phase 1 — browser identity stays organisation-wide only", (
     expect(brandTitleFn).toContain("pathname");
   });
 
-  it("BrandColorVars (property-aware) is mounted alongside BrandFavicon/BrandTitle at the root", () => {
-    expect(rootRoute).toContain("<BrandFavicon />");
+  it("BrandColorVars (property-aware) is mounted alongside BrandTitle at the root, while BrandFavicon is scoped to the authenticated layout", () => {
     expect(rootRoute).toContain("<BrandTitle />");
     expect(rootRoute).toContain("<BrandColorVars />");
+    // Theme vars and the tab title are safe to apply globally; the favicon is
+    // not, because Googlebot renders JS and indexes the resulting <head>.
+    expect(rootRoute).not.toContain("<BrandFavicon />");
+    expect(read(resolve(root, "src/routes/_authenticated/route.tsx"))).toContain(
+      "<BrandFavicon />",
+    );
   });
 
   it("the static head() meta title no longer hardcodes a tenant-specific brand name into the auth route (kept neutral; dynamic title is applied post-hydration)", () => {

@@ -12,6 +12,7 @@ import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { TopBar } from "@/components/top-bar";
 import { AccessDenied } from "@/components/access-denied";
+import { BrandFavicon } from "@/components/brand-favicon";
 import { useUserRoles } from "@/hooks/use-user-roles";
 import { useActiveProperty } from "@/hooks/use-active-property";
 import { isAllowed, requiredRolesFor } from "@/lib/admin/route-permissions";
@@ -93,6 +94,13 @@ function AuthLayout() {
 
   return (
     <SidebarProvider>
+      {/* Organisation favicon override. Deliberately mounted HERE and not in
+          __root.tsx: it rewrites every link[rel="icon"] in the document head,
+          and running it above this authenticated boundary also ran it on
+          /auth — the page Google crawls — replacing the static crawler-facing
+          icon set with a signed cross-origin Supabase URL. See
+          src/components/brand-favicon.tsx for the full history. */}
+      <BrandFavicon />
       <div className="flex min-h-screen w-full bg-background">
         <AppSidebar />
         <div className="flex flex-1 flex-col">

@@ -25,10 +25,12 @@ const SITE_ORIGIN = "https://theskwoffhotel.com";
 
 // Static browser-icon set generated from the approved brand logo
 // (scripts/branding/generate-favicons.ps1 -> public/). These are the
-// pre-hydration and crawler-facing icons — Google and other crawlers do not
-// run the client-side branding override below, and never fetched the previous
-// inline data: URI at all, so this static set is what shows up in search
-// results and on a cold tab.
+// pre-hydration and crawler-facing icons, and they must survive hydration on
+// every unauthenticated route. Googlebot DOES run client-side JavaScript and
+// indexes the rendered head, so the organisation favicon override is mounted
+// from the authenticated layout only (src/components/brand-favicon.tsx) —
+// mounting it here put a signed, non-square, cross-origin Supabase JPEG in
+// front of Google on /auth and cost the site its search-result icon.
 const STATIC_FAVICON_LINKS = [
   { rel: "icon", href: "/favicon.ico", sizes: "48x48" },
   { rel: "icon", href: "/favicon-32x32.png", type: "image/png", sizes: "32x32" },
@@ -37,40 +39,11 @@ const STATIC_FAVICON_LINKS = [
   { rel: "manifest", href: "/site.webmanifest" },
 ];
 
-function BrandFavicon() {
-  const { data: brandSettings } = useBrandSettings();
-
-  useEffect(() => {
-    const faviconUrl = brandSettings?.favicon_url || brandSettings?.logo_url;
-    if (!faviconUrl) return;
-
-    // head() declares several icon links (.ico + 32px + 16px PNG), so
-    // overriding only the first would leave the browser free to select one of
-    // the remaining static ones instead of the tenant's uploaded favicon.
-    const links = Array.from(document.querySelectorAll<HTMLLinkElement>('link[rel="icon"]'));
-    if (links.length === 0) {
-      const created = document.createElement("link");
-      created.rel = "icon";
-      created.href = faviconUrl;
-      document.head.appendChild(created);
-      return;
-    }
-    for (const link of links) {
-      link.href = faviconUrl;
-      // type/sizes describe the static PNGs, not whatever file was uploaded.
-      link.removeAttribute("type");
-      link.removeAttribute("sizes");
-    }
-  }, [brandSettings?.favicon_url, brandSettings?.logo_url]);
-
-  return null;
-}
-
 // Browser/document title is deliberately sourced from the organisation-wide
 // app_name only (useBrandSettings, not the property-aware effective-branding
 // hook) — per the approved Branding Phase 1 scope, the browser tab identity
-// never switches when the active property changes. This mirrors BrandFavicon's
-// existing client-side-only pattern rather than restructuring the root
+// never switches when the active property changes. This mirrors the pattern in
+// @/components/brand-favicon (client-side only) rather than restructuring the root
 // route's static head() into a data-dependent loader (deferred to Branding
 // Phase 2 — see the implementation report). The static head() meta on each
 // route remains the pre-hydration/crawler-facing fallback and is otherwise
@@ -208,7 +181,6 @@ function RootComponent() {
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
-        <BrandFavicon />
         <BrandTitle />
         <BrandColorVars />
         <Outlet />
