@@ -68,6 +68,7 @@ import { Route as AuthenticatedHrmAttendanceRouteImport } from './routes/_authen
 import { Route as AuthenticatedHrmAnnouncementsRouteImport } from './routes/_authenticated/hrm.announcements'
 import { Route as AuthenticatedGuestsIdRouteImport } from './routes/_authenticated/guests.$id'
 import { Route as AuthenticatedChannelsIdRouteImport } from './routes/_authenticated/channels.$id'
+import { Route as AuthenticatedAnalyticsPosRouteImport } from './routes/_authenticated/analytics_.pos'
 import { Route as AuthenticatedAdminUploadsRouteImport } from './routes/_authenticated/admin_.uploads'
 import { Route as AuthenticatedAdminSystemUpdatesRouteImport } from './routes/_authenticated/admin_.system-updates'
 import { Route as AuthenticatedAdminSecurityRouteImport } from './routes/_authenticated/admin_.security'
@@ -458,6 +459,12 @@ const AuthenticatedChannelsIdRoute = AuthenticatedChannelsIdRouteImport.update({
   path: '/channels/$id',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedAnalyticsPosRoute =
+  AuthenticatedAnalyticsPosRouteImport.update({
+    id: '/analytics_/pos',
+    path: '/analytics/pos',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedAdminUploadsRoute =
   AuthenticatedAdminUploadsRouteImport.update({
     id: '/admin_/uploads',
@@ -915,6 +922,7 @@ export interface FileRoutesByFullPath {
   '/admin/security': typeof AuthenticatedAdminSecurityRouteWithChildren
   '/admin/system-updates': typeof AuthenticatedAdminSystemUpdatesRoute
   '/admin/uploads': typeof AuthenticatedAdminUploadsRoute
+  '/analytics/pos': typeof AuthenticatedAnalyticsPosRoute
   '/channels/$id': typeof AuthenticatedChannelsIdRoute
   '/guests/$id': typeof AuthenticatedGuestsIdRoute
   '/hrm/announcements': typeof AuthenticatedHrmAnnouncementsRoute
@@ -1044,6 +1052,7 @@ export interface FileRoutesByTo {
   '/admin/security': typeof AuthenticatedAdminSecurityRouteWithChildren
   '/admin/system-updates': typeof AuthenticatedAdminSystemUpdatesRoute
   '/admin/uploads': typeof AuthenticatedAdminUploadsRoute
+  '/analytics/pos': typeof AuthenticatedAnalyticsPosRoute
   '/channels/$id': typeof AuthenticatedChannelsIdRoute
   '/guests/$id': typeof AuthenticatedGuestsIdRoute
   '/hrm/announcements': typeof AuthenticatedHrmAnnouncementsRoute
@@ -1175,6 +1184,7 @@ export interface FileRoutesById {
   '/_authenticated/admin_/security': typeof AuthenticatedAdminSecurityRouteWithChildren
   '/_authenticated/admin_/system-updates': typeof AuthenticatedAdminSystemUpdatesRoute
   '/_authenticated/admin_/uploads': typeof AuthenticatedAdminUploadsRoute
+  '/_authenticated/analytics_/pos': typeof AuthenticatedAnalyticsPosRoute
   '/_authenticated/channels/$id': typeof AuthenticatedChannelsIdRoute
   '/_authenticated/guests/$id': typeof AuthenticatedGuestsIdRoute
   '/_authenticated/hrm/announcements': typeof AuthenticatedHrmAnnouncementsRoute
@@ -1306,6 +1316,7 @@ export interface FileRouteTypes {
     | '/admin/security'
     | '/admin/system-updates'
     | '/admin/uploads'
+    | '/analytics/pos'
     | '/channels/$id'
     | '/guests/$id'
     | '/hrm/announcements'
@@ -1435,6 +1446,7 @@ export interface FileRouteTypes {
     | '/admin/security'
     | '/admin/system-updates'
     | '/admin/uploads'
+    | '/analytics/pos'
     | '/channels/$id'
     | '/guests/$id'
     | '/hrm/announcements'
@@ -1565,6 +1577,7 @@ export interface FileRouteTypes {
     | '/_authenticated/admin_/security'
     | '/_authenticated/admin_/system-updates'
     | '/_authenticated/admin_/uploads'
+    | '/_authenticated/analytics_/pos'
     | '/_authenticated/channels/$id'
     | '/_authenticated/guests/$id'
     | '/_authenticated/hrm/announcements'
@@ -2081,6 +2094,13 @@ declare module '@tanstack/react-router' {
       path: '/channels/$id'
       fullPath: '/channels/$id'
       preLoaderRoute: typeof AuthenticatedChannelsIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/analytics_/pos': {
+      id: '/_authenticated/analytics_/pos'
+      path: '/analytics/pos'
+      fullPath: '/analytics/pos'
+      preLoaderRoute: typeof AuthenticatedAnalyticsPosRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/admin_/uploads': {
@@ -2786,6 +2806,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedAdminSecurityRoute: typeof AuthenticatedAdminSecurityRouteWithChildren
   AuthenticatedAdminSystemUpdatesRoute: typeof AuthenticatedAdminSystemUpdatesRoute
   AuthenticatedAdminUploadsRoute: typeof AuthenticatedAdminUploadsRoute
+  AuthenticatedAnalyticsPosRoute: typeof AuthenticatedAnalyticsPosRoute
   AuthenticatedChannelsIdRoute: typeof AuthenticatedChannelsIdRoute
   AuthenticatedGuestsIdRoute: typeof AuthenticatedGuestsIdRoute
   AuthenticatedHrmAnnouncementsRoute: typeof AuthenticatedHrmAnnouncementsRoute
@@ -2874,6 +2895,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAdminSecurityRoute: AuthenticatedAdminSecurityRouteWithChildren,
   AuthenticatedAdminSystemUpdatesRoute: AuthenticatedAdminSystemUpdatesRoute,
   AuthenticatedAdminUploadsRoute: AuthenticatedAdminUploadsRoute,
+  AuthenticatedAnalyticsPosRoute: AuthenticatedAnalyticsPosRoute,
   AuthenticatedChannelsIdRoute: AuthenticatedChannelsIdRoute,
   AuthenticatedGuestsIdRoute: AuthenticatedGuestsIdRoute,
   AuthenticatedHrmAnnouncementsRoute: AuthenticatedHrmAnnouncementsRoute,
