@@ -274,6 +274,13 @@ const opsGroups: { label: string; items: NavItem[] }[] = [
         description: "BI dashboards, exports, scheduled emails.",
         requireRoles: EXEC_ROLES,
       },
+      {
+        title: "POS Analytics",
+        to: "/analytics/pos",
+        icon: TrendingUp,
+        description: "Operational POS sales, outlets, staff and items.",
+        requireRoles: EXEC_ROLES,
+      },
     ],
   },
   // 9. Administration — settings, least frequent, always last (Gestalt: closure)
