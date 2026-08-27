@@ -8,16 +8,23 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { format } from "date-fns";
 import { toast } from "sonner";
-import { LogIn, LogOut, XCircle, Plus, Printer, Undo2, Search, Package, RotateCcw, Wrench } from "lucide-react";
+import { LogIn, LogOut, XCircle, Plus, Printer, Undo2, Search, Package, RotateCcw, Wrench, Percent } from "lucide-react";
 import { useHasAnyRole } from "@/hooks/use-user-roles";
 import { ACCOUNTING_ADMIN_ROLES } from "@/lib/accounting/permissions";
 import { matchesSearch, menuItemSearchText, inventoryItemSearchText } from "@/lib/search-filter";
+import { formatMoney, safeCurrencyCode } from "@/lib/accounting/domain";
+import { usePermission } from "@/hooks/use-permission";
+
+// Deliberately NARROWER than the roles that may edit a reservation
+// (front_desk and reservations can do that). Reducing revenue is its own
+// authority and is not inherited; the server RPC enforces the same set.
+const DISCOUNT_ROLES = ["super_admin", "hotel_owner", "general_manager"] as const;
 
 export const Route = createFileRoute("/_authenticated/reservations/$id")({
   head: () => ({ meta: [{ title: "Reservation" }] }),
@@ -44,7 +51,7 @@ function ReservationDetail() {
     queryKey: ["reservation", id],
     queryFn: async () => {
       const { data, error } = await supabase.from("reservations")
-        .select("*, guests(*), room_types(*), rooms(*), properties(name,currency)")
+        .select("*, guests(*), room_types(*), rooms(*), properties(name,currency,base_currency)")
         .eq("id", id).single();
       if (error) throw error;
       return data;
@@ -54,6 +61,12 @@ function ReservationDetail() {
   const charges = useQuery({
     queryKey: ["charges", id],
     queryFn: async () => (await supabase.from("reservation_charges").select("*").eq("reservation_id", id).order("posted_at")).data,
+  });
+
+  const discounts = useQuery({
+    queryKey: ["discounts", id],
+    queryFn: async () =>
+      (await supabase.from("reservation_discounts" as never).select("*").eq("reservation_id", id).order("applied_at")).data as any[] | null,
   });
 
   const payments = useQuery({
@@ -153,7 +166,21 @@ function ReservationDetail() {
   const totalPaid = (payments.data ?? [])
     .reduce((s: number, p: any) => s + remainingRefundableFor(p), 0);
   const balance = totalCharges - totalPaid;
-  const currency = r.properties?.currency ?? "GHS";
+  // Split the folio for display: a discount is a negative charge line, so
+  // "Charges" must show the gross and "Discounts" the reduction, rather than
+  // silently netting them into one number the guest cannot reconcile.
+  const activeDiscounts = (discounts.data ?? []).filter((d: any) => d.status === "active");
+  const totalDiscount = activeDiscounts.reduce((sum: number, d: any) => sum + Number(d.calculated_amount), 0);
+  const grossCharges = totalCharges + totalDiscount;
+  // The eligible basis is the room value still standing -- rate_total, already
+  // net of any active discount. POS/incidental charges are never in it.
+  const eligibleRoomAmount = Number(r.rate_total ?? 0);
+  // The property's BASE currency is the money identity everywhere else in
+  // this product (accounting, analytics, reports). properties.currency is a
+  // legacy column that can disagree with it -- one live property has
+  // currency=GHS while base_currency=AUD -- so a folio read from it would be
+  // labelled in the wrong currency.
+  const currency = safeCurrencyCode(r.properties?.base_currency);
 
   async function assignRoom(roomId: string) {
     const { error } = await supabase.from("reservations").update({ room_id: roomId }).eq("id", id);
@@ -257,6 +284,19 @@ function ReservationDetail() {
           <CardTitle className="text-base">Folio</CardTitle>
           <div className="flex gap-2">
             <AddCharge reservationId={id} propertyId={res.data?.property_id} onDone={() => qc.invalidateQueries({ queryKey: ["charges", id] })} />
+            <AddDiscount
+              reservationId={id}
+              propertyId={res.data?.property_id}
+              status={r.status}
+              currency={currency}
+              eligibleRoomAmount={eligibleRoomAmount}
+              outstanding={balance}
+              onDone={() => {
+                qc.invalidateQueries({ queryKey: ["charges", id] });
+                qc.invalidateQueries({ queryKey: ["discounts", id] });
+                qc.invalidateQueries({ queryKey: ["reservation", id] });
+              }}
+            />
             <AddPayment reservationId={id} balance={balance} onDone={() => qc.invalidateQueries({ queryKey: ["payments", id] })} />
           </div>
         </CardHeader>
@@ -344,8 +384,11 @@ function ReservationDetail() {
             {payments.data?.length === 0 && <div className="px-4 py-6 text-center text-sm text-muted-foreground">No payments yet.</div>}
           </div>
 
-          <div className="mt-4 grid grid-cols-3 gap-4 text-right">
-            <SummaryLine label="Charges" value={totalCharges} currency={currency} />
+          <div className={`mt-4 grid gap-4 text-right ${totalDiscount > 0 ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-3"}`}>
+            <SummaryLine label="Charges" value={grossCharges} currency={currency} />
+            {totalDiscount > 0 && (
+              <SummaryLine label="Discounts" value={totalDiscount} currency={currency} negative />
+            )}
             <SummaryLine label="Paid" value={totalPaid} currency={currency} />
             <SummaryLine label="Balance" value={balance} currency={currency} highlight />
           </div>
@@ -442,12 +485,197 @@ function Info({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
-function SummaryLine({ label, value, currency, highlight }: { label: string; value: number; currency: string; highlight?: boolean }) {
+// Discount is scoped to the ROOM ACCOMMODATION value only: the eligible basis
+// is reservations.rate_total, which is written once at reservation creation
+// and is never increased by a POS posting or an incidental charge. The dialog
+// therefore shows that figure -- not the folio total -- as what a percentage
+// is taken of, so the operator sees exactly what the server will compute.
+//
+// Every guard here is a MIRROR of the server-side RPC, never the enforcement:
+// apply_reservation_discount() re-checks the role, the reservation status, the
+// basis and the outstanding balance inside one transaction.
+function AddDiscount({
+  reservationId, propertyId, status, currency, eligibleRoomAmount, outstanding, onDone,
+}: {
+  reservationId: string;
+  propertyId?: string;
+  status: string;
+  currency: string;
+  eligibleRoomAmount: number;
+  outstanding: number;
+  onDone: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [type, setType] = useState<"amount" | "percentage">("amount");
+  const [value, setValue] = useState("");
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  // One id per open dialog session, so a double-click or a network retry of
+  // the SAME submission applies the discount once. Regenerated on close only.
+  const [requestId, setRequestId] = useState<string>(() => crypto.randomUUID());
+
+  const canDiscount = usePermission({
+    propertyId: propertyId ?? "",
+    module: "reservation_discounts",
+    capability: "create",
+    defaultRoles: DISCOUNT_ROLES,
+  });
+
+  // Only states where the ledger has not yet been posted. Checked-out is
+  // excluded because post_reservation_checkout() is idempotent and would
+  // never re-post, leaving the folio disagreeing with accounting.
+  const statusAllowed = status === "confirmed" || status === "checked_in";
+
+  const entered = Number(value);
+  const validNumber = Number.isFinite(entered) && entered > 0;
+  const calculated = !validNumber
+    ? 0
+    : type === "percentage"
+      ? Math.round(eligibleRoomAmount * Math.min(entered, 100)) / 100
+      : Math.round(entered * 100) / 100;
+  const resultingRoom = Math.max(0, eligibleRoomAmount - calculated);
+  const outstandingAfter = outstanding - calculated;
+
+  const overBasis = calculated > eligibleRoomAmount + 0.001;
+  const overOutstanding = calculated > outstanding + 0.001;
+  const overPercent = type === "percentage" && entered > 100;
+  const blocked = !validNumber || overBasis || overOutstanding || overPercent || reason.trim() === "";
+
+  if (!canDiscount.allowed || !statusAllowed) return null;
+
+  function reset(next: boolean) {
+    setOpen(next);
+    if (!next) {
+      setType("amount");
+      setValue("");
+      setReason("");
+      setRequestId(crypto.randomUUID());
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={reset}>
+      <DialogTrigger asChild>
+        <Button size="sm" variant="outline">
+          <Percent className="h-4 w-4 mr-1" /> Add discount
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Add discount</DialogTitle>
+          <DialogDescription>
+            Applies to the room accommodation charge only. POS and incidental charges are not discounted.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-3">
+          <div>
+            <Label className="text-xs">Discount type</Label>
+            <div className="mt-1 flex gap-2">
+              <Button type="button" size="sm" variant={type === "amount" ? "default" : "outline"}
+                onClick={() => setType("amount")}>
+                Amount ({currency})
+              </Button>
+              <Button type="button" size="sm" variant={type === "percentage" ? "default" : "outline"}
+                onClick={() => setType("percentage")}>
+                Percentage (%)
+              </Button>
+            </div>
+          </div>
+
+          <div>
+            <Label className="text-xs">
+              {type === "amount" ? `Amount (${currency})` : "Percentage (%)"}
+            </Label>
+            <Input
+              type="number" min={0} step={type === "percentage" ? 0.01 : 0.01}
+              max={type === "percentage" ? 100 : undefined}
+              value={value} onChange={(e) => setValue(e.target.value)}
+              placeholder={type === "percentage" ? "10" : "100.00"}
+            />
+          </div>
+
+          <div>
+            <Label className="text-xs">Reason</Label>
+            <Input value={reason} onChange={(e) => setReason(e.target.value)}
+              placeholder="Why is this discount being given?" />
+          </div>
+
+          <div className="rounded-lg border p-3 text-sm space-y-1">
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Eligible room amount</span>
+              <span className="font-mono">{formatMoney(eligibleRoomAmount, currency)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Discount</span>
+              <span className="font-mono text-emerald-600 dark:text-emerald-400">
+                {calculated > 0 ? `-${formatMoney(calculated, currency)}` : formatMoney(0, currency)}
+              </span>
+            </div>
+            <div className="flex justify-between border-t pt-1 font-semibold">
+              <span>Resulting room amount</span>
+              <span className="font-mono">{formatMoney(resultingRoom, currency)}</span>
+            </div>
+            <div className="flex justify-between text-xs text-muted-foreground">
+              <span>Outstanding balance after</span>
+              <span className="font-mono">{formatMoney(Math.max(0, outstandingAfter), currency)}</span>
+            </div>
+          </div>
+
+          {overPercent && (
+            <p className="text-xs text-destructive">A percentage discount cannot exceed 100%.</p>
+          )}
+          {overBasis && !overPercent && (
+            <p className="text-xs text-destructive">
+              That exceeds the eligible room amount of {formatMoney(eligibleRoomAmount, currency)}.
+            </p>
+          )}
+          {overOutstanding && !overBasis && !overPercent && (
+            <p className="text-xs text-destructive">
+              That exceeds the outstanding balance of {formatMoney(outstanding, currency)}. Use a refund to
+              return money already collected.
+            </p>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button
+            disabled={busy || blocked}
+            onClick={async () => {
+              setBusy(true);
+              try {
+                const { error } = await (supabase.rpc as any)("apply_reservation_discount", {
+                  _reservation_id: reservationId,
+                  _discount_type: type,
+                  _entered_value: entered,
+                  _reason: reason.trim(),
+                  _request_id: requestId,
+                });
+                if (error) throw new Error(error.message);
+                toast.success("Discount applied");
+                reset(false);
+                onDone();
+              } catch (e: any) {
+                toast.error(e?.message ?? "Could not apply the discount");
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            {busy ? "Applying…" : "Apply discount"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function SummaryLine({ label, value, currency, highlight, negative }: { label: string; value: number; currency: string; highlight?: boolean; negative?: boolean }) {
   return (
     <div>
       <div className="text-xs uppercase text-muted-foreground">{label}</div>
-      <div className={`mt-1 text-lg font-semibold ${highlight && value > 0.01 ? "text-destructive" : ""}`}>
-        {currency} {value.toFixed(2)}
+      <div className={`mt-1 text-lg font-semibold ${highlight && value > 0.01 ? "text-destructive" : ""} ${negative ? "text-emerald-600 dark:text-emerald-400" : ""}`}>
+        {negative && value > 0 ? `-${formatMoney(value, currency)}` : formatMoney(value, currency)}
       </div>
     </div>
   );
