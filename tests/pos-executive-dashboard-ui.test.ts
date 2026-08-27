@@ -125,7 +125,11 @@ describe("route — access control", () => {
 describe("route — active property only", () => {
   it("reads the active property and disables every query without one", () => {
     expect(routeCode).toContain("const propertyId = useActiveProperty();");
-    expect(routeCode).toContain("const enabled = !!propertyId && allowed && from <= to;");
+    // The range half of this condition is named so the sections can distinguish
+    // "no rows came back" from "the query never ran" -- same operands, same
+    // meaning. See pos-executive-dashboard-pr-b-findings.test.ts.
+    expect(routeCode).toContain("const rangeRequested = from <= to;");
+    expect(routeCode).toContain("const enabled = !!propertyId && allowed && rangeRequested;");
   });
 
   it("includes the property in every dashboard query key, so a switch cannot serve stale rows", () => {

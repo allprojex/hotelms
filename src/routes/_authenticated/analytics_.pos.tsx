@@ -29,7 +29,7 @@ import {
   getPosExecSalesByPeriod,
 } from "@/lib/pos-analytics.functions";
 import type { ReportDefinition, ReportFormat } from "@/lib/reports/report-core";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -137,10 +137,15 @@ const runExport = createClientOnlyFn(
 
 function Kpi({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
-    <Card>
+    // min-w-0 lets the grid track shrink below the card's min-content width;
+    // break-words then wraps a long money value instead of painting it outside
+    // the card. Without both, a seven-figure amount in a symbol-prefixed
+    // currency sets a ~280px floor per card -- 568px of two-column grid inside
+    // a 360px phone viewport, which is what pushed this page sideways.
+    <Card className="min-w-0">
       <CardContent className="p-4">
-        <div className="flex items-center gap-1 text-xs text-muted-foreground">
-          <span>{label}</span>
+        <div className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
+          <span className="truncate">{label}</span>
           {hint && (
             <TooltipProvider>
               <UiTooltip>
@@ -148,7 +153,7 @@ function Kpi({ label, value, hint }: { label: string; value: string; hint?: stri
                   <button
                     type="button"
                     aria-label={`About ${label}`}
-                    className="inline-flex items-center text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+                    className="inline-flex shrink-0 items-center text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
                   >
                     <Info className="h-3 w-3" />
                   </button>
@@ -158,25 +163,39 @@ function Kpi({ label, value, hint }: { label: string; value: string; hint?: stri
             </TooltipProvider>
           )}
         </div>
-        <div className="text-xl font-semibold mt-1 tabular-nums">{value}</div>
+        <div className="text-xl font-semibold mt-1 tabular-nums break-words">{value}</div>
       </CardContent>
     </Card>
   );
 }
+
+// Shown when the date range is inverted. Every query on this page is disabled
+// in that state, so each section has no rows -- but "the query returned nothing"
+// and "we never asked" are different claims, and only the second is true here.
+// The Departments section made the first claim ("This property has no POS
+// outlets"), which is a statement about the property's configuration that a
+// query that never ran cannot support.
+const RANGE_NOT_REQUESTED =
+  "The start date is after the end date, so no figures were requested. Adjust the range above.";
 
 function SectionState({
   loading,
   error,
   empty,
   emptyText,
+  notRequested = false,
   children,
 }: {
   loading: boolean;
   error: unknown;
   empty: boolean;
   emptyText: string;
+  /** The query never ran, so `empty` says nothing about the underlying data. */
+  notRequested?: boolean;
   children: React.ReactNode;
 }) {
+  if (notRequested)
+    return <p className="text-sm text-muted-foreground py-6 text-center">{RANGE_NOT_REQUESTED}</p>;
   if (loading) return <p className="text-sm text-muted-foreground py-6 text-center">Loading…</p>;
   if (error)
     return (
@@ -203,7 +222,8 @@ function PosExecutiveAnalytics() {
   const itemsFn = useServerFn(getPosExecTopItems);
   const periodFn = useServerFn(getPosExecSalesByPeriod);
 
-  const enabled = !!propertyId && allowed && from <= to;
+  const rangeRequested = from <= to;
+  const enabled = !!propertyId && allowed && rangeRequested;
   // Every query key carries the property, so switching properties can never
   // serve Property A's cached rows under Property B's label.
   const args = { propertyId: propertyId!, from, to };
@@ -317,9 +337,9 @@ function PosExecutiveAnalytics() {
   const exportsDisabled = summary.isLoading || !!summary.error;
 
   return (
-    <div className="p-4 md:p-6 space-y-4">
+    <div className="p-4 md:p-6 space-y-4 min-w-0">
       <div className="flex items-start justify-between flex-wrap gap-3">
-        <div>
+        <div className="min-w-0">
           <h1 className="text-2xl font-display font-semibold flex items-center gap-2">
             <BarChart3 className="h-6 w-6" /> POS Executive Analytics
           </h1>
@@ -424,11 +444,12 @@ function PosExecutiveAnalytics() {
           loading={summary.isLoading}
           error={summary.error}
           empty={!s}
+          notRequested={!rangeRequested}
           emptyText="No POS figures for this property and period."
         >
           {s && (
             <>
-              <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
+              <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
                 <Kpi
                   label="Operational Sales"
                   value={money(s.operational_sales)}
@@ -470,10 +491,12 @@ function PosExecutiveAnalytics() {
 
               <Card className="mt-3">
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-sm">Payment methods (till only)</CardTitle>
+                  <h3 className="text-sm font-semibold leading-none tracking-tight">
+                    Payment methods (till only)
+                  </h3>
                 </CardHeader>
                 <CardContent>
-                  <div className="grid gap-3 grid-cols-2 lg:grid-cols-3">
+                  <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
                     <Kpi label="Cash" value={money(s.cash_amount)} />
                     <Kpi label="Card" value={money(s.card_amount)} />
                     <Kpi label="Mobile Money" value={money(s.mobile_money_amount)} />
@@ -492,284 +515,304 @@ function PosExecutiveAnalytics() {
         </SectionState>
       </section>
 
-      <Card>
-        <CardHeader className="pb-2 flex-row items-center justify-between space-y-0 flex-wrap gap-2">
-          <CardTitle className="text-sm">Sales trend · {rangeLabel}</CardTitle>
-          <div className="flex items-center gap-2">
-            <Label htmlFor="pos-grain" className="text-xs">
-              Granularity
-            </Label>
-            <Select value={granularity} onValueChange={(v) => setGranularity(v as Granularity)}>
-              <SelectTrigger id="pos-grain" className="w-32 h-8">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="day">Daily</SelectItem>
-                <SelectItem value="month">Monthly</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <SectionState
-            loading={periods.isLoading}
-            error={periods.error}
-            empty={trendData.length === 0}
-            emptyText="No periods in this range."
-          >
-            <div className="h-64 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={trendData}>
-                  <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
-                  <XAxis dataKey="period" fontSize={11} />
-                  <YAxis fontSize={11} />
-                  <Tooltip formatter={(v: number) => money(v)} />
-                  <Legend />
-                  <Area
-                    type="monotone"
-                    dataKey="sales"
-                    name="Operational Sales"
-                    stroke="#0ea5e9"
-                    fill="#0ea5e9"
-                    fillOpacity={0.2}
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="payments"
-                    name="Till Payments Received"
-                    stroke="#10b981"
-                    fill="#10b981"
-                    fillOpacity={0.15}
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
+      <section aria-labelledby="pos-trend">
+        <Card>
+          <CardHeader className="pb-2 flex-row items-center justify-between space-y-0 flex-wrap gap-2">
+            <h2 id="pos-trend" className="text-sm font-semibold leading-none tracking-tight">
+              Sales trend · {rangeLabel}
+            </h2>
+            <div className="flex items-center gap-2">
+              <Label htmlFor="pos-grain" className="text-xs">
+                Granularity
+              </Label>
+              <Select value={granularity} onValueChange={(v) => setGranularity(v as Granularity)}>
+                <SelectTrigger id="pos-grain" className="w-32 h-8">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="day">Daily</SelectItem>
+                  <SelectItem value="month">Monthly</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
-            {/* Text equivalent of the chart for assistive technology. */}
-            <div className="overflow-x-auto mt-2">
-              <Table>
-                <caption className="sr-only">
-                  Operational sales and till payments received per {granularity}
-                </caption>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead scope="col">Period</TableHead>
-                    <TableHead scope="col" className="text-right">
-                      Operational Sales
-                    </TableHead>
-                    <TableHead scope="col" className="text-right">
-                      Orders
-                    </TableHead>
-                    <TableHead scope="col" className="text-right">
-                      Till Payments
-                    </TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {(periods.data ?? []).map((p) => (
-                    <TableRow key={p.period_start}>
-                      <TableCell className="text-xs">{p.period_start}</TableCell>
-                      <TableCell className="text-right font-mono text-xs">
-                        {money(p.operational_sales)}
-                      </TableCell>
-                      <TableCell className="text-right font-mono text-xs">
-                        {execNumber(p.order_count)}
-                      </TableCell>
-                      <TableCell className="text-right font-mono text-xs">
-                        {money(p.payments_received_amount)}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          </SectionState>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm">Departments / outlets</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <SectionState
-            loading={departments.isLoading}
-            error={departments.error}
-            empty={(departments.data ?? []).length === 0}
-            emptyText="This property has no POS outlets."
-          >
-            {deptChart.length > 0 && (
-              <div className="h-56 w-full mb-3">
+          </CardHeader>
+          <CardContent>
+            <SectionState
+              loading={periods.isLoading}
+              error={periods.error}
+              empty={trendData.length === 0}
+              notRequested={!rangeRequested}
+              emptyText="No periods in this range."
+            >
+              <div className="h-64 w-full">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={deptChart}>
+                  <AreaChart data={trendData}>
                     <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
-                    <XAxis dataKey="name" fontSize={11} />
+                    <XAxis dataKey="period" fontSize={11} />
                     <YAxis fontSize={11} />
                     <Tooltip formatter={(v: number) => money(v)} />
-                    <Bar dataKey="sales" name="Operational Sales" fill="#6366f1" />
-                  </BarChart>
+                    <Legend />
+                    <Area
+                      type="monotone"
+                      dataKey="sales"
+                      name="Operational Sales"
+                      stroke="#0ea5e9"
+                      fill="#0ea5e9"
+                      fillOpacity={0.2}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="payments"
+                      name="Till Payments Received"
+                      stroke="#10b981"
+                      fill="#10b981"
+                      fillOpacity={0.15}
+                    />
+                  </AreaChart>
                 </ResponsiveContainer>
               </div>
-            )}
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead scope="col">Outlet</TableHead>
-                    <TableHead scope="col">Kind</TableHead>
-                    <TableHead scope="col" className="text-right">
-                      Operational Sales
-                    </TableHead>
-                    <TableHead scope="col" className="text-right">
-                      Closed Orders
-                    </TableHead>
-                    <TableHead scope="col" className="text-right">
-                      Live Orders
-                    </TableHead>
-                    <TableHead scope="col" className="text-right">
-                      Live Order Value
-                    </TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {(departments.data ?? []).map((d) => (
-                    <TableRow key={d.outlet_id}>
-                      <TableCell className="font-medium">{d.outlet_name}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline">{d.outlet_kind.replace("_", " ")}</Badge>
-                      </TableCell>
-                      <TableCell className="text-right font-mono">
-                        {money(d.operational_sales)}
-                      </TableCell>
-                      <TableCell className="text-right font-mono">
-                        {execNumber(d.order_count)}
-                      </TableCell>
-                      <TableCell className="text-right font-mono">
-                        {execNumber(d.live_order_count)}
-                      </TableCell>
-                      <TableCell className="text-right font-mono">
-                        {money(d.open_order_line_value)}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          </SectionState>
-        </CardContent>
-      </Card>
-
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Staff activity</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <SectionState
-              loading={users.isLoading}
-              error={users.error}
-              empty={(users.data ?? []).length === 0}
-              emptyText="No staff activity recorded for this period."
-            >
-              <div className="overflow-x-auto">
+              {/* Text equivalent of the chart for assistive technology. */}
+              <div className="overflow-x-auto mt-2">
                 <Table>
+                  <caption className="sr-only">
+                    Operational sales and till payments received per {granularity}
+                  </caption>
                   <TableHeader>
                     <TableRow>
-                      <TableHead scope="col">User</TableHead>
+                      <TableHead scope="col">Period</TableHead>
                       <TableHead scope="col" className="text-right">
-                        Orders Created
-                      </TableHead>
-                      <TableHead scope="col" className="text-right">
-                        Order Value
-                      </TableHead>
-                      <TableHead scope="col" className="text-right">
-                        Till Payments Received
-                      </TableHead>
-                      <TableHead scope="col" className="text-right">
-                        Till Amount Received
-                      </TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {(users.data ?? []).map((u) => (
-                      <TableRow key={u.user_id}>
-                        <TableCell className="font-medium">{staffLabel(u)}</TableCell>
-                        <TableCell className="text-right font-mono">
-                          {execNumber(u.orders_created_count)}
-                        </TableCell>
-                        <TableCell className="text-right font-mono">
-                          {money(u.orders_created_value)}
-                        </TableCell>
-                        <TableCell className="text-right font-mono">
-                          {execNumber(u.till_payments_received_count)}
-                        </TableCell>
-                        <TableCell className="text-right font-mono">
-                          {money(u.till_payments_received_value)}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-              <p className="text-xs text-muted-foreground mt-3">
-                Orders created and till payments received are two separate measures and are not
-                combined into a single &ldquo;sales by user&rdquo; figure. Orders created can read
-                zero where POS orders were saved without a recorded creator.
-              </p>
-            </SectionState>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Top items</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <SectionState
-              loading={topItems.isLoading}
-              error={topItems.error}
-              empty={(topItems.data ?? []).length === 0}
-              emptyText="No items sold in this period."
-            >
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead scope="col">Item</TableHead>
-                      <TableHead scope="col" className="text-right">
-                        Quantity
-                      </TableHead>
-                      <TableHead scope="col" className="text-right">
-                        Operational Amount
+                        Operational Sales
                       </TableHead>
                       <TableHead scope="col" className="text-right">
                         Orders
                       </TableHead>
+                      <TableHead scope="col" className="text-right">
+                        Till Payments
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {(topItems.data ?? []).map((i, idx) => (
-                      <TableRow key={`${i.menu_item_id ?? "x"}-${i.item_name}-${idx}`}>
-                        <TableCell className="font-medium">{i.item_name}</TableCell>
-                        <TableCell className="text-right font-mono">
-                          {execNumber(i.total_quantity)}
+                    {(periods.data ?? []).map((p) => (
+                      <TableRow key={p.period_start}>
+                        <TableCell className="text-xs">{p.period_start}</TableCell>
+                        <TableCell className="text-right font-mono text-xs">
+                          {money(p.operational_sales)}
                         </TableCell>
-                        <TableCell className="text-right font-mono">
-                          {money(i.total_amount)}
+                        <TableCell className="text-right font-mono text-xs">
+                          {execNumber(p.order_count)}
                         </TableCell>
-                        <TableCell className="text-right font-mono">
-                          {execNumber(i.order_count)}
+                        <TableCell className="text-right font-mono text-xs">
+                          {money(p.payments_received_amount)}
                         </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
                 </Table>
               </div>
-              <p className="text-xs text-muted-foreground mt-3">
-                Item names are the historical names recorded at the time of sale.
-              </p>
             </SectionState>
           </CardContent>
         </Card>
+      </section>
+
+      <section aria-labelledby="pos-departments">
+        <Card>
+          <CardHeader className="pb-2">
+            <h2 id="pos-departments" className="text-sm font-semibold leading-none tracking-tight">
+              Departments / outlets
+            </h2>
+          </CardHeader>
+          <CardContent>
+            <SectionState
+              loading={departments.isLoading}
+              error={departments.error}
+              empty={(departments.data ?? []).length === 0}
+              notRequested={!rangeRequested}
+              emptyText="This property has no POS outlets."
+            >
+              {deptChart.length > 0 && (
+                <div className="h-56 w-full mb-3">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={deptChart}>
+                      <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
+                      <XAxis dataKey="name" fontSize={11} />
+                      <YAxis fontSize={11} />
+                      <Tooltip formatter={(v: number) => money(v)} />
+                      <Bar dataKey="sales" name="Operational Sales" fill="#6366f1" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead scope="col">Outlet</TableHead>
+                      <TableHead scope="col">Kind</TableHead>
+                      <TableHead scope="col" className="text-right">
+                        Operational Sales
+                      </TableHead>
+                      <TableHead scope="col" className="text-right">
+                        Closed Orders
+                      </TableHead>
+                      <TableHead scope="col" className="text-right">
+                        Live Orders
+                      </TableHead>
+                      <TableHead scope="col" className="text-right">
+                        Live Order Value
+                      </TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {(departments.data ?? []).map((d) => (
+                      <TableRow key={d.outlet_id}>
+                        <TableCell className="font-medium">{d.outlet_name}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline">{d.outlet_kind.replace("_", " ")}</Badge>
+                        </TableCell>
+                        <TableCell className="text-right font-mono">
+                          {money(d.operational_sales)}
+                        </TableCell>
+                        <TableCell className="text-right font-mono">
+                          {execNumber(d.order_count)}
+                        </TableCell>
+                        <TableCell className="text-right font-mono">
+                          {execNumber(d.live_order_count)}
+                        </TableCell>
+                        <TableCell className="text-right font-mono">
+                          {money(d.open_order_line_value)}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </SectionState>
+          </CardContent>
+        </Card>
+      </section>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <section aria-labelledby="pos-staff" className="min-w-0">
+          <Card>
+            <CardHeader className="pb-2">
+              <h2 id="pos-staff" className="text-sm font-semibold leading-none tracking-tight">
+                Staff activity
+              </h2>
+            </CardHeader>
+            <CardContent>
+              <SectionState
+                loading={users.isLoading}
+                error={users.error}
+                empty={(users.data ?? []).length === 0}
+                notRequested={!rangeRequested}
+                emptyText="No staff activity recorded for this period."
+              >
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead scope="col">User</TableHead>
+                        <TableHead scope="col" className="text-right">
+                          Orders Created
+                        </TableHead>
+                        <TableHead scope="col" className="text-right">
+                          Order Value
+                        </TableHead>
+                        <TableHead scope="col" className="text-right">
+                          Till Payments Received
+                        </TableHead>
+                        <TableHead scope="col" className="text-right">
+                          Till Amount Received
+                        </TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {(users.data ?? []).map((u) => (
+                        <TableRow key={u.user_id}>
+                          <TableCell className="font-medium">{staffLabel(u)}</TableCell>
+                          <TableCell className="text-right font-mono">
+                            {execNumber(u.orders_created_count)}
+                          </TableCell>
+                          <TableCell className="text-right font-mono">
+                            {money(u.orders_created_value)}
+                          </TableCell>
+                          <TableCell className="text-right font-mono">
+                            {execNumber(u.till_payments_received_count)}
+                          </TableCell>
+                          <TableCell className="text-right font-mono">
+                            {money(u.till_payments_received_value)}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+                <p className="text-xs text-muted-foreground mt-3">
+                  Orders created and till payments received are two separate measures and are not
+                  combined into a single &ldquo;sales by user&rdquo; figure. Orders created can read
+                  zero where POS orders were saved without a recorded creator.
+                </p>
+              </SectionState>
+            </CardContent>
+          </Card>
+        </section>
+
+        <section aria-labelledby="pos-items" className="min-w-0">
+          <Card>
+            <CardHeader className="pb-2">
+              <h2 id="pos-items" className="text-sm font-semibold leading-none tracking-tight">
+                Top items
+              </h2>
+            </CardHeader>
+            <CardContent>
+              <SectionState
+                loading={topItems.isLoading}
+                error={topItems.error}
+                empty={(topItems.data ?? []).length === 0}
+                notRequested={!rangeRequested}
+                emptyText="No items sold in this period."
+              >
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead scope="col">Item</TableHead>
+                        <TableHead scope="col" className="text-right">
+                          Quantity
+                        </TableHead>
+                        <TableHead scope="col" className="text-right">
+                          Operational Amount
+                        </TableHead>
+                        <TableHead scope="col" className="text-right">
+                          Orders
+                        </TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {(topItems.data ?? []).map((i, idx) => (
+                        <TableRow key={`${i.menu_item_id ?? "x"}-${i.item_name}-${idx}`}>
+                          <TableCell className="font-medium">{i.item_name}</TableCell>
+                          <TableCell className="text-right font-mono">
+                            {execNumber(i.total_quantity)}
+                          </TableCell>
+                          <TableCell className="text-right font-mono">
+                            {money(i.total_amount)}
+                          </TableCell>
+                          <TableCell className="text-right font-mono">
+                            {execNumber(i.order_count)}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+                <p className="text-xs text-muted-foreground mt-3">
+                  Item names are the historical names recorded at the time of sale.
+                </p>
+              </SectionState>
+            </CardContent>
+          </Card>
+        </section>
       </div>
     </div>
   );
