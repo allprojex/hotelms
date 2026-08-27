@@ -14,6 +14,8 @@ function bytes(path: string): Buffer {
 
 const rootRoute = read(resolve(root, "src/routes/__root.tsx"));
 const authRoute = read(resolve(root, "src/routes/auth.tsx"));
+const brandFaviconComponent = read(resolve(root, "src/components/brand-favicon.tsx"));
+const authenticatedLayout = read(resolve(root, "src/routes/_authenticated/route.tsx"));
 const manifest = JSON.parse(read(resolve(root, "public/site.webmanifest")));
 
 /** Reads a PNG's IHDR dimensions (and asserts the file really is a PNG). */
@@ -143,17 +145,60 @@ describe("browser identity is unchanged by this fix", () => {
 });
 
 describe("branding architecture is preserved", () => {
-  it("a tenant-configured favicon still overrides the static set — and now overrides every declared icon link, not just the first", () => {
-    const brandFavicon = rootRoute.match(/function BrandFavicon\(\)[\s\S]*?\n\}/)?.[0] ?? "";
-    expect(brandFavicon).toContain("useBrandSettings");
-    expect(brandFavicon).toContain("brandSettings?.favicon_url || brandSettings?.logo_url");
-    expect(brandFavicon).toContain("querySelectorAll<HTMLLinkElement>('link[rel=\"icon\"]')");
-    expect(brandFavicon).not.toContain("querySelector<HTMLLinkElement>");
+  it("a tenant-configured favicon still overrides the static set — and still overrides every declared icon link, not just the first", () => {
+    expect(brandFaviconComponent).toContain("useBrandSettings");
+    expect(brandFaviconComponent).toContain(
+      "brandSettings?.favicon_url || brandSettings?.logo_url",
+    );
+    expect(brandFaviconComponent).toContain(
+      "querySelectorAll<HTMLLinkElement>('link[rel=\"icon\"]')",
+    );
+    expect(brandFaviconComponent).not.toContain("querySelector<HTMLLinkElement>");
   });
 
   it("browser identity stays organisation-wide — the favicon is never sourced from property-level branding, so one property cannot leak its icon into another", () => {
-    const brandFavicon = rootRoute.match(/function BrandFavicon\(\)[\s\S]*?\n\}/)?.[0] ?? "";
-    expect(brandFavicon).not.toContain("useEffectiveBranding");
+    expect(brandFaviconComponent).not.toContain("useEffectiveBranding");
     expect(read(resolve(root, "src/hooks/use-effective-branding.ts"))).not.toContain("favicon_url");
+  });
+});
+
+// Googlebot renders JavaScript and indexes the resulting head. Mounting the
+// organisation favicon override above the authenticated boundary therefore put
+// a signed, non-square, cross-origin Supabase JPEG in front of Google on /auth
+// and cost the site its search-result icon. The behavioural proof lives in
+// tests/favicon-crawler-hydration.test.tsx; these pin the mount point itself,
+// which is the part a future refactor is most likely to undo by accident.
+describe("the organisation favicon override is scoped to authenticated routes", () => {
+  it("is not defined or mounted anywhere in the root route", () => {
+    expect(rootRoute).not.toContain("function BrandFavicon(");
+    expect(rootRoute).not.toContain("<BrandFavicon />");
+    expect(rootRoute).not.toMatch(/import .*BrandFavicon/);
+  });
+
+  it("is mounted from the authenticated layout, which redirects unauthenticated visitors to /auth", () => {
+    expect(authenticatedLayout).toContain(
+      'import { BrandFavicon } from "@/components/brand-favicon";',
+    );
+    expect(authenticatedLayout).toContain("<BrandFavicon />");
+    expect(authenticatedLayout).toContain('throw redirect({ to: "/auth" })');
+  });
+
+  it("no public route mounts it — /auth, the booking pages and the password routes are all crawler-facing", () => {
+    for (const route of [
+      "auth.tsx",
+      "index.tsx",
+      "reset-password.tsx",
+      "change-password.tsx",
+      "book.index.tsx",
+      "book.embed.tsx",
+    ]) {
+      expect(read(resolve(root, "src/routes", route))).not.toContain("BrandFavicon");
+    }
+  });
+
+  it("restores the static declarations on unmount, so signing out cannot leave the tenant icon in the head of a public page", () => {
+    expect(brandFaviconComponent).toContain("getAttribute");
+    expect(brandFaviconComponent).toContain("removeAttribute");
+    expect(brandFaviconComponent).toContain("return () => {");
   });
 });
