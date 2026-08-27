@@ -3,6 +3,7 @@ import autoTable from "jspdf-autotable";
 import * as XLSX from "xlsx";
 import { openPrintView, renderTable } from "@/lib/admin/print-html";
 import {
+  pdfSafeText,
   reportFileName,
   reportRows,
   reportSubtitle,
@@ -54,17 +55,20 @@ export function exportReport<Row>(
   }
 
   if (format === "pdf") {
+    // Every string handed to jsPDF goes through pdfSafeText: the default
+    // Helvetica is Latin-1 only, and a currency symbol it cannot encode is
+    // silently mangled or dropped. See pdfSafeText in report-core.
     const document = new jsPDF({ orientation: "landscape", unit: "pt" });
     document.setFontSize(16);
-    document.text(definition.title, 40, 40);
+    document.text(pdfSafeText(definition.title), 40, 40);
     document.setFontSize(9);
-    document.text(reportSubtitle(definition), 40, 56);
+    document.text(pdfSafeText(reportSubtitle(definition)), 40, 56);
     autoTable(document, {
       startY: 70,
-      head: [definition.columns.map((column) => column.label)],
+      head: [definition.columns.map((column) => pdfSafeText(column.label))],
       body:
         definition.rows.length > 0
-          ? reportRows(definition).map((row) => row.map((value) => String(value ?? "")))
+          ? reportRows(definition).map((row) => row.map((value) => pdfSafeText(value)))
           : [["No results", ...definition.columns.slice(1).map(() => "")]],
       styles: { fontSize: 8, cellPadding: 4 },
     });

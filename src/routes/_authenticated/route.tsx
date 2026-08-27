@@ -95,7 +95,14 @@ function AuthLayout() {
     <SidebarProvider>
       <div className="flex min-h-screen w-full bg-background">
         <AppSidebar />
-        <div className="flex flex-1 flex-col">
+        {/* min-w-0: this column is a flex item, so without it its automatic
+            minimum size is the min-content width of the whole page below it.
+            Any wide descendant -- a table inside its own overflow-x-auto, a
+            grid of KPI cards -- then stretches this column past the viewport
+            and the entire document scrolls sideways instead of the wide
+            region scrolling inside itself. Clamping it here is what lets
+            overflow-x-auto regions actually do their job. */}
+        <div className="flex min-w-0 flex-1 flex-col">
           <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b bg-background/80 px-3 backdrop-blur">
             <SidebarTrigger />
             <TopBar />
