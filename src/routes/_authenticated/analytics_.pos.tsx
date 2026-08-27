@@ -20,6 +20,7 @@ import { useHasAnyRole, EXEC_ROLES } from "@/hooks/use-user-roles";
 import { AccessDenied } from "@/components/access-denied";
 import { execCurrency, execMoney, execNumber } from "@/lib/analytics-format";
 import { staffLabel } from "@/lib/pos-staff-label";
+import { buildPosExecReport, type ExportLine } from "@/lib/pos-analytics-report";
 import {
   getPosExecSummary,
   getPosExecByDepartment,
@@ -124,16 +125,6 @@ type PeriodRow = {
   operational_sales: number | string;
   order_count: number;
   payments_received_amount: number | string;
-};
-
-/** One flattened export row: every section is emitted into this shape. */
-type ExportLine = {
-  section: string;
-  a: string;
-  b: string;
-  c: unknown;
-  d: unknown;
-  e: unknown;
 };
 
 // jspdf/xlsx are browser-only and heavy — loaded only when an export runs.
@@ -298,95 +289,19 @@ function PosExecutiveAnalytics() {
   );
 
   function exportAll(fmt: ReportFormat) {
-    // Exports carry the FULL RPC result sets for the selected property and
-    // range — never a visually truncated chart slice. Numeric cells stay
-    // numeric and a Currency column names the unit, so spreadsheets remain
-    // usable while PDF/Print render formatted money.
-    const humanReadable = fmt === "pdf" || fmt === "print";
-    const m = (v: unknown) => (humanReadable ? money(v) : Number(v ?? 0));
-
-    const rows: ExportLine[] = [];
-    if (s) {
-      const kv: [string, unknown][] = [
-        ["Operational Sales", s.operational_sales],
-        ["Net Sales", s.operational_sales_net],
-        ["Tax", s.operational_tax],
-        ["Till Payments", s.till_payment_amount],
-        ["Folio Posted", s.folio_posted_amount],
-        ["Live Order Value", s.open_order_line_value],
-        ["Cash", s.cash_amount],
-        ["Card", s.card_amount],
-        ["Mobile Money", s.mobile_money_amount],
-        ["Bank Transfer", s.bank_transfer_amount],
-        ["Wallet", s.wallet_amount],
-        ["Other", s.other_amount],
-      ];
-      for (const [k, v] of kv)
-        rows.push({ section: "Summary", a: k, b: "", c: m(v), d: "", e: "" });
-      const counts: [string, unknown][] = [
-        ["Closed Orders", s.closed_order_count],
-        ["Live Orders", s.open_order_count],
-        ["Void Orders", s.void_order_count],
-        ["Till Payment Count", s.till_payment_count],
-        ["Folio Posted Count", s.folio_posted_count],
-      ];
-      // Counts never receive a currency symbol.
-      for (const [k, v] of counts)
-        rows.push({ section: "Summary", a: k, b: "", c: Number(v ?? 0), d: "", e: "" });
-    }
-    for (const d of departments.data ?? [])
-      rows.push({
-        section: "Outlet",
-        a: d.outlet_name,
-        b: d.outlet_kind,
-        c: m(d.operational_sales),
-        d: Number(d.order_count ?? 0),
-        e: m(d.open_order_line_value),
-      });
-    for (const u of users.data ?? [])
-      rows.push({
-        section: "Staff",
-        a: staffLabel(u),
-        b: "",
-        c: m(u.orders_created_value),
-        d: Number(u.orders_created_count ?? 0),
-        e: m(u.till_payments_received_value),
-      });
-    for (const i of topItems.data ?? [])
-      rows.push({
-        section: "Item",
-        a: i.item_name,
-        b: "",
-        c: m(i.total_amount),
-        d: Number(i.total_quantity ?? 0),
-        e: Number(i.order_count ?? 0),
-      });
-    for (const p of periods.data ?? [])
-      rows.push({
-        section: granularity === "day" ? "Day" : "Month",
-        a: p.period_start,
-        b: "",
-        c: m(p.operational_sales),
-        d: Number(p.order_count ?? 0),
-        e: m(p.payments_received_amount),
-      });
-
-    const definition: ReportDefinition<ExportLine> = {
-      title: `POS Executive Analytics — ${propertyName ?? "Property"}`,
-      slug: "pos-executive-analytics",
+    const definition = buildPosExecReport({
+      format: fmt,
+      currency,
       propertyName,
-      dateRange: { from, to },
-      columns: [
-        { key: "section", label: "Section", value: (r) => r.section },
-        { key: "a", label: "Name", value: (r) => r.a },
-        { key: "b", label: "Type", value: (r) => r.b },
-        { key: "c", label: "Amount", value: (r) => r.c },
-        { key: "d", label: "Count / Quantity", value: (r) => r.d },
-        { key: "e", label: "Secondary", value: (r) => r.e },
-        { key: "cur", label: "Currency", value: () => currency },
-      ],
-      rows,
-    };
+      from,
+      to,
+      granularity,
+      summary: s as Record<string, unknown> | null,
+      departments: (departments.data ?? []) as unknown as Record<string, unknown>[],
+      users: (users.data ?? []) as unknown as Record<string, unknown>[],
+      topItems: (topItems.data ?? []) as unknown as Record<string, unknown>[],
+      periods: (periods.data ?? []) as unknown as Record<string, unknown>[],
+    });
     return runExport(definition, fmt);
   }
 

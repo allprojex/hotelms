@@ -362,27 +362,32 @@ describe("route — exports", () => {
     }
   });
 
-  it("exports the complete RPC result sets, not the truncated chart data", () => {
+  // What the report itself contains is covered behaviourally by
+  // pos-executive-dashboard-export.test.ts, which runs the real CSV/XLSX
+  // pipeline. What the route still owns is feeding that builder the FULL
+  // result sets -- not the chart-shaped, filtered data.
+  it("hands the builder the complete RPC result sets, not the truncated chart data", () => {
     for (const src of ["departments.data", "users.data", "topItems.data", "periods.data"]) {
-      expect(routeCode).toMatch(new RegExp(`for \\(const \\w+ of ${src.replace(".", "\\.")}`));
+      expect(routeCode).toContain(`(${src} ?? [])`);
     }
-    expect(routeCode).not.toMatch(/for \(const \w+ of deptChart|for \(const \w+ of trendData/);
+    expect(routeCode).not.toMatch(/deptChart,|trendData,|: deptChart|: trendData/);
   });
 
-  it("carries the property, range and currency into the report definition", () => {
-    expect(routeCode).toContain("propertyName,");
-    expect(routeCode).toContain("dateRange: { from, to },");
-    expect(routeCode).toContain('{ key: "cur", label: "Currency", value: () => currency }');
-  });
-
-  it("keeps machine-readable cells numeric while PDF/Print render formatted money", () => {
-    expect(routeCode).toContain('const humanReadable = fmt === "pdf" || fmt === "print";');
-    expect(routeCode).toContain("humanReadable ? money(v) : Number(v ?? 0)");
+  it("passes the active property, range, granularity and currency to the builder", () => {
+    const call = routeCode.slice(
+      routeCode.indexOf("buildPosExecReport({"),
+      routeCode.indexOf("return runExport"),
+    );
+    for (const field of ["format: fmt", "currency", "propertyName", "from", "to", "granularity"]) {
+      expect(call, `builder call must pass ${field}`).toContain(field);
+    }
   });
 
   it("never emits a Refund or Discount column", () => {
-    const exportBlock = routeCode.slice(routeCode.indexOf("function exportAll"));
-    expect(exportBlock).not.toMatch(/refund|discount/i);
+    const builder = read("src/lib/pos-analytics-report.ts")
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/\/\/[^\n]*/g, "");
+    expect(builder).not.toMatch(/refund|discount/i);
   });
 });
 
