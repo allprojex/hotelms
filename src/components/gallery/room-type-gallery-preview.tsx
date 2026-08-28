@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ImageOff, Images } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { gallerySignedUrls, GALLERY_SIGNED_URL_TTL_SECONDS } from "@/lib/gallery/signed-url";
+import { pickRoomTypeCoverPaths } from "@/lib/gallery/domain";
 import { GalleryLightbox } from "@/components/gallery/gallery-lightbox";
 
 type PreviewImage = {
@@ -67,12 +68,9 @@ export function useRoomTypeCoverImages(roomTypeIds: string[]) {
         .order("is_cover", { ascending: false })
         .order("sort_order", { ascending: true });
       if (error) throw error;
-      const coverByRoomType = new Map<string, string>();
-      for (const row of data ?? []) {
-        const roomTypeId = row.room_type_id as string;
-        if (!coverByRoomType.has(roomTypeId))
-          coverByRoomType.set(roomTypeId, row.thumbnail_path as string);
-      }
+      const coverByRoomType = pickRoomTypeCoverPaths(
+        (data ?? []) as { room_type_id: string; thumbnail_path: string }[],
+      );
       const urls = await gallerySignedUrls([...coverByRoomType.values()]);
       const result = new Map<string, string>();
       for (const [roomTypeId, path] of coverByRoomType) {
@@ -82,6 +80,51 @@ export function useRoomTypeCoverImages(roomTypeIds: string[]) {
       return result;
     },
   });
+}
+
+/**
+ * Row-sized cover thumbnail for a list that has ALREADY resolved its covers
+ * in one batch (see useRoomTypeCoverImages). Deliberately takes a resolved
+ * url instead of a roomTypeId: dropping RoomTypeCoverThumbnail into a table
+ * would fire one metadata query + one sign request per row, which is the N+1
+ * this map exists to avoid. Rooms sharing a room type share one entry.
+ *
+ * Renders the same neutral ImageOff placeholder at identical dimensions when
+ * the room type has no photo, when the signed URL has expired, or when the
+ * image fails to load -- a broken-image icon or an empty box is never shown.
+ */
+export function RoomTypeRowThumbnail({
+  url,
+  alt,
+  className,
+}: {
+  url: string | null | undefined;
+  alt: string;
+  className?: string;
+}) {
+  const [failed, setFailed] = useState(false);
+  const box = className ?? "h-9 w-9";
+  return (
+    <div className={`shrink-0 overflow-hidden rounded-md border bg-muted ${box}`}>
+      {url && !failed ? (
+        <img
+          src={url}
+          alt={alt}
+          className="h-full w-full object-cover"
+          loading="lazy"
+          decoding="async"
+          onError={() => setFailed(true)}
+        />
+      ) : (
+        <div
+          className="flex h-full w-full items-center justify-center text-muted-foreground"
+          aria-hidden="true"
+        >
+          <ImageOff className="h-4 w-4" />
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function RoomTypeCoverThumbnail({
