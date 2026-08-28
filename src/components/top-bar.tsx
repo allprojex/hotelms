@@ -77,8 +77,16 @@ export function TopBar() {
   const initials = displayName[0]?.toUpperCase() ?? "?";
 
   return (
-    <div className="flex flex-1 items-center justify-between gap-3">
-      <div className="flex items-center gap-3">
+    // min-w-0 on this row, on the property group and on the trigger itself.
+    // The row is a flex item whose automatic minimum size is its content's
+    // min-content width, and the property switcher is a fixed 220px control
+    // that never shrinks. At 375px that made the row 404px wide inside a
+    // 360px viewport, so the whole document scrolled sideways on every
+    // authenticated page. 220px stays the preferred width; the trigger just
+    // gives ground when there isn't room, and shadcn's existing
+    // [&>span]:line-clamp-1 truncates the property name.
+    <div className="flex min-w-0 flex-1 items-center justify-between gap-3">
+      <div className="flex min-w-0 items-center gap-3">
         {properties && properties.length > 0 && (
           <Select
             value={activeId ?? undefined}
@@ -88,7 +96,7 @@ export function TopBar() {
               window.dispatchEvent(new Event("iti-property-changed"));
             }}
           >
-            <SelectTrigger className="h-8 w-[220px]">
+            <SelectTrigger className="h-8 w-[220px] min-w-0">
               <SelectValue placeholder="Select property" />
             </SelectTrigger>
             <SelectContent>
