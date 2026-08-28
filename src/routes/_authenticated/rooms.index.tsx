@@ -105,8 +105,7 @@ function RoomsPage() {
           <TableBody>
             {rooms.data?.map((r: any) => (
               <TableRow key={r.id}>
-                <TableCell className="font-medium">{r.number}</TableCell>
-                <TableCell className="w-[52px] py-1.5"><RoomTypeRowThumbnail url={covers.data?.get(r.room_type_id)} alt={r.room_types?.name ? `${r.room_types.name} room type photo` : ""} /></TableCell>
+                <TableCell className="font-medium">{r.number}</TableCell><TableCell className="w-[52px] py-1.5"><RoomTypeRowThumbnail url={covers.data?.get(r.room_type_id)} alt={r.room_types?.name ? `${r.room_types.name} room type photo` : ""} /></TableCell>
                 <TableCell className="whitespace-nowrap">{r.room_types?.name}</TableCell>
                 <TableCell>{r.floor ?? "—"}</TableCell>
                 <TableCell>
