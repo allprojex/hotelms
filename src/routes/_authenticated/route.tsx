@@ -13,6 +13,7 @@ import { AppSidebar } from "@/components/app-sidebar";
 import { TopBar } from "@/components/top-bar";
 import { AccessDenied } from "@/components/access-denied";
 import { BrandFavicon } from "@/components/brand-favicon";
+import { EnvironmentBanner } from "@/components/environment-banner";
 import { useUserRoles } from "@/hooks/use-user-roles";
 import { useActiveProperty } from "@/hooks/use-active-property";
 import { isAllowed, requiredRolesFor } from "@/lib/admin/route-permissions";
@@ -111,10 +112,19 @@ function AuthLayout() {
             region scrolling inside itself. Clamping it here is what lets
             overflow-x-auto regions actually do their job. */}
         <div className="flex min-w-0 flex-1 flex-col">
-          <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b bg-background/80 px-3 backdrop-blur">
-            <SidebarTrigger />
-            <TopBar />
-          </header>
+          {/* The environment strip and the app header share one sticky
+              container, so on a demo deployment the strip stays visible on
+              every screen rather than scrolling away at the top of a page.
+              On production ENVIRONMENT_LABEL is empty, <EnvironmentBanner />
+              renders null, and this wrapper is visually identical to the
+              plain sticky header it replaces. */}
+          <div className="sticky top-0 z-30 bg-background/80 backdrop-blur">
+            <EnvironmentBanner />
+            <header className="flex h-14 items-center gap-2 border-b px-3">
+              <SidebarTrigger />
+              <TopBar />
+            </header>
+          </div>
           <main className="flex-1 p-4 sm:p-6">
             {!guardReady ? null : allowed ? <Outlet /> : <AccessDenied />}
           </main>

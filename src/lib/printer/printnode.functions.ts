@@ -1,3 +1,4 @@
+import { BRAND_NAME } from "@/lib/deployment-identity";
 // PrintNode server bridge — reads PRINTNODE_API_KEY on the server so the
 // customer's cloud-print token never touches the browser. Missing key ⇒
 // { available: false } (never throws); UI falls back to browser-native.
@@ -40,7 +41,7 @@ export const sendPrintNodeJob = createServerFn({ method: "POST" })
       title: data.title,
       contentType: data.contentType,
       content: data.content,
-      source: "ThesKwoff Hotel",
+      source: BRAND_NAME,
       qty: data.copies ?? 1,
     };
     const res = await fetch(`${BASE}/printjobs`, {

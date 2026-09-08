@@ -1,3 +1,4 @@
+import { pageTitle } from "@/lib/deployment-identity";
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -29,7 +30,7 @@ import { toast } from "sonner";
 export const Route = createFileRoute("/_authenticated/admin_/recycle-bin")({
   head: () => ({
     meta: [
-      { title: "Recycle Bin · ThesKwoff Hotel" },
+      { title: pageTitle("Recycle Bin") },
       { name: "description", content: "Restore or permanently delete removed items across the system." },
       { name: "robots", content: "noindex" },
     ],

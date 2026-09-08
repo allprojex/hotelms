@@ -17,6 +17,8 @@ const authRoute = read(resolve(root, "src/routes/auth.tsx"));
 const brandFaviconComponent = read(resolve(root, "src/components/brand-favicon.tsx"));
 const authenticatedLayout = read(resolve(root, "src/routes/_authenticated/route.tsx"));
 const manifest = JSON.parse(read(resolve(root, "public/site.webmanifest")));
+const deploymentIdentity = read(resolve(root, "src/lib/deployment-identity.ts"));
+const brandSettingsHook = read(resolve(root, "src/hooks/use-brand-settings.ts"));
 
 /** Reads a PNG's IHDR dimensions (and asserts the file really is a PNG). */
 function pngSize(buffer: Buffer): { width: number; height: number } {
@@ -103,8 +105,18 @@ describe("document head — one coherent set of icon declarations", () => {
     expect(rootRoute).toContain(
       '{ name: "twitter:image", content: `${SITE_ORIGIN}/og-image.png` }',
     );
-    // Crawlers do not resolve relative og:image URLs.
-    expect(rootRoute).toContain('const SITE_ORIGIN = "https://theskwoffhotel.com"');
+    // Crawlers do not resolve relative og:image URLs, so SITE_ORIGIN must be
+    // absolute. It now comes from the shared deployment-identity module rather
+    // than a local constant, so a second deployment (the demo) can point these
+    // at its own host — but the module's fallback, and therefore production's
+    // rendered value with no environment variables set, is unchanged.
+    expect(rootRoute).toContain('import { BRAND_NAME, SITE_ORIGIN } from "@/lib/deployment-identity"');
+    expect(deploymentIdentity).toContain(
+      'export const FALLBACK_SITE_ORIGIN = "https://theskwoffhotel.com"',
+    );
+    expect(deploymentIdentity).toContain(
+      'export const SITE_ORIGIN = (readEnv("SITE_URL") ?? FALLBACK_SITE_ORIGIN)',
+    );
   });
 
   it("every declared static icon path actually resolves to a file in public/", () => {
@@ -120,8 +132,14 @@ describe("web manifest", () => {
   it("uses the same site identity as the branding defaults, and both icons resolve", () => {
     expect(manifest.name).toBe("ThesKwoff Hotel");
     expect(manifest.short_name).toBe("ThesKwoff Hotel");
-    expect(read(resolve(root, "src/hooks/use-brand-settings.ts"))).toContain(
-      'app_name: "ThesKwoff Hotel"',
+    // The branding default is now the deployment's configured name, whose
+    // fallback is the literal the static manifest also carries — so the two
+    // still agree on production, and the manifest stays the one place a
+    // second deployment cannot rename from configuration alone (it is a
+    // static file in public/, generated at build time).
+    expect(brandSettingsHook).toContain("app_name: BRAND_NAME");
+    expect(deploymentIdentity).toContain(
+      `export const FALLBACK_BRAND_NAME = "${manifest.name}"`,
     );
     expect(manifest.icons.map((i: { sizes: string }) => i.sizes)).toEqual(["192x192", "512x512"]);
     for (const icon of manifest.icons as { src: string }[]) {
@@ -136,7 +154,12 @@ describe("web manifest", () => {
 
 describe("browser identity is unchanged by this fix", () => {
   it("the root static title is still the organisation name", () => {
-    expect(rootRoute).toContain('{ title: "ThesKwoff Hotel" }');
+    // Still the organisation name, now resolved through the deployment's
+    // configured brand name whose fallback is that same literal.
+    expect(rootRoute).toContain("{ title: BRAND_NAME }");
+    expect(deploymentIdentity).toContain(
+      'export const BRAND_NAME = readEnv("APP_BRAND_NAME") ?? FALLBACK_BRAND_NAME',
+    );
   });
 
   it("the login page keeps its own page-specific title", () => {

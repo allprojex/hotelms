@@ -1,3 +1,4 @@
+import { pageTitle } from "@/lib/deployment-identity";
 /* eslint-disable @typescript-eslint/no-explicit-any -- Phase 6A tables await generated database types. */
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
@@ -23,7 +24,7 @@ import { format, startOfMonth, endOfMonth } from "date-fns";
 import { AccountingWorkspaceShell } from "@/components/accounting/accounting-workspace-nav";
 
 export const Route = createFileRoute("/_authenticated/accounting/")({
-  head: () => ({ meta: [{ title: "Accounting · ThesKwoff Hotel" }] }),
+  head: () => ({ meta: [{ title: pageTitle("Accounting") }] }),
   component: () => (
     <AccountingWorkspaceShell>
       <AccountingOverview />

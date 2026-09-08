@@ -16,12 +16,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { ThemeProvider } from "@/components/theme-provider";
 import { useBrandSettings } from "@/hooks/use-brand-settings";
 import { BrandColorVars } from "@/components/brand-color-vars";
-
-// Absolute origin used only for crawler-facing absolute asset URLs (og:image).
-// Matches SITE_URL in .env.production.example / the canonical production domain
-// recorded in scripts/prod/production.config.json; www and apex both serve this
-// same deployment, so the image resolves from either host.
-const SITE_ORIGIN = "https://theskwoffhotel.com";
+import { BRAND_NAME, SITE_ORIGIN } from "@/lib/deployment-identity";
 
 // Static browser-icon set generated from the approved brand logo
 // (scripts/branding/generate-favicons.ps1 -> public/). These are the
@@ -120,22 +115,22 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "ThesKwoff Hotel" },
+      { title: BRAND_NAME },
       {
         name: "description",
-        content: "Enterprise cloud hotel property management system by ThesKwoff Hotel.",
+        content: `Enterprise cloud hotel property management system by ${BRAND_NAME}.`,
       },
-      { property: "og:title", content: "ThesKwoff Hotel" },
+      { property: "og:title", content: BRAND_NAME },
       {
         property: "og:description",
-        content: "Enterprise cloud hotel property management system by ThesKwoff Hotel.",
+        content: `Enterprise cloud hotel property management system by ${BRAND_NAME}.`,
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
-      { name: "twitter:title", content: "ThesKwoff Hotel" },
+      { name: "twitter:title", content: BRAND_NAME },
       {
         name: "twitter:description",
-        content: "Enterprise cloud hotel property management system by ThesKwoff Hotel.",
+        content: `Enterprise cloud hotel property management system by ${BRAND_NAME}.`,
       },
       // Social/search preview card, served from this deployment rather than
       // the scaffold's original external upload bucket. Absolute because
