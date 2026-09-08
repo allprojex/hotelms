@@ -1,3 +1,4 @@
+import { pageTitle } from "@/lib/deployment-identity";
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -27,7 +28,7 @@ import { toast } from "sonner";
 export const Route = createFileRoute("/_authenticated/admin_/esl")({
   head: () => ({
     meta: [
-      { title: "ESL Dashboard · ThesKwoff Hotel" },
+      { title: pageTitle("ESL Dashboard") },
       { name: "description", content: "Electronic shelf label management: templates, product mapping, batch export." },
       { name: "robots", content: "noindex" },
     ],

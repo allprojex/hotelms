@@ -1,3 +1,4 @@
+import { pageTitle } from "@/lib/deployment-identity";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -17,7 +18,7 @@ import { Coins, RefreshCw, CheckCircle2, AlertCircle } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
 export const Route = createFileRoute("/_authenticated/settings")({
-  head: () => ({ meta: [{ title: "Settings — ThesKwoff Hotel" }] }),
+  head: () => ({ meta: [{ title: pageTitle("Settings", "—") }] }),
   component: SettingsPage,
 });
 

@@ -1,3 +1,4 @@
+import { pageTitle } from "@/lib/deployment-identity";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -15,7 +16,7 @@ import { format } from "date-fns";
 import { useState } from "react";
 
 export const Route = createFileRoute("/_authenticated/channels/$id")({
-  head: () => ({ meta: [{ title: "Channel · ThesKwoff Hotel" }] }),
+  head: () => ({ meta: [{ title: pageTitle("Channel") }] }),
   component: ChannelDetail,
   errorComponent: ({ error }) => <div className="p-6 text-sm text-destructive">{error.message}</div>,
   notFoundComponent: () => <div className="p-6">Channel not found</div>,

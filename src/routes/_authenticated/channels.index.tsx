@@ -1,3 +1,4 @@
+import { pageTitle } from "@/lib/deployment-identity";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -18,7 +19,7 @@ import { formatDistanceToNow } from "date-fns";
 import { useState } from "react";
 
 export const Route = createFileRoute("/_authenticated/channels/")({
-  head: () => ({ meta: [{ title: "Channel Manager · ThesKwoff Hotel" }] }),
+  head: () => ({ meta: [{ title: pageTitle("Channel Manager") }] }),
   component: ChannelsIndex,
 });
 

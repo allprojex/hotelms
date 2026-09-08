@@ -1,3 +1,4 @@
+import { pageTitle } from "@/lib/deployment-identity";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -60,7 +61,7 @@ function RefreshIntervalControl() {
 
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
-  head: () => ({ meta: [{ title: "Dashboard — ThesKwoff Hotel" }] }),
+  head: () => ({ meta: [{ title: pageTitle("Dashboard", "—") }] }),
   component: DashboardPage,
 });
 

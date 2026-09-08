@@ -1,9 +1,10 @@
+import { pageTitle } from "@/lib/deployment-identity";
 import { createFileRoute } from "@tanstack/react-router";
 import { EmployeeProfilePage } from "@/components/hrm/employee-profile-page";
 import { HrmWorkspaceShell } from "@/components/hrm/hrm-workspace-nav";
 
 export const Route = createFileRoute("/_authenticated/hrm/employees/$employeeId")({
-  head: () => ({ meta: [{ title: "Employee Profile · ThesKwoff Hotel" }] }),
+  head: () => ({ meta: [{ title: pageTitle("Employee Profile") }] }),
   component: EmployeeProfileRoute,
 });
 

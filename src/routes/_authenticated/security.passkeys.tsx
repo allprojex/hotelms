@@ -1,3 +1,4 @@
+import { pageTitle } from "@/lib/deployment-identity";
 /* eslint-disable @typescript-eslint/no-explicit-any -- Phase 5 tables await generated database types. */
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
@@ -40,7 +41,7 @@ import { toast } from "sonner";
 export const Route = createFileRoute("/_authenticated/security/passkeys")({
   head: () => ({
     meta: [
-      { title: "Passkeys & Security · ThesKwoff Hotel" },
+      { title: pageTitle("Passkeys & Security") },
       { name: "robots", content: "noindex" },
     ],
   }),

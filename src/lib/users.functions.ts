@@ -1,3 +1,4 @@
+import { ACCOUNTS_EMAIL_DOMAIN } from "@/lib/deployment-identity";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
@@ -282,7 +283,7 @@ export const createManagedAccount = createServerFn({ method: "POST" })
         if (duplicate.data) throw new Error("That identifier is already assigned.");
         const email =
           data.email?.trim() ||
-          `${normalized.replace(/[^a-z0-9]/g, ".")}.${crypto.randomUUID().slice(0, 8)}@accounts.theskwoffhotel.invalid`;
+          `${normalized.replace(/[^a-z0-9]/g, ".")}.${crypto.randomUUID().slice(0, 8)}@${ACCOUNTS_EMAIL_DOMAIN}`;
         const created = await supabaseAdmin.auth.admin.createUser({
           email,
           password: data.password,

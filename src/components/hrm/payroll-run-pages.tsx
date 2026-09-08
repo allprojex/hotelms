@@ -1,3 +1,4 @@
+import { BRAND_NAME } from "@/lib/deployment-identity";
 /* eslint-disable @typescript-eslint/no-explicit-any -- Phase 4B joined rows await generated types. */
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
@@ -479,7 +480,7 @@ export function PayrollRunDetailPage({ runId }: { runId: string }) {
         {
           title: `DRAFT ${reportType.replaceAll("-", " ")} · ${query.data.run.run_code} · v${query.data.selectedVersion}`,
           slug: `draft-${reportType}-${query.data.run.run_code}-v${query.data.selectedVersion}`,
-          propertyName: "ThesKwoff Hotel",
+          propertyName: BRAND_NAME,
           dateRange: {
             from: query.data.run.period.start_date,
             to: query.data.run.period.end_date,

@@ -25,6 +25,7 @@ __pycache__/
 .env.*
 !.env.example
 !.env.production.example
+!.env.demo.example
 !.env.test.example
 
 # Wrangler / Cloudflare

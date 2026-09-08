@@ -1,3 +1,4 @@
+import { pageTitle } from "@/lib/deployment-identity";
 import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
@@ -16,7 +17,7 @@ export const Route = createFileRoute("/change-password")({
     const { data } = await supabase.auth.getUser();
     if (!data.user) throw redirect({ to: "/auth" });
   },
-  head: () => ({ meta: [{ title: "Change Password — ThesKwoff Hotel" }] }),
+  head: () => ({ meta: [{ title: pageTitle("Change Password", "—") }] }),
   component: ChangePasswordPage,
 });
 

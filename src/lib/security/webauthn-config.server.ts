@@ -1,3 +1,4 @@
+import { BRAND_NAME } from "@/lib/deployment-identity";
 // Server-only WebAuthn Relying Party configuration.
 // RP ID and allowed origins are derived from SITE_URL (the same env var used for auth
 // redirect links) unless explicitly overridden — never hard-coded, per Phase 5 policy.
@@ -21,7 +22,7 @@ export function getRpId(): string {
 }
 
 export function getRpName(): string {
-  return process.env.WEBAUTHN_RP_NAME || "ThesKwoff Hotel PMS";
+  return process.env.WEBAUTHN_RP_NAME || `${BRAND_NAME} PMS`;
 }
 
 export function getAllowedOrigins(): string[] {

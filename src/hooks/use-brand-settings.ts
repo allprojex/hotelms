@@ -1,3 +1,4 @@
+import { BRAND_NAME } from "@/lib/deployment-identity";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -15,8 +16,8 @@ export type BrandSettings = {
 };
 
 const DEFAULTS: BrandSettings = {
-  app_name: "ThesKwoff Hotel",
-  app_short_name: "ThesKwoff Hotel",
+  app_name: BRAND_NAME,
+  app_short_name: BRAND_NAME,
   tagline: null,
   logo_url: null,
   logo_dark_url: null,

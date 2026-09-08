@@ -1,3 +1,4 @@
+import { BRAND_NAME } from "@/lib/deployment-identity";
 // Server-only PDF builder. Never import from client bundles.
 // pdf-lib is safe in the Cloudflare Worker SSR runtime.
 import {
@@ -53,7 +54,7 @@ export interface DocData {
 const M = 40;
 const W = 595;
 const H = 842;
-const DEFAULT_BRAND_NAME = "ThesKwoff Hotel";
+const DEFAULT_BRAND_NAME = BRAND_NAME;
 const DEFAULT_TITLE_COLOR = rgb(0.05, 0.09, 0.16);
 
 function hexToRgbColor(hex: string | null | undefined): ReturnType<typeof rgb> | null {

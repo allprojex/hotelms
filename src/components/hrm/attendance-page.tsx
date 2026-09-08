@@ -1,3 +1,4 @@
+import { BRAND_NAME } from "@/lib/deployment-identity";
 /* eslint-disable @typescript-eslint/no-explicit-any -- Detail/export join shapes will be generated with Phase 3B Supabase types. */
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -191,7 +192,7 @@ export function AttendancePage() {
         {
           title: "Attendance Report",
           slug: "attendance",
-          propertyName: `ThesKwoff Hotel (${result.timezone})`,
+          propertyName: `${BRAND_NAME} (${result.timezone})`,
           dateRange: state.from && state.to ? { from: state.from, to: state.to } : null,
           rows,
           columns: [

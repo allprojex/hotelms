@@ -1,3 +1,4 @@
+import { pageTitle } from "@/lib/deployment-identity";
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -42,7 +43,7 @@ import { BrandModule } from "@/components/admin/modules/brand-module";
 export const Route = createFileRoute("/_authenticated/admin")({
   head: () => ({
     meta: [
-      { title: "Administration · ThesKwoff Hotel" },
+      { title: pageTitle("Administration") },
       {
         name: "description",
         content:
