@@ -32,12 +32,34 @@
  * .env.demo.example does.
  */
 
+/**
+ * Every VITE_ value this module can read, written out as LITERAL member
+ * accesses on `import.meta.env`.
+ *
+ * This shape is mandatory, not stylistic. Vite resolves `import.meta.env.VITE_X`
+ * by static text substitution, so a computed lookup — `import.meta.env[key]`,
+ * or destructuring the object and indexing it — cannot be resolved. Under
+ * `vite build` that merely produced an inlined object and happened to work;
+ * under the dev module runner (`vite dev`, which is what the smoke workflow
+ * exercises) it *throws*: "Dynamic access of import.meta.env is not supported".
+ * Because the exports below are module-level constants, that throw happened
+ * during module evaluation and took down every SSR render, so the dev server
+ * never became healthy. Adding a key here is the only way to add a variable.
+ */
+const VITE_ENV: Record<string, unknown> = {
+  APP_BRAND_NAME: import.meta.env.VITE_APP_BRAND_NAME,
+  SITE_URL: import.meta.env.VITE_SITE_URL,
+  APP_ENV: import.meta.env.VITE_APP_ENV,
+  APP_ENV_LABEL: import.meta.env.VITE_APP_ENV_LABEL,
+  ACCOUNTS_EMAIL_DOMAIN: import.meta.env.VITE_ACCOUNTS_EMAIL_DOMAIN,
+};
+
 function readEnv(key: string): string | undefined {
-  // import.meta.env is populated by Vite in both the client and the SSR
-  // bundle; process.env is the fallback for plain-Node contexts (scripts,
-  // the Nitro server's own environment) where Vite never transformed the file.
-  const viteEnv = (import.meta as unknown as { env?: Record<string, unknown> })?.env;
-  const fromVite = viteEnv?.[`VITE_${key}`];
+  // The VITE_ form is inlined into both the client and the SSR bundle at build
+  // time; process.env is the fallback for plain-Node contexts (the Nitro
+  // server's own environment, scripts) and is also what lets a server-only
+  // caller be configured without a VITE_ prefix.
+  const fromVite = VITE_ENV[key];
   if (typeof fromVite === "string" && fromVite.trim()) return fromVite.trim();
 
   const fromNode =

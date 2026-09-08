@@ -113,6 +113,37 @@ describe("deployment identity — a second deployment can rename itself from con
     expect(m.BRAND_NAME).toBe("ThesKwoff Hotel");
   });
 
+  it("reads import.meta.env only through literal member access, never a computed key", () => {
+    // Regression guard. Vite resolves `import.meta.env.VITE_X` by static text
+    // substitution. A computed lookup survives `vite build` (the object gets
+    // inlined) but THROWS under the dev module runner — "Dynamic access of
+    // import.meta.env is not supported" — and because this module's exports are
+    // top-level constants, that throw happens during module evaluation and 500s
+    // every SSR render, so `vite dev` never comes up. The smoke workflow caught
+    // it; nothing else did, because tests and production builds both resolve
+    // import.meta.env differently from the dev runner.
+    const source = read(resolve(root, "src/lib/deployment-identity.ts"));
+    const code = source
+      .replace(/\/\*[\s\S]*?\*\//g, "") // block comments
+      .replace(/^[ \t]*\/\/.*$/gm, ""); // line comments
+
+    expect(code).not.toMatch(/import\.meta\.env\s*\[/);
+    expect(code).not.toMatch(/import\.meta[\s\S]{0,80}?\)\s*\?\.\s*env/);
+
+    // Every surviving reference must be `import.meta.env.VITE_<NAME>`.
+    const references = [...code.matchAll(/import\.meta\.env(\S*)/g)].map((m) => m[1]);
+    expect(references.length).toBeGreaterThan(0);
+    for (const ref of references) expect(ref).toMatch(/^\.VITE_[A-Z0-9_]+,?$/);
+
+    // And every key readEnv() is called with must exist in the literal map.
+    const mapKeys = [...code.matchAll(/^\s{2}([A-Z0-9_]+): import\.meta\.env\./gm)].map(
+      (m) => m[1],
+    );
+    const requestedKeys = [...code.matchAll(/readEnv\("([A-Z0-9_]+)"\)/g)].map((m) => m[1]);
+    expect(requestedKeys.length).toBeGreaterThan(0);
+    for (const key of requestedKeys) expect(mapKeys).toContain(key);
+  });
+
   it("IS_DEMO is not derived from NODE_ENV — a demo deployment is still a production build", async () => {
     const source = read(resolve(root, "src/lib/deployment-identity.ts"));
     // The module may *explain* NODE_ENV in a comment; it must never read it.
