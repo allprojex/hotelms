@@ -25,6 +25,7 @@ import { ComplianceLogTab } from "@/components/security/compliance-log-tab";
 import { FileFirewallTab } from "@/components/security/file-firewall-tab";
 import { format } from "date-fns";
 import { toast } from "sonner";
+import { ChildRouteOr } from "@/components/child-route-or";
 
 export const Route = createFileRoute("/_authenticated/admin_/security")({
   head: () => ({
@@ -34,7 +35,11 @@ export const Route = createFileRoute("/_authenticated/admin_/security")({
       { name: "robots", content: "noindex" },
     ],
   }),
-  component: SecurityCenterPage,
+  component: () => (
+    <ChildRouteOr>
+      <SecurityCenterPage />
+    </ChildRouteOr>
+  ),
 });
 
 function SecurityCenterPage() {

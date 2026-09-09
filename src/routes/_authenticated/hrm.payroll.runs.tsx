@@ -2,12 +2,15 @@ import { pageTitle } from "@/lib/deployment-identity";
 import { createFileRoute } from "@tanstack/react-router";
 import { PayrollRunsPage } from "@/components/hrm/payroll-run-pages";
 import { HrmWorkspaceShell } from "@/components/hrm/hrm-workspace-nav";
+import { ChildRouteOr } from "@/components/child-route-or";
 
 export const Route = createFileRoute("/_authenticated/hrm/payroll/runs")({
   head: () => ({ meta: [{ title: pageTitle("Draft Payroll Runs") }] }),
   component: () => (
-    <HrmWorkspaceShell>
-      <PayrollRunsPage />
-    </HrmWorkspaceShell>
+    <ChildRouteOr>
+      <HrmWorkspaceShell>
+        <PayrollRunsPage />
+      </HrmWorkspaceShell>
+    </ChildRouteOr>
   ),
 });
