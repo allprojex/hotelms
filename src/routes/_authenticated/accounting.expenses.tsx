@@ -32,13 +32,16 @@ import {
 } from "@/components/ui/select";
 import { Receipt, Plus, AlertCircle } from "lucide-react";
 import { AccountingWorkspaceShell } from "@/components/accounting/accounting-workspace-nav";
+import { ChildRouteOr } from "@/components/child-route-or";
 
 export const Route = createFileRoute("/_authenticated/accounting/expenses")({
   head: () => ({ meta: [{ title: "Expenses · Accounting" }] }),
   component: () => (
-    <AccountingWorkspaceShell>
-      <ExpensesPage />
-    </AccountingWorkspaceShell>
+    <ChildRouteOr>
+      <AccountingWorkspaceShell>
+        <ExpensesPage />
+      </AccountingWorkspaceShell>
+    </ChildRouteOr>
   ),
 });
 

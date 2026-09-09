@@ -62,10 +62,15 @@ export const listDraftPayrollRuns = createServerFn({ method: "POST" })
     const range = pageRange(data.page, data.pageSize);
     let query = (context.supabase as any)
       .from("payroll_runs")
-      .select(
-        "*,period:calendar_period_id(period_label,start_date,end_date,status),version:current_calculation_version(id,status,completed_at)",
-        { count: "exact" },
-      )
+      // current_calculation_version is an integer column on payroll_runs, not a
+      // foreign key, so embedding it made PostgREST reject the whole query with
+      // "Could not find a relationship between 'payroll_runs' and
+      // 'current_calculation_version' in the schema cache" — the draft runs list
+      // failed on every load. The number itself is already in `*`, and nothing
+      // in the UI read the embedded object.
+      .select("*,period:calendar_period_id(period_label,start_date,end_date,status)", {
+        count: "exact",
+      })
       .eq("property_id", data.propertyId)
       .order("created_at", { ascending: false })
       .range(range.from, range.to);

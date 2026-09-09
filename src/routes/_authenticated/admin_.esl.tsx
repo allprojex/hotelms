@@ -24,6 +24,7 @@ import { Tag, Grid3x3, RefreshCw, Plus, Download, Trash2, ScanLine } from "lucid
 import { DevicesTab } from "@/components/esl/devices-tab";
 import { format } from "date-fns";
 import { toast } from "sonner";
+import { ChildRouteOr } from "@/components/child-route-or";
 
 export const Route = createFileRoute("/_authenticated/admin_/esl")({
   head: () => ({
@@ -33,7 +34,11 @@ export const Route = createFileRoute("/_authenticated/admin_/esl")({
       { name: "robots", content: "noindex" },
     ],
   }),
-  component: EslPage,
+  component: () => (
+    <ChildRouteOr>
+      <EslPage />
+    </ChildRouteOr>
+  ),
 });
 
 function EslPage() {
