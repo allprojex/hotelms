@@ -83,8 +83,8 @@ describe("deployment identity — a second deployment can rename itself from con
   });
 
   it("SITE_URL becomes the crawler-facing origin, with any trailing slash stripped", async () => {
-    const m = await importWith({ SITE_URL: "https://pms-demo.infinitytechapp.com/" });
-    expect(m.SITE_ORIGIN).toBe("https://pms-demo.infinitytechapp.com");
+    const m = await importWith({ SITE_URL: "https://app.infinitytechub.com/" });
+    expect(m.SITE_ORIGIN).toBe("https://app.infinitytechub.com");
   });
 
   it("APP_ENV=demo marks the deployment and supplies a default label", async () => {
