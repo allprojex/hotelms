@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useActiveProperty } from "@/hooks/use-active-property";
 import { Card } from "@/components/ui/card";
@@ -13,6 +13,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { AlertCircle, Loader2, Plus } from "lucide-react";
 import { toast } from "sonner";
+import {
+  useRoomTypeCoverImages,
+  RoomTypeRowThumbnail,
+} from "@/components/gallery/room-type-gallery-preview";
 
 export const Route = createFileRoute("/_authenticated/rooms/")({
   head: () => ({ meta: [{ title: "Rooms" }] }),
@@ -50,6 +54,18 @@ function RoomsPage() {
     },
   });
 
+  // One metadata query + one bulk sign call covers every room type on the
+  // page, however many rooms there are: rooms sharing a room type share the
+  // same resolved cover, so this never becomes N+1. The ids come from rooms
+  // already filtered by property_id, and gallery_images' own RLS is
+  // property-scoped on top, so a room can only ever resolve a photo from its
+  // own property.
+  const roomTypeIds = useMemo(() => {
+    const rows = (rooms.data ?? []) as { room_type_id: string | null }[];
+    return [...new Set(rows.map((r) => r.room_type_id).filter((id): id is string => !!id))];
+  }, [rooms.data]);
+  const covers = useRoomTypeCoverImages(roomTypeIds);
+
   async function update(id: string, patch: any) {
     const { error } = await supabase.from("rooms").update(patch).eq("id", id);
     if (error) return toast.error(error.message);
@@ -82,15 +98,15 @@ function RoomsPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Room</TableHead><TableHead>Type</TableHead><TableHead>Floor</TableHead>
+              <TableHead>Room</TableHead><TableHead className="w-[52px]"><span className="sr-only">Room type photo</span></TableHead><TableHead>Type</TableHead><TableHead>Floor</TableHead>
               <TableHead>Status</TableHead><TableHead>Housekeeping</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {rooms.data?.map((r: any) => (
               <TableRow key={r.id}>
-                <TableCell className="font-medium">{r.number}</TableCell>
-                <TableCell>{r.room_types?.name}</TableCell>
+                <TableCell className="font-medium">{r.number}</TableCell><TableCell className="w-[52px] py-1.5"><RoomTypeRowThumbnail url={covers.data?.get(r.room_type_id)} alt={r.room_types?.name ? `${r.room_types.name} room type photo` : ""} /></TableCell>
+                <TableCell className="whitespace-nowrap">{r.room_types?.name}</TableCell>
                 <TableCell>{r.floor ?? "—"}</TableCell>
                 <TableCell>
                   <Select value={r.status} onValueChange={(v) => update(r.id, { status: v })}>

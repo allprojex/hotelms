@@ -1,5 +1,26 @@
 import { safeStorageSegment } from "@/lib/hrm/domain";
 
+/**
+ * Which photo represents a room type: the first row of a result already
+ * ordered is_cover DESC, sort_order ASC — i.e. the explicitly-flagged cover if
+ * there is one, otherwise the first photo in the curator's own order. A room
+ * type with no photos is simply absent from the map, which is what makes a
+ * caller fall back to a placeholder rather than to a broken image.
+ *
+ * Domain rule rather than component code so it can be asserted on its own and
+ * so every surface that shows "the room type's photo" agrees on what that is.
+ */
+export function pickRoomTypeCoverPaths(
+  rows: ReadonlyArray<{ room_type_id: string; thumbnail_path: string }>,
+): Map<string, string> {
+  const coverByRoomType = new Map<string, string>();
+  for (const row of rows) {
+    if (!coverByRoomType.has(row.room_type_id))
+      coverByRoomType.set(row.room_type_id, row.thumbnail_path);
+  }
+  return coverByRoomType;
+}
+
 export function uuid(value: unknown): string {
   const v = String(value ?? "");
   if (!/^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(v)) throw new Error("Valid identifier required");
