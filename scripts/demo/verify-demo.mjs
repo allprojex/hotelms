@@ -211,7 +211,7 @@ const audits = await service.select("night_audits", `select=id&property_id=eq.${
 check(
   "Night audit history",
   audits.length > 0 ? "PASS" : "WARN",
-  `${audits.length} night audit records (run_night_audit fails on this schema — see the defect report)`,
+  `${audits.length} night audit records`,
 );
 
 // ── summary ──────────────────────────────────────────────────────────────────
