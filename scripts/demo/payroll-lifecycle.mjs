@@ -14,11 +14,23 @@
 
 import { randomUUID } from "node:crypto";
 import { loadContext, signIn, serviceClient } from "./lib/env.mjs";
+import { loadStaffClients } from "./stages/04-operations.mjs";
 
 const ctx = loadContext();
 const service = serviceClient(ctx);
 const admin = await signIn(ctx, ctx.adminEmail, ctx.adminPassword, "demo.admin");
 const pid = ctx.propertyId;
+
+// payroll_settings.require_payroll_separation_of_duties is on, so whoever
+// submits a run may not approve it. The HR manager reviews and submits; the
+// administrator approves. Those are the roles the permission matrix actually
+// grants payroll approval to — hr, hotel_owner and super_admin; the general
+// manager holds none of them.
+const { hr } = await loadStaffClients({
+  ctx,
+  admin,
+  signIn: (email, password, label) => signIn(ctx, email, password, label),
+});
 
 const runs = await service.select(
   "payroll_runs",
@@ -60,18 +72,21 @@ for (const run of runs) {
     }
     console.log(`  · acknowledged ${acknowledged} of ${open.length} warnings`);
 
-    const locked = await admin.tryRpc("payroll_transition_review", {
-      _property_id: pid, _run_id: run.id, _action: "lock", _reason: "Reviewed by the general manager",
+    const locked = await hr.tryRpc("payroll_transition_review", {
+      _property_id: pid, _run_id: run.id, _action: "lock", _reason: "Reviewed by the HR manager",
     });
     console.log(locked.ok ? "  · locked for review" : `  ! lock: ${JSON.stringify(locked.body).slice(0, 220)}`);
     if (!locked.ok) continue;
     run.status = "locked_for_review";
   }
 
-  // 2. approval
-  if (run.status === "locked_for_review" || run.status === "pending_approval") {
-    for (const action of ["submit", "approve"]) {
-      const r = await admin.tryRpc("payroll_approval_transition", {
+  // 2. approval — a run that was returned for correction re-enters here, and
+  // one already submitted only needs the approval half.
+  if (["locked_for_review", "returned_for_correction", "submitted_for_approval"].includes(run.status)) {
+    const steps =
+      run.status === "submitted_for_approval" ? [["approve", admin]] : [["submit", hr], ["approve", admin]];
+    for (const [action, actor] of steps) {
+      const r = await actor.tryRpc("payroll_approval_transition", {
         _property_id: pid,
         _run_id: run.id,
         _action: action,
@@ -79,7 +94,11 @@ for (const run of runs) {
         _reason: action === "approve" ? "Approved for payment" : "Submitted for approval",
         _idempotency_key: randomUUID(),
       });
-      console.log(r.ok ? `  · ${action}d` : `  ! ${action}: ${JSON.stringify(r.body).slice(0, 220)}`);
+      console.log(
+        r.ok
+          ? `  · ${action === "submit" ? "submitted" : "approved"} by ${actor.label}`
+          : `  ! ${action}: ${JSON.stringify(r.body).slice(0, 220)}`,
+      );
     }
   }
 

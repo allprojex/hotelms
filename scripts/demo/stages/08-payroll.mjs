@@ -22,10 +22,11 @@ import { DESIGNATIONS } from "./07-hrm.mjs";
 
 const YEAR = 2026;
 
+// The employee base salary is emitted by the calculation engine itself, from
+// payroll_employee_compensations.base_salary, as a base_earning line. A
+// "Basic Salary" component on top of it would add — and tax — the same money a
+// second time, so the components below are only what sits ON TOP of base pay.
 export const PAY_COMPONENTS = [
-  { code: "BASIC", name: "Basic Salary", component_type: "earning", value_type: "fixed", calculation_method: "none",
-    taxable_classification: "taxable", statutory_classification: "contributory", pensionable_classification: "pensionable",
-    recurrence: "recurring", display_order: 10, payslip_visible: true, proration_enabled: true, attendance_sensitive: false },
   { code: "HOUSE", name: "Housing Allowance", component_type: "earning", value_type: "fixed", calculation_method: "none",
     taxable_classification: "taxable", statutory_classification: "contributory", pensionable_classification: "pensionable",
     recurrence: "recurring", display_order: 20, payslip_visible: true, proration_enabled: true, attendance_sensitive: false },
@@ -198,10 +199,9 @@ export async function run({ ctx, admin, signIn, log }) {
   const componentByCode = new Map(components.rows.map((c) => [c.code, c]));
   log(`  · pay components: ${components.created} created, ${components.existing} already present`);
 
-  const basic = componentByCode.get("BASIC");
   const ruleSpecs = [
-    { code: "BASIC", calculation_method: "percentage_base", percentage: 100 },
-    { code: "HOUSE", calculation_method: "percentage_component", percentage: 15, basis_component_id: basic.id },
+    // Housing is fifteen per cent of the employee base salary.
+    { code: "HOUSE", calculation_method: "percentage_base", percentage: 15 },
     { code: "TRANS", calculation_method: "fixed_amount", amount: 350 },
     { code: "MEAL", calculation_method: "fixed_amount", amount: 220 },
     { code: "LOAN", calculation_method: "manual_amount" },
@@ -289,13 +289,13 @@ export async function run({ ctx, admin, signIn, log }) {
 
   const structureComponents = await write.select("payroll_structure_components", `select=id,pay_component_id&property_id=eq.${pid}`);
   const haveStructureComponent = new Set(structureComponents.map((r) => r.pay_component_id));
-  const structureComponentRows = ["BASIC", "HOUSE", "TRANS", "MEAL"]
+  const structureComponentRows = ["HOUSE", "TRANS", "MEAL"]
     .filter((code) => !haveStructureComponent.has(componentByCode.get(code).id))
     .map((code, index) => ({
       property_id: pid,
       salary_structure_id: structure.id,
       pay_component_id: componentByCode.get(code).id,
-      required: code === "BASIC",
+      required: false,
       effective_from: `${YEAR}-01-01`,
       display_order: (index + 1) * 10,
       active: true,
