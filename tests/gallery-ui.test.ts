@@ -230,12 +230,20 @@ describe("Lightbox", () => {
 });
 
 describe("Regression safety on pre-existing surfaces", () => {
-  it("29. rooms.types.tsx keeps its original insert/update save path untouched — only a cover thumbnail and a photo-management link were added", () => {
-    expect(roomTypesRoute).toContain(
-      'supabase.from("room_types").update(payload).eq("id", existing.id)',
-    );
-    expect(roomTypesRoute).toContain('supabase.from("room_types").insert(payload)');
-    expect(roomTypesRoute).toContain("RoomTypeCoverThumbnail");
+  it("29. rooms.types.tsx keeps its original insert/update save path untouched — the card now resolves its cover from the batched gallery lookup", () => {
+    // Compared whitespace-insensitively: the save path is unchanged, but the
+    // card around it was reformatted when it was rebuilt to present room
+    // information alongside the photo.
+    const flat = roomTypesRoute.replace(/\s+/g, " ");
+    expect(flat).toContain('.from("room_types") .update(payload) .eq("id", existing.id');
+    expect(flat).toContain('supabase.from("room_types").insert(payload)');
+    // RoomTypeCoverThumbnail was deliberately dropped here: mounting it once
+    // per card cost a metadata query plus a signing round-trip per room type.
+    // Every cover now comes from the batched hook instead.
+    expect(roomTypesRoute).not.toContain("RoomTypeCoverThumbnail");
+    expect(roomTypesRoute).toContain("useRoomTypeCoverImages(roomTypeIds)");
+    // The photo-management link still points at the same place.
+    expect(roomTypesRoute).toContain('context: "room_type", roomTypeId: type.id');
   });
 
   it("29. reservations.new.tsx keeps its original reservation-creation flow untouched — only a gallery preview was added under the room type select", () => {
