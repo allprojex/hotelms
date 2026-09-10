@@ -1,10 +1,15 @@
 #!/usr/bin/env bash
 # Provision the Hotel PMS DEMO instance on the shared VPS.
 #
-# Run as root, ONCE, on srv1760881. Idempotent: re-running it is safe and
-# will not disturb a demo that is already provisioned.
+# Run with root privileges, ONCE, on srv1760881. Idempotent: re-running it is
+# safe and will not disturb a demo that is already provisioned.
 #
-#   sudo bash provision-demo.sh
+# Root SSH is disabled on this host and must stay that way. Run it as the
+# "deploy" administrator account, which is in the sudo group:
+#
+#   ssh deploy@187.127.234.113 "sudo bash /tmp/provision-demo.sh"
+#
+# Do NOT broaden claude-deploy's narrow sudo scope to run this.
 #
 # WHAT IT DOES NOT DO, deliberately:
 #   - never touches /opt/infinity-pms, infinity-pms.service, port 3100,
