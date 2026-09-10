@@ -230,12 +230,19 @@ So verify identity from the served bundle instead. `VITE_SUPABASE_URL` is
 inlined at build time, so the demo's own JavaScript names its project:
 
 ```bash
-# must print akcppyymgoubsqedpkch, and must NOT print texhuavnrdhaohqzlyqw
-curl -s https://app.infinitytechub.com/ \
-  | grep -oE '/_build/assets/[A-Za-z0-9._-]+\.js' | sort -u | head -20 \
+# must print exactly akcppyymgoubsqedpkch.supabase.co
+# printing NOTHING is the failure this catches: it means the VITE_ values were
+# never inlined and every page will hit the error boundary in the browser.
+curl -s https://app.infinitytechub.com/auth \
+  | grep -aoE '/assets/[A-Za-z0-9._-]+\.js' | sort -u \
   | while read -r a; do curl -s "https://app.infinitytechub.com$a"; done \
-  | grep -oE '[a-z]{20}\.supabase\.co' | sort -u
+  | grep -aoE '[a-z0-9]{15,25}\.supabase\.co' | sort -u
 ```
+
+Assets are served from `/assets/`, not `/_build/assets/` — an earlier revision
+of this file had the wrong path, so the check silently matched nothing and
+looked like it had passed. The provisioning script now asserts the same thing
+at build time and **fails** rather than warning.
 
 A faster equivalent, once signed in: the demo shows **Infinity Grand Hotel**
 with GHS amounts and an Africa/Accra clock, and the demo database contains no
