@@ -4,6 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { startAuthentication, browserSupportsWebAuthn } from "@simplewebauthn/browser";
 import { supabase } from "@/integrations/supabase/client";
 import { identifierSignIn } from "@/lib/auth.functions";
+import { getAuthenticationPolicy, recordMfaEvent } from "@/lib/security/mfa.functions";
 import {
   beginPasskeyAuthentication,
   completePasskeyAuthentication,
@@ -38,6 +39,8 @@ function AuthPage() {
   const signIn = useServerFn(identifierSignIn);
   const beginPasskey = useServerFn(beginPasskeyAuthentication);
   const completePasskey = useServerFn(completePasskeyAuthentication);
+  const getPolicy = useServerFn(getAuthenticationPolicy);
+  const auditMfa = useServerFn(recordMfaEvent);
   const [accountType, setAccountType] = useState<LoginAccountType>("staff");
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
@@ -55,9 +58,25 @@ function AuthPage() {
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
-      if (data.session) navigate({ to: "/dashboard", replace: true });
+      if (data.session) void routeAfterPrimaryAuthentication(false);
     });
+    // Authentication routing is re-run explicitly after each successful sign-in.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [navigate]);
+
+  async function routeAfterPrimaryAuthentication(mustChangePassword: boolean) {
+    if (mustChangePassword) {
+      navigate({ to: "/change-password", replace: true });
+      return;
+    }
+    const policy = await getPolicy();
+    if (policy.next !== "complete") {
+      await auditMfa({ data: { action: "auth.mfa.required" } }).catch(() => undefined);
+      navigate({ to: "/mfa", replace: true });
+      return;
+    }
+    navigate({ to: "/dashboard", replace: true });
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -69,10 +88,7 @@ function AuthPage() {
         refresh_token: result.refreshToken,
       });
       if (session.error) throw session.error;
-      navigate({
-        to: result.mustChangePassword ? "/change-password" : "/dashboard",
-        replace: true,
-      });
+      await routeAfterPrimaryAuthentication(result.mustChangePassword);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Invalid ID or password");
     } finally {
@@ -97,10 +113,7 @@ function AuthPage() {
         refresh_token: result.refreshToken,
       });
       if (session.error) throw session.error;
-      navigate({
-        to: result.mustChangePassword ? "/change-password" : "/dashboard",
-        replace: true,
-      });
+      await routeAfterPrimaryAuthentication(result.mustChangePassword);
     } catch (error) {
       if (error instanceof Error && error.name === "NotAllowedError") {
         // User cancelled the device prompt — no need for an error toast.
@@ -229,6 +242,11 @@ function AuthPage() {
                 : "Passkey sign-in requires a secure (HTTPS) connection."}
             </p>
           )}
+
+          <p className="mt-5 text-center text-xs leading-relaxed text-muted-foreground">
+            Password sign-in is always available. Passkeys are the faster recommended option.
+            Privileged accounts also verify an authenticator code.
+          </p>
 
           <p className="mt-5 text-center text-xs text-muted-foreground">
             Contact your system administrator to reset your password.

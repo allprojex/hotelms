@@ -20,6 +20,8 @@ import { isAllowed, requiredRolesFor } from "@/lib/admin/route-permissions";
 import { getDeviceContext } from "@/lib/device-context";
 import { pingSession } from "@/lib/sessions.functions";
 import { getPasswordChangeState } from "@/lib/auth.functions";
+import { getAuthenticationPolicy } from "@/lib/security/mfa.functions";
+import { recordLogout } from "@/lib/security/mfa.functions";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated")({
@@ -27,6 +29,8 @@ export const Route = createFileRoute("/_authenticated")({
   beforeLoad: async () => {
     const { data, error } = await supabase.auth.getUser();
     if (error || !data.user) throw redirect({ to: "/auth" });
+    const policy = await getAuthenticationPolicy();
+    if (policy.required && policy.assuranceLevel !== "aal2") throw redirect({ to: "/mfa" });
     return { user: data.user };
   },
   component: AuthLayout,
@@ -45,6 +49,7 @@ function AuthLayout() {
   const guardReady = !required || !rolesQ.isLoading;
   const allowed = !required || isAllowed(currentPath, rows, propertyId ?? null);
   const passwordState = useServerFn(getPasswordChangeState);
+  const auditLogout = useServerFn(recordLogout);
 
   useEffect(() => {
     passwordState()
@@ -58,6 +63,7 @@ function AuthLayout() {
     const reset = () => {
       if (timer.current) clearTimeout(timer.current);
       timer.current = setTimeout(async () => {
+        await auditLogout().catch(() => undefined);
         await supabase.auth.signOut();
         toast.info("Signed out after 30 minutes of inactivity.");
         navigate({ to: "/auth", replace: true });
@@ -70,7 +76,7 @@ function AuthLayout() {
       events.forEach((e) => window.removeEventListener(e, reset));
       if (timer.current) clearTimeout(timer.current);
     };
-  }, [navigate]);
+  }, [auditLogout, navigate]);
 
   // Session heartbeat for Live Online Users
   const ping = useServerFn(pingSession);

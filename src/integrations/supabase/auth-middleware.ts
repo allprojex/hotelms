@@ -4,6 +4,7 @@ import { createMiddleware } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "./types";
+import { assuranceLevelFromClaims, requiresMfaForRoles } from "@/lib/security/mfa-policy";
 
 function isNewSupabaseApiKey(value: string): boolean {
   return value.startsWith("sb_publishable_") || value.startsWith("sb_secret_");
@@ -32,7 +33,7 @@ function createSupabaseFetch(supabaseKey: string): typeof fetch {
   };
 }
 
-function authMiddleware(allowPasswordChange: boolean) {
+function authMiddleware(options: { allowPasswordChange: boolean; allowAal1: boolean }) {
   return createMiddleware({ type: "function" }).server(async ({ next }) => {
     const SUPABASE_URL = process.env.SUPABASE_URL;
     const SUPABASE_PUBLISHABLE_KEY = process.env.SUPABASE_PUBLISHABLE_KEY;
@@ -101,18 +102,40 @@ function authMiddleware(allowPasswordChange: boolean) {
       .eq("id", data.claims.sub)
       .single()) as any;
     if (profileError || !profile || profile.status !== "active") throw new Error("Unauthorized");
-    if (!allowPasswordChange && profile.must_change_password)
+    if (!options.allowPasswordChange && profile.must_change_password)
       throw new Error("Password change required");
+
+    const { data: roleRows, error: rolesError } = (await supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", data.claims.sub)) as any;
+    if (rolesError) throw new Error("Unauthorized");
+    const roles = (roleRows ?? []).map((row: { role: string }) => row.role);
+    const mfaRequired = requiresMfaForRoles(roles);
+    const assuranceLevel = assuranceLevelFromClaims(data.claims);
+    if (!options.allowAal1 && mfaRequired && assuranceLevel !== "aal2") {
+      throw new Error("MFA verification required");
+    }
 
     return next({
       context: {
         supabase,
         userId: data.claims.sub,
         claims: data.claims,
+        roles,
+        mfaRequired,
+        assuranceLevel,
       },
     });
   });
 }
 
-export const requireSupabaseAuth = authMiddleware(false);
-export const requireSupabaseAuthAllowPasswordChange = authMiddleware(true);
+export const requireSupabaseAuth = authMiddleware({ allowPasswordChange: false, allowAal1: false });
+export const requireSupabaseAuthAllowPasswordChange = authMiddleware({
+  allowPasswordChange: true,
+  allowAal1: true,
+});
+export const requireSupabaseAuthAllowMfaChallenge = authMiddleware({
+  allowPasswordChange: false,
+  allowAal1: true,
+});
