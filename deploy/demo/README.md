@@ -53,31 +53,28 @@ commands (see the end of this file).
 
 ## A. DNS
 
-### Read this first — the hostname is currently in use
+### This hostname is being taken over, deliberately
 
-`app.infinitytechub.com` resolves today to **185.158.133.1**, which is a
-**Cloudflare** edge address (`Server: cloudflare`, `CF-RAY`, `__cf_bm`), and it
-is serving a **different, live application**: *Infinity Mart Sales Management
-360*. It has nothing to do with this VPS — no nginx block here answers for any
-`infinitytechub` hostname.
+`app.infinitytechub.com` resolves today to **185.158.133.1**, a **Cloudflare**
+edge address (`Server: cloudflare`, `CF-RAY`, `__cf_bm`), serving a
+Cloudflare-hosted build of *Infinity Mart Sales Management 360*. It has nothing
+to do with this VPS — no nginx block here answers for any `infinitytechub`
+hostname.
 
-**Repointing this record takes that application offline at this hostname.**
-Decide before you change anything:
-
-- **If Sales 360 should keep the name** — use a free subdomain for the PMS demo
-  instead. Both `pms.infinitytechub.com` and `demo.infinitytechub.com` are
-  currently unused (NXDOMAIN). Pick one, and change `SITE_URL` /
-  `VITE_SITE_URL` in `.env.demo` and the nginx `server_name` to match before
-  building.
-- **If the PMS demo should take the name** — proceed with the record below and
-  move Sales 360 to its own hostname first.
+**The owner has decided the PMS demo takes this hostname.** Sales 360 is being
+replaced *at this name only*. Nothing of it is deleted: its application, files
+and database are untouched, and the VPS-hosted build of the same product stays
+live and unaffected at **`infinitytechapp.com`** (separate nginx block,
+separate port 3000, pm2-managed — none of which this runbook touches).
 
 ### The record
 
 The zone is on **Hostinger** DNS (`solar.dns-parking.com` /
 `lunar.dns-parking.com`), so edit it in **hPanel → Domains → DNS / Nameservers**.
-There is an existing `A` record for `app`; change its value rather than adding
-a second one.
+
+The `app` host has **exactly one record** — a single `A`, TTL 14400, value
+`185.158.133.1`. There is **no `AAAA`, no `CNAME` and no `TXT`**, so nothing
+needs deleting: change that one record's value.
 
 | Field | Value |
 |---|---|
@@ -86,6 +83,14 @@ a second one.
 | **Points to / Value** | `187.127.234.113` |
 | **TTL** | `300` (raise to 3600 once verified) |
 
+**Propagation.** The current record's TTL is **14400 (4 hours)**, so resolvers
+that have already cached `185.158.133.1` may keep serving it for up to that
+long. During the overlap some visitors reach the old Sales 360 build and others
+reach the demo. The demo is not live yet, so nothing of ours is "down" — but
+**certbot must wait** until Let's Encrypt's validators see `187.127.234.113`,
+or the HTTP-01 challenge fails. Lowering the TTL to 300 in the same edit makes
+every future change quick.
+
 **Why 187.127.234.113.** That is the VPS's own public address, held directly on
 `eth0` with no NAT and no CDN in front of it. It is confirmed independently by
 production: `theskwoffhotel.com` resolves to it and is served from this host by
@@ -93,10 +98,10 @@ plain nginx, with no Cloudflare in the path. `infinitytechapp.com` resolves to
 it too. The demo will be served the same way — directly from this VPS — so the
 A record must name the origin, not a proxy.
 
-Leave the apex `infinitytechub.com` (Hostinger shared hosting) and everything
-under `theskwoffhotel.com` exactly as they are. If an `AAAA` record exists for
-`app`, delete it — a stale `AAAA` wins on IPv6 clients and silently bypasses
-the demo.
+Change nothing else. Leave the apex `infinitytechub.com` (Hostinger shared
+hosting, and it rotates between addresses), everything under
+`theskwoffhotel.com`, and the `infinitytechapp.com` record that keeps Sales 360
+reachable, all exactly as they are.
 
 Confirm before continuing:
 
