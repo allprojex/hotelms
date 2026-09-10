@@ -1,0 +1,50 @@
+# Infinity PMS — DEMO instance (app.infinitytechub.com)
+#
+# Deliberately a sibling of infinity-pms.service, not a variant of it. Every
+# field that could reach production is different: user, directory, env file,
+# port, and the ReadWritePaths grant. Restarting this unit cannot restart
+# production, and restarting production cannot restart this.
+#
+# Install to /etc/systemd/system/infinity-pms-demo.service
+#
+# NOT PM2. Hotel PMS is a systemd service on this host, demo included.
+
+[Unit]
+Description=Infinity Grand Hotel (PMS Demo)
+After=network.target
+
+[Service]
+Type=simple
+User=pms-demo
+Group=pms-demo
+WorkingDirectory=/opt/infinity-pms-demo
+EnvironmentFile=/opt/infinity-pms-demo/.env.demo
+ExecStart=/usr/bin/node .output/server/index.mjs
+Restart=on-failure
+RestartSec=5
+KillSignal=SIGTERM
+TimeoutStopSec=15
+
+# Bind to loopback only. Nginx is the sole public entrance, exactly as it is
+# for production — the demo port must never be reachable from the internet.
+Environment="HOST=127.0.0.1"
+Environment="NITRO_HOST=127.0.0.1"
+Environment="PORT=3200"
+
+# Same hardening as the production unit. ReadWritePaths names ONLY the demo
+# directory, so even a compromised demo process cannot write to
+# /opt/infinity-pms.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/opt/infinity-pms-demo
+
+# The demo is a sales asset on a shared box, not the business-critical
+# service. Keep it from starving production of memory during a build or a
+# traffic spike.
+MemoryMax=1200M
+CPUWeight=50
+
+[Install]
+WantedBy=multi-user.target
