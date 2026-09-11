@@ -358,7 +358,7 @@ describe("PR B — receipt UI: Reverse action (inline in accounting.ar.tsx, mirr
 
   it("reversed receipts show the reversal date alongside the reason, matching the credit-note panel's own Reversed-date pattern, using the already-fetched reversed_at value", () => {
     expect(arPage).toContain(
-      'Reversed {r.reversed_at ? format(new Date(r.reversed_at), "yyyy-MM-dd") : ""}',
+      'Reversed {r.reversed_at ? format(new Date(r.reversed_at), "dd/MM/yyyy") : ""}',
     );
   });
 

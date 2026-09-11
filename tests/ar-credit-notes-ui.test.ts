@@ -89,7 +89,7 @@ describe("AR Credit Note UI — list rendering", () => {
 
   it("shows a posted date derived from updated_at only when the note is actually posted", () => {
     expect(panel).toContain('{cn.status === "posted" && (');
-    expect(panel).toContain('Posted {format(new Date(cn.updated_at), "yyyy-MM-dd")}');
+    expect(panel).toContain('Posted {format(new Date(cn.updated_at), "dd/MM/yyyy")}');
   });
 
   it("credit notes are fetched via a single unambiguous embed (ar_credit_notes_invoice_fkey is the only FK to ar_invoices)", () => {
