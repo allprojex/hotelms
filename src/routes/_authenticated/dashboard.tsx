@@ -142,7 +142,7 @@ function DashboardPage() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold">Today</h1>
-          <p className="text-sm text-muted-foreground">{format(new Date(), "EEEE, MMMM d, yyyy")}</p>
+          <p className="text-sm text-muted-foreground">{format(new Date(), "EEEE, dd/MM/yyyy")}</p>
         </div>
         <RefreshIntervalControl />
       </div>

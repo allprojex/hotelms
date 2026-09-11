@@ -212,7 +212,7 @@ function EnrollmentTab({ propertyId }: { propertyId: string }) {
                     <StatusBadge status={row.status} />
                   </TableCell>
                   <TableCell className="text-xs">
-                    {row.requested_at ? format(new Date(row.requested_at), "MMM d, HH:mm") : "—"}
+                    {row.requested_at ? format(new Date(row.requested_at), "dd/MM/yyyy HH:mm") : "—"}
                   </TableCell>
                   <TableCell className="text-right space-x-1">
                     {row.status === "pending" && (
@@ -427,9 +427,9 @@ function UserDetail({ propertyId, userId }: { propertyId: string; userId: string
           <div key={c.id} className="flex items-center justify-between text-xs border rounded p-2">
             <span>
               {c.device_name} — {c.authenticator_attachment ?? "unknown"} — added{" "}
-              {format(new Date(c.created_at), "MMM d, yyyy")}
+              {format(new Date(c.created_at), "dd/MM/yyyy")}
               {c.last_used_at
-                ? ` · last used ${format(new Date(c.last_used_at), "MMM d, yyyy")}`
+                ? ` · last used ${format(new Date(c.last_used_at), "dd/MM/yyyy")}`
                 : " · never used"}
               {c.revoked_at && (
                 <Badge variant="destructive" className="ml-2">
@@ -468,7 +468,7 @@ function UserDetail({ propertyId, userId }: { propertyId: string; userId: string
         <div className="space-y-1 mt-1">
           {(history.data ?? []).map((h: any) => (
             <div key={h.id} className="text-xs text-muted-foreground">
-              {format(new Date(h.created_at), "MMM d, HH:mm")} — {h.action}
+              {format(new Date(h.created_at), "dd/MM/yyyy HH:mm")} — {h.action}
               {h.reason ? `: ${h.reason}` : ""}
             </div>
           ))}

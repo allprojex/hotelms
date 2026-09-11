@@ -100,7 +100,7 @@ function GuestPage() {
                 <Link key={r.id} to="/reservations/$id" params={{ id: r.id }} className="flex items-center justify-between py-3 hover:bg-muted/50 -mx-3 px-3 rounded">
                   <div>
                     <div className="font-medium">{r.room_types?.name} · <span className="font-mono text-xs">{r.code}</span></div>
-                    <div className="text-xs text-muted-foreground">{format(new Date(r.check_in), "MMM d, yyyy")} → {format(new Date(r.check_out), "MMM d, yyyy")}</div>
+                    <div className="text-xs text-muted-foreground">{format(new Date(r.check_in), "dd/MM/yyyy")} → {format(new Date(r.check_out), "dd/MM/yyyy")}</div>
                   </div>
                   <Badge variant="outline">{r.status.replace("_", " ")}</Badge>
                 </Link>

@@ -198,7 +198,7 @@ export function StaffAnnouncementsPage() {
                     </Badge>
                     {row.expiry_date && (
                       <p className="mt-1 text-xs text-muted-foreground">
-                        Expires {new Date(row.expiry_date).toLocaleDateString()}
+                        Expires {new Date(row.expiry_date).toLocaleDateString("en-GB")}
                       </p>
                     )}
                   </TableCell>

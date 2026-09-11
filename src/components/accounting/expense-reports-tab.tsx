@@ -191,7 +191,7 @@ export function ExpenseReportsTab({
           {
             key: "date",
             label: "Date",
-            value: (r: any) => format(new Date(r.created_at), "yyyy-MM-dd HH:mm"),
+            value: (r: any) => format(new Date(r.created_at), "dd/MM/yyyy HH:mm"),
           },
           { key: "expense", label: "Expense", value: (r: any) => r.expense?.expense_number ?? "" },
           { key: "action", label: "Action", value: (r: any) => r.action },
@@ -360,7 +360,7 @@ export function ExpenseReportsTab({
               {filteredRows.map((r: any) => (
                 <TableRow key={r.id}>
                   <TableCell className="text-xs">
-                    {format(new Date(r.created_at), "MMM d, HH:mm")}
+                    {format(new Date(r.created_at), "dd/MM/yyyy HH:mm")}
                   </TableCell>
                   <TableCell className="font-mono text-xs">{r.expense?.expense_number}</TableCell>
                   <TableCell className="text-xs">{r.action}</TableCell>

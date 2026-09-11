@@ -56,7 +56,7 @@ function AdjPage() {
                 <TableCell>{a.stock_locations?.name}</TableCell>
                 <TableCell>{a.reason}</TableCell>
                 <TableCell><Badge variant={a.adjusted_at ? "outline" : "secondary"}>{a.adjusted_at ? "applied" : "pending"}</Badge></TableCell>
-                <TableCell>{a.adjusted_at ? new Date(a.adjusted_at).toLocaleString() : "—"}</TableCell>
+                <TableCell>{a.adjusted_at ? new Date(a.adjusted_at).toLocaleString("en-GB") : "—"}</TableCell>
                 <TableCell className="text-right">{!a.adjusted_at && <Button size="sm" onClick={() => apply(a.id)}><Check className="h-3 w-3 mr-1" /> Apply</Button>}</TableCell>
               </TableRow>
             ))}

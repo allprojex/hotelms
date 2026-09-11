@@ -220,8 +220,8 @@ function ReservationDetail() {
         <Card className="lg:col-span-2">
           <CardHeader><CardTitle className="text-base">Stay</CardTitle></CardHeader>
           <CardContent className="grid gap-4 sm:grid-cols-2 text-sm">
-            <Info label="Check-in" value={format(new Date(r.check_in), "EEE, MMM d, yyyy")} />
-            <Info label="Check-out" value={format(new Date(r.check_out), "EEE, MMM d, yyyy")} />
+            <Info label="Check-in" value={format(new Date(r.check_in), "EEE, dd/MM/yyyy")} />
+            <Info label="Check-out" value={format(new Date(r.check_out), "EEE, dd/MM/yyyy")} />
             <Info label="Guests" value={`${r.adults} adult${r.adults > 1 ? "s" : ""}${r.children > 0 ? `, ${r.children} child` : ""}`} />
             <Info label="Room type" value={r.room_types?.name} />
             <div className="sm:col-span-2">
@@ -267,7 +267,7 @@ function ReservationDetail() {
               <div key={c.id} className="flex items-center justify-between px-4 py-2 text-sm border-b last:border-0">
                 <div>
                   <div>{c.description}</div>
-                  <div className="text-xs text-muted-foreground">{format(new Date(c.posted_at), "PPp")}</div>
+                  <div className="text-xs text-muted-foreground">{format(new Date(c.posted_at), "dd/MM/yyyy HH:mm")}</div>
                 </div>
                 <div className="font-medium">{Number(c.amount).toFixed(2)}</div>
               </div>
@@ -291,7 +291,7 @@ function ReservationDetail() {
                       {fullyRefunded && <Badge variant="secondary" className="text-[10px] uppercase">Refunded</Badge>}
                       {partiallyRefunded && <Badge variant="outline" className="text-[10px] uppercase">Partially refunded</Badge>}
                     </div>
-                    <div className="text-xs text-muted-foreground">{format(new Date(p.received_at), "PPp")} {p.reference ? `· ${p.reference}` : ""}</div>
+                    <div className="text-xs text-muted-foreground">{format(new Date(p.received_at), "dd/MM/yyyy HH:mm")} {p.reference ? `· ${p.reference}` : ""}</div>
                     {/* Legacy single-shot display — a payment refunded via the
                        retired reverse_reservation_payment() path before this
                        feature existed has no reservation_payment_refunds
@@ -300,7 +300,7 @@ function ReservationDetail() {
                        silently disappearing. */}
                     {fullyRefunded && paymentRefunds.length === 0 && p.reversal_reason && (
                       <div className="text-[10px] text-destructive mt-0.5">
-                        Refunded {p.reversed_at ? format(new Date(p.reversed_at), "PPp") : ""}
+                        Refunded {p.reversed_at ? format(new Date(p.reversed_at), "dd/MM/yyyy HH:mm") : ""}
                         {refundedByName(p.reversed_by) ? ` by ${refundedByName(p.reversed_by)}` : ""}: {p.reversal_reason}
                       </div>
                     )}
@@ -308,7 +308,7 @@ function ReservationDetail() {
                       <div className="mt-1 space-y-0.5">
                         {paymentRefunds.map((r: any) => (
                           <div key={r.id} className="text-[10px] text-destructive">
-                            Refunded {Number(r.amount).toFixed(2)} · {format(new Date(r.created_at), "PPp")}
+                            Refunded {Number(r.amount).toFixed(2)} · {format(new Date(r.created_at), "dd/MM/yyyy HH:mm")}
                             {refundedByName(r.refunded_by) ? ` by ${refundedByName(r.refunded_by)}` : ""}: {r.reason}
                           </div>
                         ))}
@@ -371,7 +371,7 @@ function ReservationDetail() {
                   <div><span className="text-muted-foreground">Method</span><div className="capitalize">{refundTarget.method.replace("_", " ")}</div></div>
                   <div><span className="text-muted-foreground">Already refunded</span><div className="font-mono">{currency} {alreadyRefunded.toFixed(2)}</div></div>
                   <div><span className="text-muted-foreground">Remaining refundable</span><div className="font-mono font-semibold">{currency} {remaining.toFixed(2)}</div></div>
-                  <div><span className="text-muted-foreground">Paid</span><div>{format(new Date(refundTarget.received_at), "PPp")}</div></div>
+                  <div><span className="text-muted-foreground">Paid</span><div>{format(new Date(refundTarget.received_at), "dd/MM/yyyy HH:mm")}</div></div>
                   {refundTarget.reference && <div><span className="text-muted-foreground">Reference</span><div className="truncate">{refundTarget.reference}</div></div>}
                 </div>
                 <p className="text-xs text-muted-foreground">
@@ -717,7 +717,7 @@ function ItemDistributionSection({ reservation: r }: { reservation: any }) {
                     <span className="text-xs text-muted-foreground font-mono">{d.inventory_items?.sku}</span>
                   </div>
                   <div className="text-xs text-muted-foreground mt-0.5">
-                    {Number(d.quantity).toFixed(2)} · {d.stock_locations?.name ?? "—"} · {actorName(d.actor_id)} · {format(new Date(d.created_at), "PPp")}
+                    {Number(d.quantity).toFixed(2)} · {d.stock_locations?.name ?? "—"} · {actorName(d.actor_id)} · {format(new Date(d.created_at), "dd/MM/yyyy HH:mm")}
                   </div>
                   {d.reason && <div className="text-xs text-muted-foreground mt-0.5">{d.reason}</div>}
                   {d.action === "issue" && outstanding !== null && (

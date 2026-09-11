@@ -321,7 +321,7 @@ function SyncTab({ propertyId }: { propertyId: string }) {
             <TableBody>
               {(batches.data ?? []).map((b) => (
                 <TableRow key={b.id}>
-                  <TableCell className="text-xs">{format(new Date(b.created_at), "MMM d, HH:mm")}</TableCell>
+                  <TableCell className="text-xs">{format(new Date(b.created_at), "dd/MM/yyyy HH:mm")}</TableCell>
                   <TableCell className="text-xs uppercase">{b.format}</TableCell>
                   <TableCell className="text-xs">{b.label_count}</TableCell>
                   <TableCell><Badge variant={b.status === "completed" ? "secondary" : "outline"}>{b.status}</Badge></TableCell>

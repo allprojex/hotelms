@@ -226,9 +226,9 @@ function PasskeysPage() {
                 </div>
                 <p className="text-xs text-muted-foreground">
                   {p.attachment ?? "Unknown type"} · ····{p.credentialIdSuffix} · Added{" "}
-                  {format(new Date(p.createdAt), "MMM d, yyyy")}
+                  {format(new Date(p.createdAt), "dd/MM/yyyy")}
                   {p.lastUsedAt
-                    ? ` · Last used ${format(new Date(p.lastUsedAt), "MMM d, yyyy")}`
+                    ? ` · Last used ${format(new Date(p.lastUsedAt), "dd/MM/yyyy")}`
                     : ""}
                 </p>
               </div>

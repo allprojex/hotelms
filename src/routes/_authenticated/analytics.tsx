@@ -165,7 +165,7 @@ th,td{border:1px solid #ddd;padding:6px 8px;text-align:left;} th{background:#f5f
 @media print{@page{margin:16mm;}}
 </style></head><body>
 <h1>Executive Report</h1>
-<div class="muted">${esc(propName)} · ${esc(from)} → ${esc(to)} · Generated ${esc(new Date().toLocaleString())}</div>
+<div class="muted">${esc(propName)} · ${esc(from)} → ${esc(to)} · Generated ${esc(new Date().toLocaleString("en-GB"))}</div>
 <div class="kpis">
   <div class="kpi"><div class="l">Total revenue</div><div class="v">${esc(cur(k.revenue))}</div></div>
   <div class="kpi"><div class="l">Occupancy</div><div class="v">${esc(fmt(k.occupancy_pct, "%"))}</div></div>
@@ -405,7 +405,7 @@ function ScheduledExportsSection({ propertyId }: { propertyId: string | null }) 
                   <TableCell className="text-xs">{scheduleLabel(s)}</TableCell>
                   <TableCell><Badge variant="outline" className="text-[10px]">{s.format.toUpperCase()}</Badge></TableCell>
                   <TableCell className="text-xs">{s.recipients?.length ?? 0}</TableCell>
-                  <TableCell className="text-xs">{s.next_run_at ? new Date(s.next_run_at).toLocaleString() : "—"}</TableCell>
+                  <TableCell className="text-xs">{s.next_run_at ? new Date(s.next_run_at).toLocaleString("en-GB") : "—"}</TableCell>
                   <TableCell><RunStatusBadge status={s.last_run_status} error={s.last_run_error} /></TableCell>
                   <TableCell>{s.is_active ? <CheckCircle2 className="h-4 w-4 text-emerald-600" /> : <XCircle className="h-4 w-4 text-muted-foreground" />}</TableCell>
                   <TableCell className="text-right space-x-1">
@@ -446,7 +446,7 @@ function ScheduledExportsSection({ propertyId }: { propertyId: string | null }) 
             <TableBody>
               {runs.data?.map((r: any) => (
                 <TableRow key={r.id}>
-                  <TableCell className="text-xs">{new Date(r.created_at).toLocaleString()}</TableCell>
+                  <TableCell className="text-xs">{new Date(r.created_at).toLocaleString("en-GB")}</TableCell>
                   <TableCell className="text-xs">{r.period_from} → {r.period_to}</TableCell>
                   <TableCell className="text-xs uppercase">{r.format}</TableCell>
                   <TableCell className="text-xs">{r.recipients?.join(", ")}</TableCell>

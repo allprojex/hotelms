@@ -204,7 +204,7 @@ export function FileFirewallTab() {
                 {rows.map((r: any) => (
                   <TableRow key={r.id}>
                     <TableCell className="whitespace-nowrap text-xs">
-                      {format(new Date(r.created_at), "MMM d, HH:mm")}
+                      {format(new Date(r.created_at), "dd/MM/yyyy HH:mm")}
                     </TableCell>
                     <TableCell className="max-w-[220px] truncate" title={r.file_name}>
                       {r.file_name}

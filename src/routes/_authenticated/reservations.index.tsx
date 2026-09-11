@@ -247,9 +247,9 @@ function ReservationsList() {
                 <CalendarIcon className="h-4 w-4 mr-2 shrink-0" />
                 {checkInRange?.from ? (
                   checkInRange.to && checkInTo !== checkInFrom ? (
-                    <span className="truncate">{format(checkInRange.from, "MMM d")} – {format(checkInRange.to, "MMM d, yyyy")}</span>
+                    <span className="truncate">{format(checkInRange.from, "MMM d")} – {format(checkInRange.to, "dd/MM/yyyy")}</span>
                   ) : (
-                    <span className="truncate">{format(checkInRange.from, "MMM d, yyyy")}</span>
+                    <span className="truncate">{format(checkInRange.from, "dd/MM/yyyy")}</span>
                   )
                 ) : (
                   <span className="truncate text-muted-foreground">Check-in date</span>
@@ -330,8 +330,8 @@ function ReservationsList() {
                   <div>{r.room_type_name}</div>
                   <div className="text-xs text-muted-foreground">{r.room_number ? `Room ${r.room_number}` : "Unassigned"}</div>
                 </TableCell>
-                <TableCell>{format(new Date(r.check_in), "MMM d, yyyy")}</TableCell>
-                <TableCell>{format(new Date(r.check_out), "MMM d, yyyy")}</TableCell>
+                <TableCell>{format(new Date(r.check_in), "dd/MM/yyyy")}</TableCell>
+                <TableCell>{format(new Date(r.check_out), "dd/MM/yyyy")}</TableCell>
                 <TableCell><Badge variant={STATUS_COLORS[r.status]}>{r.status.replace("_", " ")}</Badge></TableCell>
                 <TableCell className="text-right font-medium">{Number(r.rate_total).toFixed(2)}</TableCell>
               </TableRow>

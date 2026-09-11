@@ -95,7 +95,7 @@ function ReportsPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold">Reports</h1>
-        <p className="text-sm text-muted-foreground">Last {days} days · {format(start, "MMM d")} – {format(end, "MMM d, yyyy")}</p>
+        <p className="text-sm text-muted-foreground">Last {days} days · {format(start, "MMM d")} – {format(end, "dd/MM/yyyy")}</p>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

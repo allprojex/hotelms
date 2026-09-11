@@ -84,7 +84,7 @@ function PhaseNotice({ children }: { children?: React.ReactNode }) {
   );
 }
 
-function money(value: number | string, currency = "USD") {
+function money(value: number | string, currency = "GHS") {
   return new Intl.NumberFormat(undefined, {
     style: "currency",
     currency,
@@ -136,7 +136,7 @@ export function PayrollSettingsPage() {
     effectiveFrom: new Date().toISOString().slice(0, 10),
     payrollEnabled: settings?.payroll_enabled ?? false,
     displayName: settings?.display_name ?? "Payroll",
-    currency: property?.base_currency ?? "USD",
+    currency: property?.base_currency ?? "GHS",
     jurisdictionCode: settings?.jurisdiction_code ?? "UNSPECIFIED",
     defaultPayFrequencyId: settings?.default_pay_frequency_id ?? "",
     timezone: settings?.timezone ?? property?.timezone ?? "UTC",

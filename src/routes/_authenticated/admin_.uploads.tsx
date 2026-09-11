@@ -156,7 +156,7 @@ function UploadsPage() {
                 <TableCell><Badge variant="outline">{u.target_kind}</Badge></TableCell>
                 <TableCell>{u.row_count}</TableCell>
                 <TableCell><StatusBadge status={u.status} /></TableCell>
-                <TableCell className="text-xs text-muted-foreground">{format(new Date(u.created_at), "MMM d HH:mm")}</TableCell>
+                <TableCell className="text-xs text-muted-foreground">{format(new Date(u.created_at), "dd/MM/yyyy HH:mm")}</TableCell>
                 <TableCell className="text-right">
                   {u.status === "pending" && (
                     <div className="inline-flex gap-1">

@@ -147,8 +147,8 @@ function HealthDashboard() {
           </div>
           <div className="text-right text-xs text-muted-foreground space-y-0.5">
             <div className="flex items-center justify-end gap-1"><Clock className="h-3 w-3" />Fetched {fetchedAt ? fmtSince(fetchedAt, now) : "—"}</div>
-            {payload?.timestamp && <div>Server ts: {new Date(payload.timestamp).toLocaleString()}</div>}
-            {payload?.startedAt && <div>Started: {new Date(payload.startedAt).toLocaleString()}</div>}
+            {payload?.timestamp && <div>Server ts: {new Date(payload.timestamp).toLocaleString("en-GB")}</div>}
+            {payload?.startedAt && <div>Started: {new Date(payload.startedAt).toLocaleString("en-GB")}</div>}
           </div>
         </div>
       </Card>

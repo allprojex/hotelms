@@ -236,7 +236,7 @@ function NotificationsPage() {
               filtered.map((n) => (
                 <TableRow key={n.id}>
                   <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
-                    {format(new Date(n.created_at), "MMM d HH:mm")}
+                    {format(new Date(n.created_at), "dd/MM/yyyy HH:mm")}
                   </TableCell>
                   <TableCell>
                     <Badge variant="outline">{n.category}</Badge>

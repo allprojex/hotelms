@@ -40,7 +40,7 @@ export function openPrintView(opts: {
     <h1>${escapeHtml(opts.title)}</h1>
     ${opts.subtitle ? `<div class="subtitle">${escapeHtml(opts.subtitle)}</div>` : ""}
     ${opts.bodyHtml}
-    <footer>Printed ${new Date().toLocaleString()} · ${escapeHtml(BRAND_NAME)}</footer>
+    <footer>Printed ${new Date().toLocaleString("en-GB")} · ${escapeHtml(BRAND_NAME)}</footer>
     <script>window.addEventListener('load',()=>setTimeout(()=>window.print(),150));</script>
     </body></html>`);
   w.document.close();

@@ -249,7 +249,7 @@ export function EmployeeProfilePage({ employeeId }: { employeeId: string }) {
                     <div key={entry.id} className="rounded-md border p-3 text-sm">
                       <p className="font-medium">{entry.action}</p>
                       <p className="text-xs text-muted-foreground">
-                        {new Date(entry.created_at).toLocaleString()}
+                        {new Date(entry.created_at).toLocaleString("en-GB")}
                       </p>
                     </div>
                   ))}

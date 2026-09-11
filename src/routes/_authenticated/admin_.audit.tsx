@@ -156,7 +156,7 @@ function AuditTrailPage() {
           <TableBody>
             {filtered.map((r: any) => (
               <TableRow key={r.id}>
-                <TableCell className="text-xs whitespace-nowrap">{format(new Date(r.created_at), "MMM d HH:mm:ss")}</TableCell>
+                <TableCell className="text-xs whitespace-nowrap">{format(new Date(r.created_at), "dd/MM/yyyy HH:mm:ss")}</TableCell>
                 <TableCell className="text-sm">{r.full_name_snapshot ?? r.actor_id?.slice(0, 8) ?? "—"}</TableCell>
                 <TableCell className="text-xs">{r.role_snapshot ?? "—"}</TableCell>
                 <TableCell><Badge variant="outline">{r.action}</Badge></TableCell>
@@ -170,7 +170,7 @@ function AuditTrailPage() {
                     <SheetContent className="overflow-y-auto w-full sm:max-w-lg">
                       <SheetHeader><SheetTitle>Audit entry</SheetTitle></SheetHeader>
                       <div className="mt-4 space-y-2 text-xs">
-                        <Row label="When">{format(new Date(r.created_at), "PPpp")}</Row>
+                        <Row label="When">{format(new Date(r.created_at), "dd/MM/yyyy HH:mm")}</Row>
                         <Row label="User">{r.full_name_snapshot} ({r.actor_id?.slice(0,8)})</Row>
                         <Row label="Role">{r.role_snapshot ?? "—"}</Row>
                         <Row label="IP">{r.ip ?? "—"}</Row>
