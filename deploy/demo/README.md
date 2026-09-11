@@ -4,15 +4,15 @@ The permanent sales demo: the same shipped application as production, on the
 same VPS, with its own user, directory, service, port, Supabase project and
 secrets. **Nothing here touches production.**
 
-| | Production | Demo |
-|---|---|---|
-| Directory | `/opt/infinity-pms` | `/opt/infinity-pms-demo` |
-| User | `pms` | `pms-demo` |
-| Service | `infinity-pms.service` | `infinity-pms-demo.service` |
-| Port | 3100 | 3200 |
-| Env file | `.env.production` | `.env.demo` |
-| Supabase | `texhuavnrdhaohqzlyqw` | `akcppyymgoubsqedpkch` |
-| Host | theskwoffhotel.com | app.infinitytechub.com |
+|           | Production             | Demo                        |
+| --------- | ---------------------- | --------------------------- |
+| Directory | `/opt/infinity-pms`    | `/opt/infinity-pms-demo`    |
+| User      | `pms`                  | `pms-demo`                  |
+| Service   | `infinity-pms.service` | `infinity-pms-demo.service` |
+| Port      | 3100                   | 3200                        |
+| Env file  | `.env.production`      | `.env.demo`                 |
+| Supabase  | `texhuavnrdhaohqzlyqw` | `akcppyymgoubsqedpkch`      |
+| Host      | theskwoffhotel.com     | app.infinitytechub.com      |
 
 Both run under **systemd**. Neither uses PM2. A demo restart cannot restart
 production and vice versa — different units, different users, different
@@ -30,10 +30,10 @@ further down. `PasswordAuthentication` is `no` as well. A direct
 
 There are two human accounts on the box:
 
-| Account | UID | Sudo | Purpose |
-|---|---|---|---|
-| `deploy` | 1000 | member of `sudo` — full | **the administrator account; run this runbook as it** |
-| `claude-deploy` | 1001 | four exact commands only | the automation account |
+| Account         | UID  | Sudo                     | Purpose                                               |
+| --------------- | ---- | ------------------------ | ----------------------------------------------------- |
+| `deploy`        | 1000 | member of `sudo` — full  | **the administrator account; run this runbook as it** |
+| `claude-deploy` | 1001 | four exact commands only | the automation account                                |
 
 `claude-deploy`'s `NOPASSWD` sudo covers only
 `systemctl {restart,status,is-active} pm2-infinitysales`, some `pm2` commands
@@ -57,12 +57,12 @@ commands (see the end of this file).
 
 `app.infinitytechub.com` resolves today to **185.158.133.1**, a **Cloudflare**
 edge address (`Server: cloudflare`, `CF-RAY`, `__cf_bm`), serving a
-Cloudflare-hosted build of *Infinity Mart Sales Management 360*. It has nothing
+Cloudflare-hosted build of _Infinity Mart Sales Management 360_. It has nothing
 to do with this VPS — no nginx block here answers for any `infinitytechub`
 hostname.
 
 **The owner has decided the PMS demo takes this hostname.** Sales 360 is being
-replaced *at this name only*. Nothing of it is deleted: its application, files
+replaced _at this name only_. Nothing of it is deleted: its application, files
 and database are untouched, and the VPS-hosted build of the same product stays
 live and unaffected at **`infinitytechapp.com`** (separate nginx block,
 separate port 3000, pm2-managed — none of which this runbook touches).
@@ -76,12 +76,12 @@ The `app` host has **exactly one record** — a single `A`, TTL 14400, value
 `185.158.133.1`. There is **no `AAAA`, no `CNAME` and no `TXT`**, so nothing
 needs deleting: change that one record's value.
 
-| Field | Value |
-|---|---|
-| **Type** | `A` |
-| **Host / Name** | `app` |
-| **Points to / Value** | `187.127.234.113` |
-| **TTL** | `300` (raise to 3600 once verified) |
+| Field                 | Value                               |
+| --------------------- | ----------------------------------- |
+| **Type**              | `A`                                 |
+| **Host / Name**       | `app`                               |
+| **Points to / Value** | `187.127.234.113`                   |
+| **TTL**               | `300` (raise to 3600 once verified) |
 
 **Propagation.** The current record's TTL is **14400 (4 hours)**, so resolvers
 that have already cached `185.158.133.1` may keep serving it for up to that
@@ -272,11 +272,16 @@ session at all.
 ## Updating the demo later
 
 ```bash
-ssh deploy@187.127.234.113 'sudo bash /tmp/provision-demo.sh'
+ssh deploy@187.127.234.113 \
+  'sudo /opt/infinity-pms-demo/deploy/demo/deploy-demo.sh <APPROVED_40_CHARACTER_SHA>'
 ```
 
-Same script. It fast-forwards to `origin/main`, rebuilds, restarts the demo
-service, and re-checks that production's PID and SHA are unchanged.
+Use the permanent update helper after initial provisioning. It accepts one
+explicitly approved full commit SHA, preserves the Demo checkout's repaired
+`package-lock.json`, refuses any other dirty file, builds with `--mode demo`,
+and restarts only `infinity-pms-demo.service`. It records Production's PID,
+SHA and health before the build and requires all three to remain unchanged.
+It never runs `git reset --hard`, `git clean`, a migration, PM2, or nginx.
 
 ## Rolling the demo back or taking it down
 
