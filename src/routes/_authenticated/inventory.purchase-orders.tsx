@@ -14,6 +14,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Plus, Trash2, Package } from "lucide-react";
 import { toast } from "sonner";
+import { InventoryItemSelect } from "@/components/inventory/inventory-item-select";
 
 export const Route = createFileRoute("/_authenticated/inventory/purchase-orders")({
   head: () => ({ meta: [{ title: "Purchase Orders" }] }),
@@ -256,10 +257,7 @@ function PODialog({ propertyId, onDone }: { propertyId: string | null; onDone: (
               {lines.map((l, i) => (
                 <div key={i} className="grid grid-cols-12 gap-2 items-end">
                   <div className="col-span-6">
-                    <Select value={l.item_id} onValueChange={(v) => { const c = [...lines]; c[i].item_id = v; const it = items.data?.find((x: any) => x.id === v); if (it) c[i].unit_cost = Number(it.cost); setLines(c); }}>
-                      <SelectTrigger><SelectValue placeholder="Select item" /></SelectTrigger>
-                      <SelectContent>{items.data?.map((it: any) => <SelectItem key={it.id} value={it.id}>{it.sku} — {it.name}</SelectItem>)}</SelectContent>
-                    </Select>
+                    <InventoryItemSelect items={items.data ?? []} value={l.item_id} onValueChange={(v) => { const c = [...lines]; c[i].item_id = v; const it = items.data?.find((x: any) => x.id === v); if (it) c[i].unit_cost = Number(it.cost); setLines(c); }} />
                   </div>
                   <div className="col-span-2"><Input type="number" step="0.01" value={l.quantity} onChange={(e) => { const c = [...lines]; c[i].quantity = +e.target.value; setLines(c); }} /></div>
                   <div className="col-span-3"><Input type="number" step="0.01" value={l.unit_cost} onChange={(e) => { const c = [...lines]; c[i].unit_cost = +e.target.value; setLines(c); }} /></div>
