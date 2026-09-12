@@ -260,6 +260,9 @@ export function AttendancePage() {
                 <Button variant="outline" onClick={() => exportAttendance("xlsx")}>
                   <FileSpreadsheet className="mr-1 h-4 w-4" /> XLSX
                 </Button>
+                <Button variant="outline" onClick={() => exportAttendance("docx")}>
+                  <Download className="mr-1 h-4 w-4" /> DOCX
+                </Button>
                 <Button variant="outline" onClick={() => exportAttendance("pdf")}>
                   PDF
                 </Button>

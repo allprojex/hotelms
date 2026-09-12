@@ -47,9 +47,10 @@ describe("pageNumbers() — real behavioral proof, not a string match", () => {
 });
 
 describe("Reservations pagination reuses the existing shared toolkit (pageRange/totalPages), not a reinvented one", () => {
-  it("pageRange() computes the correct zero-indexed Supabase .range() bounds for a 25-row page size", () => {
-    expect(pageRange(1, DEFAULT_PAGE_SIZE)).toEqual({ from: 0, to: 24 });
-    expect(pageRange(2, DEFAULT_PAGE_SIZE)).toEqual({ from: 25, to: 49 });
+  it("pageRange() computes the correct zero-indexed Supabase .range() bounds for the 20-row default", () => {
+    expect(DEFAULT_PAGE_SIZE).toBe(20);
+    expect(pageRange(1, DEFAULT_PAGE_SIZE)).toEqual({ from: 0, to: 19 });
+    expect(pageRange(2, DEFAULT_PAGE_SIZE)).toEqual({ from: 20, to: 39 });
     expect(pageRange(3, 10)).toEqual({ from: 20, to: 29 });
   });
 

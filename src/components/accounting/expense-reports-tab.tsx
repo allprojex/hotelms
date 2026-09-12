@@ -303,6 +303,9 @@ export function ExpenseReportsTab({
               <Button variant="outline" size="sm" onClick={() => handleExport("xlsx")}>
                 <Download className="h-3 w-3 mr-1" /> XLSX
               </Button>
+              <Button variant="outline" size="sm" onClick={() => handleExport("docx")}>
+                <Download className="h-3 w-3 mr-1" /> DOCX
+              </Button>
               <Button variant="outline" size="sm" onClick={() => handleExport("pdf")}>
                 <Download className="h-3 w-3 mr-1" /> PDF
               </Button>

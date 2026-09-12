@@ -35,6 +35,14 @@ describe("report foundation", () => {
         dateRange: { from: "2026-07-01", to: "2026-07-31" },
       }),
     ).toBe("guest-revenue_accra-central-hotel_2026-07-01_2026-07-31.xlsx");
+    expect(
+      reportFileName({
+        slug: "Guest Revenue",
+        format: "docx",
+        propertyName: "Accra Central Hotel",
+        dateRange: { from: "2026-07-01", to: "2026-07-31" },
+      }),
+    ).toBe("guest-revenue_accra-central-hotel_2026-07-01_2026-07-31.docx");
   });
 
   it("applies inclusive date and text filters", () => {

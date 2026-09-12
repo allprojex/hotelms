@@ -1,4 +1,4 @@
-export type ReportFormat = "csv" | "xlsx" | "pdf" | "print";
+export type ReportFormat = "csv" | "xlsx" | "docx" | "pdf" | "print";
 
 export type ReportDateRange = {
   from: string;

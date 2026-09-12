@@ -293,6 +293,9 @@ function ReservationsList() {
           <Button variant="outline" size="sm" onClick={() => handleExport("xlsx")}>
             <Download className="h-3 w-3 mr-1" /> XLSX
           </Button>
+          <Button variant="outline" size="sm" onClick={() => handleExport("docx")}>
+            <Download className="h-3 w-3 mr-1" /> DOCX
+          </Button>
           <Button variant="outline" size="sm" onClick={() => handleExport("pdf")}>
             <Download className="h-3 w-3 mr-1" /> PDF
           </Button>
@@ -351,6 +354,11 @@ function ReservationsList() {
           <Pagination className="mx-0 w-auto justify-end">
             <PaginationContent>
               <PaginationItem>
+                <PaginationLink href="#" aria-disabled={page <= 1} className={page <= 1 ? "pointer-events-none opacity-50" : ""} onClick={(e) => { e.preventDefault(); if (page > 1) setPage(1); }}>
+                  First
+                </PaginationLink>
+              </PaginationItem>
+              <PaginationItem>
                 <PaginationPrevious
                   href="#"
                   aria-disabled={page <= 1}
@@ -380,6 +388,11 @@ function ReservationsList() {
                   className={page >= pageCount ? "pointer-events-none opacity-50" : ""}
                   onClick={(e) => { e.preventDefault(); if (page < pageCount) setPage(page + 1); }}
                 />
+              </PaginationItem>
+              <PaginationItem>
+                <PaginationLink href="#" aria-disabled={page >= pageCount} className={page >= pageCount ? "pointer-events-none opacity-50" : ""} onClick={(e) => { e.preventDefault(); if (page < pageCount) setPage(pageCount); }}>
+                  Last
+                </PaginationLink>
               </PaginationItem>
             </PaginationContent>
           </Pagination>

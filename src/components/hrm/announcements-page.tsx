@@ -350,11 +350,11 @@ function AnnouncementDialog({
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-h-[90vh] max-w-2xl overflow-hidden">
         <DialogHeader>
           <DialogTitle>{announcement ? "Edit announcement" : "New announcement"}</DialogTitle>
         </DialogHeader>
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid min-h-0 gap-3 overflow-y-auto overscroll-contain pr-2 scroll-smooth sm:grid-cols-2">
           <div className="space-y-1 sm:col-span-2">
             <Label htmlFor="announcement-title">Title</Label>
             <Input

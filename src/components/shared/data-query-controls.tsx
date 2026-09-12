@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { AlertCircle, Inbox, LoaderCircle } from "lucide-react";
+import { AlertCircle, ArrowDownToLine, ArrowUpToLine, Inbox, LoaderCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -132,6 +132,12 @@ export function ServerPagination({
   onPageSizeChange: (pageSize: number) => void;
 }) {
   const pages = totalPages(totalRows, pageSize);
+  const currentPage = Math.min(Math.max(1, page), pages);
+  const firstVisiblePage = Math.max(1, Math.min(currentPage - 2, pages - 4));
+  const visiblePages = Array.from(
+    { length: Math.min(5, pages) },
+    (_, index) => firstVisiblePage + index,
+  );
   return (
     <nav
       className="flex flex-wrap items-center justify-between gap-3"
@@ -154,25 +160,82 @@ export function ServerPagination({
       </div>
       <div className="flex items-center gap-2">
         <span className="text-sm text-muted-foreground" aria-live="polite">
-          Page {Math.min(page, pages)} of {pages} · {totalRows} results
+          Page {currentPage} of {pages} · {totalRows} results
         </span>
         <Button
           type="button"
           variant="outline"
-          disabled={page <= 1}
-          onClick={() => onPageChange(page - 1)}
+          disabled={currentPage <= 1}
+          onClick={() => onPageChange(1)}
         >
-          Previous
+          First
         </Button>
         <Button
           type="button"
           variant="outline"
-          disabled={page >= pages}
-          onClick={() => onPageChange(page + 1)}
+          disabled={currentPage <= 1}
+          onClick={() => onPageChange(currentPage - 1)}
+        >
+          Previous
+        </Button>
+        {visiblePages.map((pageNumber) => (
+          <Button
+            key={pageNumber}
+            type="button"
+            variant={pageNumber === currentPage ? "default" : "outline"}
+            aria-current={pageNumber === currentPage ? "page" : undefined}
+            aria-label={`Page ${pageNumber}`}
+            onClick={() => onPageChange(pageNumber)}
+          >
+            {pageNumber}
+          </Button>
+        ))}
+        <Button
+          type="button"
+          variant="outline"
+          disabled={currentPage >= pages}
+          onClick={() => onPageChange(currentPage + 1)}
         >
           Next
         </Button>
+        <Button
+          type="button"
+          variant="outline"
+          disabled={currentPage >= pages}
+          onClick={() => onPageChange(pages)}
+        >
+          Last
+        </Button>
       </div>
     </nav>
+  );
+}
+
+export function FastScrollControls() {
+  return (
+    <div className="fixed bottom-4 right-4 z-40 flex flex-col gap-2 print:hidden">
+      <Button
+        type="button"
+        variant="secondary"
+        size="icon"
+        aria-label="Scroll to top"
+        title="Scroll to top"
+        onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+      >
+        <ArrowUpToLine className="h-4 w-4" />
+      </Button>
+      <Button
+        type="button"
+        variant="secondary"
+        size="icon"
+        aria-label="Scroll to bottom"
+        title="Scroll to bottom"
+        onClick={() =>
+          window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "smooth" })
+        }
+      >
+        <ArrowDownToLine className="h-4 w-4" />
+      </Button>
+    </div>
   );
 }

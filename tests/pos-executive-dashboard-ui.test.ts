@@ -360,8 +360,8 @@ describe("route — exports", () => {
     expect(routeCode).not.toMatch(/new Blob\(|jsPDF|XLSX\./);
   });
 
-  it("offers CSV, XLSX, PDF and Print", () => {
-    for (const f of ["csv", "xlsx", "pdf", "print"]) {
+  it("offers CSV, XLSX, DOCX, PDF and Print", () => {
+    for (const f of ["csv", "xlsx", "docx", "pdf", "print"]) {
       expect(routeCode).toContain(`exportAll("${f}")`);
     }
   });

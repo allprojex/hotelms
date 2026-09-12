@@ -5,6 +5,7 @@ import {
   useNavigate,
   useRouterState,
 } from "@tanstack/react-router";
+import { FastScrollControls } from "@/components/shared/data-query-controls";
 import { useEffect, useRef } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
@@ -134,6 +135,7 @@ function AuthLayout() {
           <main className="flex-1 p-4 sm:p-6">
             {!guardReady ? null : allowed ? <Outlet /> : <AccessDenied />}
           </main>
+          {guardReady && allowed ? <FastScrollControls /> : null}
         </div>
       </div>
     </SidebarProvider>

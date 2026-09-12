@@ -111,9 +111,9 @@ class EffectResetList {
   }
 }
 
-const PAGE_1 = { from: 0, to: 24 };
-const PAGE_2 = { from: 25, to: 49 };
-const PAGE_3 = { from: 50, to: 74 };
+const PAGE_1 = { from: 0, to: 19 };
+const PAGE_2 = { from: 20, to: 39 };
+const PAGE_3 = { from: 40, to: 59 };
 
 /** Every request whose page is not 1 but whose scope differs from the previous request's. */
 function staleScopeRequests(requests: Request[]): Request[] {
