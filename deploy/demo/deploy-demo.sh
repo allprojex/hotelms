@@ -14,7 +14,6 @@ PRODUCTION_DIR="/opt/infinity-pms"
 PRODUCTION_SERVICE="infinity-pms.service"
 PRODUCTION_PORT="3100"
 PRODUCTION_REF="texhuavnrdhaohqzlyqw"
-LOCK_BACKUP_DIR="/var/lib/infinity-pms-demo-deploy"
 
 fail() {
   echo "ERROR: $*" >&2
@@ -44,19 +43,16 @@ DIRTY_EXCEPT_LOCK="$({
 } | grep -vE '^.. package-lock\.json$' || true)"
 [[ -z "$DIRTY_EXCEPT_LOCK" ]] || fail "Demo checkout has changes other than package-lock.json"
 
-install -d -m 700 -o root -g root "$LOCK_BACKUP_DIR"
-install -m 600 -o root -g root "$DEMO_DIR/package-lock.json" "$LOCK_BACKUP_DIR/package-lock.json"
-
 sudo -u "$DEMO_USER" git -c safe.directory="$DEMO_DIR" -C "$DEMO_DIR" fetch origin "$APPROVED_SHA"
 FETCHED_SHA="$(git -c safe.directory="$DEMO_DIR" -C "$DEMO_DIR" rev-parse FETCH_HEAD^{commit})"
 [[ "$FETCHED_SHA" = "$APPROVED_SHA" ]] || fail "fetched commit does not match approved SHA"
 
-# Move only the tracked lockfile out of the way. No hard reset, clean, or broad
-# restore is permitted; the repaired lock is restored immediately afterward.
+# Discard only a stale lockfile left by an earlier failed deployment. The
+# approved commit's lockfile is authoritative and must stay paired with its
+# package.json; preserving an older server copy makes npm ci fail as soon as a
+# dependency changes. No hard reset, clean, or broad restore is permitted.
 sudo -u "$DEMO_USER" git -c safe.directory="$DEMO_DIR" -C "$DEMO_DIR" restore package-lock.json
 sudo -u "$DEMO_USER" git -c safe.directory="$DEMO_DIR" -C "$DEMO_DIR" checkout --detach "$APPROVED_SHA"
-install -m 600 -o "$DEMO_USER" -g "$DEMO_USER" \
-  "$LOCK_BACKUP_DIR/package-lock.json" "$DEMO_DIR/package-lock.json"
 
 cd "$DEMO_DIR"
 nice -n 15 ionice -c3 sudo -u "$DEMO_USER" \

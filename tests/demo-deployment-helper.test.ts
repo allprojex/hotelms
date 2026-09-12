@@ -9,9 +9,10 @@ describe("permanent Demo deployment helper", () => {
     expect(helper).toContain('[[ "$FETCHED_SHA" = "$APPROVED_SHA" ]]');
   });
 
-  it("preserves the repaired lockfile without a destructive repository reset", () => {
-    expect(helper).toContain('LOCK_BACKUP_DIR="/var/lib/infinity-pms-demo-deploy"');
-    expect(helper).toContain('"$LOCK_BACKUP_DIR/package-lock.json"');
+  it("uses the approved commit's lockfile without a destructive repository reset", () => {
+    expect(helper).toContain('restore package-lock.json');
+    expect(helper).not.toContain("LOCK_BACKUP_DIR");
+    expect(helper).not.toContain('install -m 600 -o "$DEMO_USER"');
     expect(helper).not.toMatch(/git\s+reset|git\s+clean/);
   });
 

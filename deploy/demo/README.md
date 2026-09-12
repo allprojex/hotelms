@@ -277,7 +277,7 @@ ssh deploy@187.127.234.113 \
 ```
 
 Use the permanent update helper after initial provisioning. It accepts one
-explicitly approved full commit SHA, preserves the Demo checkout's repaired
+explicitly approved full commit SHA, uses the approved commit's matching
 `package-lock.json`, refuses any other dirty file, builds with `--mode demo`,
 and restarts only `infinity-pms-demo.service`. It records Production's PID,
 SHA and health before the build and requires all three to remain unchanged.
