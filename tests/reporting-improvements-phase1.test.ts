@@ -36,8 +36,8 @@ describe("Financial Reports (P&L/BS/TB) — migrated onto the shared report tool
     { name: "Balance Sheet", defVar: "bsDefinition" },
     { name: "Trial Balance", defVar: "tbDefinition" },
   ]) {
-    it(`${name}: provides CSV, XLSX, PDF, and Print via the shared exportFinancialReport helper`, () => {
-      for (const fmt of ["csv", "xlsx", "pdf", "print"]) {
+    it(`${name}: provides CSV, XLSX, DOCX, PDF, and Print via the shared exportFinancialReport helper`, () => {
+      for (const fmt of ["csv", "xlsx", "docx", "pdf", "print"]) {
         expect(reportsPage).toContain(`exportFinancialReport(${defVar}, "${fmt}")`);
       }
     });

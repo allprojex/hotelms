@@ -438,7 +438,7 @@ export const setAttendanceApproval = createServerFn({ method: "POST" })
 
 export const getAttendanceExportData = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((data: ListInput & { format: "csv" | "xlsx" | "pdf" | "print" }) => ({
+  .inputValidator((data: ListInput & { format: "csv" | "xlsx" | "docx" | "pdf" | "print" }) => ({
     ...input(data),
     format: data.format,
   }))

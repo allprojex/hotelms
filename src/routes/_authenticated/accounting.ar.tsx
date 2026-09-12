@@ -382,7 +382,7 @@ function ARPage() {
                     className="text-[10px] text-destructive truncate max-w-[220px]"
                     title={r.reversal_reason}
                   >
-                    Reversed {r.reversed_at ? format(new Date(r.reversed_at), "yyyy-MM-dd") : ""}:{" "}
+                    Reversed {r.reversed_at ? format(new Date(r.reversed_at), "dd/MM/yyyy") : ""}:{" "}
                     {r.reversal_reason}
                   </span>
                 )}

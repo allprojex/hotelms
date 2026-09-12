@@ -168,7 +168,7 @@ export function PrintQueueTab() {
                       />
                     </TableCell>
                     <TableCell className="text-xs whitespace-nowrap">
-                      {format(new Date(j.created_at), "MMM d, HH:mm:ss")}
+                      {format(new Date(j.created_at), "dd/MM/yyyy HH:mm:ss")}
                     </TableCell>
                     <TableCell className="text-xs uppercase">{j.job_type}</TableCell>
                     <TableCell className="text-xs max-w-[200px] truncate">{j.title ?? "—"}</TableCell>
@@ -218,9 +218,9 @@ export function PrintQueueTab() {
                 <div><span className="text-muted-foreground">Status:</span> <StatusBadge status={detail.status} /></div>
                 <div><span className="text-muted-foreground">Job type:</span> {detail.job_type}</div>
                 <div><span className="text-muted-foreground">Copies:</span> {detail.copies}</div>
-                <div><span className="text-muted-foreground">Created:</span> {format(new Date(detail.created_at), "PPpp")}</div>
-                <div><span className="text-muted-foreground">Started:</span> {detail.started_at ? format(new Date(detail.started_at), "PPpp") : "—"}</div>
-                <div><span className="text-muted-foreground">Completed:</span> {detail.completed_at ? format(new Date(detail.completed_at), "PPpp") : "—"}</div>
+                <div><span className="text-muted-foreground">Created:</span> {format(new Date(detail.created_at), "dd/MM/yyyy HH:mm")}</div>
+                <div><span className="text-muted-foreground">Started:</span> {detail.started_at ? format(new Date(detail.started_at), "dd/MM/yyyy HH:mm") : "—"}</div>
+                <div><span className="text-muted-foreground">Completed:</span> {detail.completed_at ? format(new Date(detail.completed_at), "dd/MM/yyyy HH:mm") : "—"}</div>
                 <div><span className="text-muted-foreground">Printer:</span> {detail.printer_id ? printerMap.get(detail.printer_id) ?? detail.printer_id : "—"}</div>
               </div>
               {detail.error && (

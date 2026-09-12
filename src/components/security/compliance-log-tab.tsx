@@ -159,7 +159,7 @@ export function ComplianceLogTab() {
               {(q.data ?? []).map((r: ComplianceRow) => (
                 <TableRow key={`${r.source}-${r.id}`}>
                   <TableCell className="text-xs whitespace-nowrap">
-                    {format(new Date(r.when), "MMM d, HH:mm:ss")}
+                    {format(new Date(r.when), "dd/MM/yyyy HH:mm:ss")}
                   </TableCell>
                   <TableCell>
                     <Badge variant={r.source === "security" ? "destructive" : "outline"} className="text-[10px] uppercase">

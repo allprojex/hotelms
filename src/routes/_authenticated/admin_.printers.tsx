@@ -118,12 +118,12 @@ function RegisteredTab({ propertyId }: { propertyId: string }) {
         }});
         if (!res.ok) throw new Error(res.error);
       } else if (p.protocol === "zpl") {
-        const bytes = buildZplLabel({ title: "TEST LABEL", price: "$0.00", barcode: "1234567890", barcodeType: "CODE128" });
+        const bytes = buildZplLabel({ title: "TEST LABEL", price: "₵0.00", barcode: "1234567890", barcodeType: "CODE128" });
         await pairAndSend(p.kind, bytes);
       } else {
         const bytes = buildReceipt("TEST RECEIPT", [
           { type: "text", text: BRAND_NAME, align: "center" },
-          { type: "text", text: format(new Date(), "PPpp"), align: "center" },
+          { type: "text", text: format(new Date(), "dd/MM/yyyy HH:mm"), align: "center" },
           { type: "hr" },
           { type: "text", text: "If you can read this, the printer works." },
         ]);
@@ -390,7 +390,7 @@ function JobsTab({ propertyId: _p }: { propertyId: string }) {
             <TableBody>
               {(list.data ?? []).map((j) => (
                 <TableRow key={j.id}>
-                  <TableCell className="text-xs whitespace-nowrap">{format(new Date(j.created_at), "MMM d, HH:mm")}</TableCell>
+                  <TableCell className="text-xs whitespace-nowrap">{format(new Date(j.created_at), "dd/MM/yyyy HH:mm")}</TableCell>
                   <TableCell className="text-xs uppercase">{j.job_type}</TableCell>
                   <TableCell className="text-xs">{j.title ?? "—"}</TableCell>
                   <TableCell className="text-xs">{j.copies}</TableCell>

@@ -16,7 +16,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { ThemeProvider } from "@/components/theme-provider";
 import { useBrandSettings } from "@/hooks/use-brand-settings";
 import { BrandColorVars } from "@/components/brand-color-vars";
-import { BRAND_NAME, SITE_ORIGIN } from "@/lib/deployment-identity";
+import { BRAND_NAME, IS_DEMO, SITE_ORIGIN } from "@/lib/deployment-identity";
 
 // Static browser-icon set generated from the approved brand logo
 // (scripts/branding/generate-favicons.ps1 -> public/). These are the
@@ -32,6 +32,13 @@ const STATIC_FAVICON_LINKS = [
   { rel: "icon", href: "/favicon-16x16.png", type: "image/png", sizes: "16x16" },
   { rel: "apple-touch-icon", href: "/apple-touch-icon.png", sizes: "180x180" },
   { rel: "manifest", href: "/site.webmanifest" },
+];
+
+// The organisation demo has its own build-time identity. Keep its browser
+// icon separate from the production ThesKwoff asset set so deploying the demo
+// branch cannot overwrite or rebrand production.
+const DEMO_FAVICON_LINKS = [
+  { rel: "icon", href: "/demo-hotel-favicon.svg", type: "image/svg+xml" },
 ];
 
 // Browser/document title is deliberately sourced from the organisation-wide
@@ -138,7 +145,10 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { property: "og:image", content: `${SITE_ORIGIN}/og-image.png` },
       { name: "twitter:image", content: `${SITE_ORIGIN}/og-image.png` },
     ],
-    links: [{ rel: "stylesheet", href: appCss }, ...STATIC_FAVICON_LINKS],
+    links: [
+      { rel: "stylesheet", href: appCss },
+      ...(IS_DEMO ? DEMO_FAVICON_LINKS : STATIC_FAVICON_LINKS),
+    ],
   }),
   shellComponent: RootShell,
   component: RootComponent,

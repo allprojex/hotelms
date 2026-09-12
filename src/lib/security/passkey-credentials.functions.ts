@@ -179,7 +179,29 @@ export const revokeAllPasskeyCredentials = createServerFn({ method: "POST" })
     adminCredentialAction(context, { ...data, credentialId: null, action: "revoke_all" }),
   );
 
-/** Admin: reset a user's 2FA status (policy foundation only — no TOTP secret exists to clear). */
+export const getUserMfaStatus = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: { propertyId: string; targetUserId: string }) => ({
+    propertyId: uuid(d.propertyId),
+    targetUserId: uuid(d.targetUserId),
+  }))
+  .handler(async ({ data, context }) => {
+    await assertServerPermission(context as any, {
+      propertyId: data.propertyId,
+      ...PASSKEY_PERMISSIONS.twoFactorPolicyView,
+      defaultRoles: PASSKEY_ADMIN_ROLES,
+    });
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const factors = await supabaseAdmin.auth.admin.mfa.listFactors({ userId: data.targetUserId });
+    if (factors.error) throw new Error("Unable to read MFA status");
+    return {
+      enrolled: factors.data.factors.some(
+        (factor) => factor.factor_type === "totp" && factor.status === "verified",
+      ),
+    };
+  });
+
+/** Admin: remove every TOTP factor. Supabase invalidates affected sessions automatically. */
 export const resetUserTwoFactor = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: { propertyId: string; targetUserId: string; reason: string }) => ({
@@ -193,21 +215,32 @@ export const resetUserTwoFactor = createServerFn({ method: "POST" })
       ...PASSKEY_PERMISSIONS.userTwoFactorReset,
       defaultRoles: PASSKEY_ADMIN_ROLES,
     });
-    const result = await (context.supabase as any).rpc("two_factor_admin_reset", {
-      _property_id: data.propertyId,
-      _target_user_id: data.targetUserId,
-      _reason: data.reason,
-    });
-    if (result.error) throw new Error(result.error.message);
-    await captureAuditEvent(context as any, {
-      propertyId: data.propertyId,
-      sourceModule: "passkeys",
-      action: "passkey.two_factor.admin_reset",
-      resourceType: "profile",
-      resourceId: data.targetUserId,
-      memo: data.reason,
-    });
-    return { ok: true };
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const factors = await supabaseAdmin.auth.admin.mfa.listFactors({ userId: data.targetUserId });
+    if (factors.error) throw new Error("Unable to read MFA status");
+    for (const factor of factors.data.factors.filter((item) => item.factor_type === "totp")) {
+      const deleted = await supabaseAdmin.auth.admin.mfa.deleteFactor({
+        userId: data.targetUserId,
+        id: factor.id,
+      });
+      if (deleted.error) throw new Error("Unable to reset MFA");
+    }
+    await captureAuditEvent(
+      context as any,
+      {
+        propertyId: data.propertyId,
+        sourceModule: "authentication",
+        action: "auth.mfa.reset",
+        resourceType: "profile",
+        resourceId: data.targetUserId,
+        memo: data.reason,
+      },
+      { required: true },
+    );
+    return {
+      ok: true,
+      removed: factors.data.factors.filter((item) => item.factor_type === "totp").length,
+    };
   });
 
 /** Safe, read-only auth policy for the current property (passkey/2FA policy only — no thresholds). */

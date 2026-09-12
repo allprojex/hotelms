@@ -294,7 +294,7 @@ function APPage() {
                   <Badge variant="outline" className="text-[10px] uppercase">{b.status}</Badge>
                   {b.status === "void" && b.reversal_reason && (
                     <span className="text-[10px] text-destructive truncate max-w-[220px]" title={b.reversal_reason}>
-                      Reversed {b.reversed_at ? format(new Date(b.reversed_at), "yyyy-MM-dd") : ""}: {b.reversal_reason}
+                      Reversed {b.reversed_at ? format(new Date(b.reversed_at), "dd/MM/yyyy") : ""}: {b.reversal_reason}
                     </span>
                   )}
                 </div>
@@ -329,12 +329,12 @@ function APPage() {
               <div key={p.id} className="flex items-center justify-between px-4 py-2 border-b last:border-0 hover:bg-muted/30">
                 <div className="flex items-center gap-3 min-w-0">
                   <span className="font-mono text-xs text-muted-foreground w-24">{bill?.code ?? p.bill_id}</span>
-                  <span className="text-xs text-muted-foreground">{p.paid_at ? format(new Date(p.paid_at), "yyyy-MM-dd") : ""}</span>
+                  <span className="text-xs text-muted-foreground">{p.paid_at ? format(new Date(p.paid_at), "dd/MM/yyyy") : ""}</span>
                   <Badge variant="outline" className="text-[10px] uppercase">{p.method}</Badge>
                   {p.status === "void" && <Badge variant="secondary" className="text-[10px] uppercase">void</Badge>}
                   {p.status === "void" && p.reversal_reason && (
                     <span className="text-[10px] text-destructive truncate max-w-[220px]" title={p.reversal_reason}>
-                      Reversed {p.reversed_at ? format(new Date(p.reversed_at), "yyyy-MM-dd") : ""}: {p.reversal_reason}
+                      Reversed {p.reversed_at ? format(new Date(p.reversed_at), "dd/MM/yyyy") : ""}: {p.reversal_reason}
                     </span>
                   )}
                 </div>
@@ -417,7 +417,7 @@ function APPage() {
                 <div><span className="text-muted-foreground">Bill</span><div className="font-mono">{reversePaymentTarget.bill?.code ?? reversePaymentTarget.bill_id}</div></div>
                 <div><span className="text-muted-foreground">Method</span><div className="truncate">{reversePaymentTarget.method}</div></div>
                 <div><span className="text-muted-foreground">Amount</span><div className="font-mono">{fmt(Number(reversePaymentTarget.amount), reversePaymentTarget.bill?.currency)}</div></div>
-                <div><span className="text-muted-foreground">Paid</span><div>{reversePaymentTarget.paid_at ? format(new Date(reversePaymentTarget.paid_at), "yyyy-MM-dd") : ""}</div></div>
+                <div><span className="text-muted-foreground">Paid</span><div>{reversePaymentTarget.paid_at ? format(new Date(reversePaymentTarget.paid_at), "dd/MM/yyyy") : ""}</div></div>
               </div>
               <p className="text-xs text-destructive">
                 This posts a new offsetting journal entry that exactly reverses this payment's original posting and restores the bill's balance. The payment and its original journal entry are never edited or deleted. This cannot be undone through the UI.

@@ -292,7 +292,7 @@ export function PayrollRunApprovalPage({ runId }: { runId: string }) {
               <div key={row.id} className="border-t p-3 first:border-t-0">
                 <Badge>{row.action}</Badge> {row.prior_status} to {row.new_status}
                 <div className="text-sm text-muted-foreground">
-                  {row.reason || "No reason recorded"} - {new Date(row.action_at).toLocaleString()}
+                  {row.reason || "No reason recorded"} - {new Date(row.action_at).toLocaleString("en-GB")}
                 </div>
               </div>
             ))}
@@ -508,7 +508,7 @@ export function PayslipsPage() {
           <td className="px-3 py-3">
             <Badge>{row.status}</Badge>
           </td>
-          <td className="px-3 py-3">{new Date(row.generated_at).toLocaleString()}</td>
+          <td className="px-3 py-3">{new Date(row.generated_at).toLocaleString("en-GB")}</td>
         </tr>
       )}
     />
@@ -771,7 +771,7 @@ export function PayrollCorrectionsPage() {
             <td className="px-3 py-3">
               <div>{row.requester?.full_name || row.requester?.email || "-"}</div>
               <div className="text-xs text-muted-foreground">
-                {new Date(row.created_at).toLocaleString()}
+                {new Date(row.created_at).toLocaleString("en-GB")}
               </div>
             </td>
             <td className="px-3 py-3">
@@ -779,7 +779,7 @@ export function PayrollCorrectionsPage() {
                 <>
                   <div>{row.reviewer?.full_name || row.reviewer?.email || "-"}</div>
                   <div className="text-xs text-muted-foreground">
-                    {row.reviewed_at ? new Date(row.reviewed_at).toLocaleString() : ""}
+                    {row.reviewed_at ? new Date(row.reviewed_at).toLocaleString("en-GB") : ""}
                   </div>
                 </>
               ) : (

@@ -176,6 +176,9 @@ function ReportsPage() {
                 <Button variant="outline" size="sm" onClick={() => exportFinancialReport(plDefinition, "xlsx")}>
                   <Download className="h-3 w-3 mr-1" /> XLSX
                 </Button>
+                <Button variant="outline" size="sm" onClick={() => exportFinancialReport(plDefinition, "docx")}>
+                  <Download className="h-3 w-3 mr-1" /> DOCX
+                </Button>
                 <Button variant="outline" size="sm" onClick={() => exportFinancialReport(plDefinition, "pdf")}>
                   <Download className="h-3 w-3 mr-1" /> PDF
                 </Button>
@@ -204,6 +207,9 @@ function ReportsPage() {
                 </Button>
                 <Button variant="outline" size="sm" onClick={() => exportFinancialReport(bsDefinition, "xlsx")}>
                   <Download className="h-3 w-3 mr-1" /> XLSX
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => exportFinancialReport(bsDefinition, "docx")}>
+                  <Download className="h-3 w-3 mr-1" /> DOCX
                 </Button>
                 <Button variant="outline" size="sm" onClick={() => exportFinancialReport(bsDefinition, "pdf")}>
                   <Download className="h-3 w-3 mr-1" /> PDF
@@ -238,6 +244,9 @@ function ReportsPage() {
                 </Button>
                 <Button variant="outline" size="sm" onClick={() => exportFinancialReport(tbDefinition, "xlsx")}>
                   <Download className="h-3 w-3 mr-1" /> XLSX
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => exportFinancialReport(tbDefinition, "docx")}>
+                  <Download className="h-3 w-3 mr-1" /> DOCX
                 </Button>
                 <Button variant="outline" size="sm" onClick={() => exportFinancialReport(tbDefinition, "pdf")}>
                   <Download className="h-3 w-3 mr-1" /> PDF

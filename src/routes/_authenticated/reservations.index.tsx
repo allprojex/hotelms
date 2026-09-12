@@ -247,9 +247,9 @@ function ReservationsList() {
                 <CalendarIcon className="h-4 w-4 mr-2 shrink-0" />
                 {checkInRange?.from ? (
                   checkInRange.to && checkInTo !== checkInFrom ? (
-                    <span className="truncate">{format(checkInRange.from, "MMM d")} – {format(checkInRange.to, "MMM d, yyyy")}</span>
+                    <span className="truncate">{format(checkInRange.from, "MMM d")} – {format(checkInRange.to, "dd/MM/yyyy")}</span>
                   ) : (
-                    <span className="truncate">{format(checkInRange.from, "MMM d, yyyy")}</span>
+                    <span className="truncate">{format(checkInRange.from, "dd/MM/yyyy")}</span>
                   )
                 ) : (
                   <span className="truncate text-muted-foreground">Check-in date</span>
@@ -293,6 +293,9 @@ function ReservationsList() {
           <Button variant="outline" size="sm" onClick={() => handleExport("xlsx")}>
             <Download className="h-3 w-3 mr-1" /> XLSX
           </Button>
+          <Button variant="outline" size="sm" onClick={() => handleExport("docx")}>
+            <Download className="h-3 w-3 mr-1" /> DOCX
+          </Button>
           <Button variant="outline" size="sm" onClick={() => handleExport("pdf")}>
             <Download className="h-3 w-3 mr-1" /> PDF
           </Button>
@@ -330,8 +333,8 @@ function ReservationsList() {
                   <div>{r.room_type_name}</div>
                   <div className="text-xs text-muted-foreground">{r.room_number ? `Room ${r.room_number}` : "Unassigned"}</div>
                 </TableCell>
-                <TableCell>{format(new Date(r.check_in), "MMM d, yyyy")}</TableCell>
-                <TableCell>{format(new Date(r.check_out), "MMM d, yyyy")}</TableCell>
+                <TableCell>{format(new Date(r.check_in), "dd/MM/yyyy")}</TableCell>
+                <TableCell>{format(new Date(r.check_out), "dd/MM/yyyy")}</TableCell>
                 <TableCell><Badge variant={STATUS_COLORS[r.status]}>{r.status.replace("_", " ")}</Badge></TableCell>
                 <TableCell className="text-right font-medium">{Number(r.rate_total).toFixed(2)}</TableCell>
               </TableRow>
@@ -350,6 +353,11 @@ function ReservationsList() {
           </p>
           <Pagination className="mx-0 w-auto justify-end">
             <PaginationContent>
+              <PaginationItem>
+                <PaginationLink href="#" aria-disabled={page <= 1} className={page <= 1 ? "pointer-events-none opacity-50" : ""} onClick={(e) => { e.preventDefault(); if (page > 1) setPage(1); }}>
+                  First
+                </PaginationLink>
+              </PaginationItem>
               <PaginationItem>
                 <PaginationPrevious
                   href="#"
@@ -380,6 +388,11 @@ function ReservationsList() {
                   className={page >= pageCount ? "pointer-events-none opacity-50" : ""}
                   onClick={(e) => { e.preventDefault(); if (page < pageCount) setPage(page + 1); }}
                 />
+              </PaginationItem>
+              <PaginationItem>
+                <PaginationLink href="#" aria-disabled={page >= pageCount} className={page >= pageCount ? "pointer-events-none opacity-50" : ""} onClick={(e) => { e.preventDefault(); if (page < pageCount) setPage(pageCount); }}>
+                  Last
+                </PaginationLink>
               </PaginationItem>
             </PaginationContent>
           </Pagination>

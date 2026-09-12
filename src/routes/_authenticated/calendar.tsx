@@ -49,7 +49,7 @@ function CalendarPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold">Availability</h1>
-          <p className="text-sm text-muted-foreground">14-day window · {format(start, "MMM d")} – {format(addDays(start, DAYS - 1), "MMM d, yyyy")}</p>
+          <p className="text-sm text-muted-foreground">14-day window · {format(start, "MMM d")} – {format(addDays(start, DAYS - 1), "dd/MM/yyyy")}</p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={() => setStart(addDays(start, -7))}><ChevronLeft className="h-4 w-4" /></Button>

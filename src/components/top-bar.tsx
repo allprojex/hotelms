@@ -3,6 +3,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
+import { recordLogout } from "@/lib/security/mfa.functions";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -29,6 +30,7 @@ import { getPasswordChangeState } from "@/lib/auth.functions";
 import { GlobalSearch } from "@/components/global-search";
 
 export function TopBar() {
+  const auditLogout = useServerFn(recordLogout);
   const navigate = useNavigate();
   const { theme, setTheme } = useTheme();
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -68,6 +70,7 @@ export function TopBar() {
   const active = properties?.find((p) => p.id === activeId);
 
   async function signOut() {
+    await auditLogout().catch(() => undefined);
     await supabase.auth.signOut();
     toast.success("Signed out");
     navigate({ to: "/auth", replace: true });

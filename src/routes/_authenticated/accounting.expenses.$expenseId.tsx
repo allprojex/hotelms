@@ -645,7 +645,7 @@ function ExpenseDetailPage() {
         <CardContent className="space-y-1">
           {(history.data ?? []).map((h: any) => (
             <div key={h.id} className="text-xs text-muted-foreground">
-              {format(new Date(h.created_at), "MMM d, yyyy HH:mm")} — {h.action} by{" "}
+              {format(new Date(h.created_at), "dd/MM/yyyy HH:mm")} — {h.action} by{" "}
               {h.actor?.full_name ?? "system"}
               {h.reason ? `: ${h.reason}` : ""}
             </div>

@@ -370,13 +370,13 @@ export function ArCreditNotesPanel({
                   </Badge>
                   {cn.status === "posted" && (
                     <span className="text-[10px] text-muted-foreground">
-                      Posted {format(new Date(cn.updated_at), "yyyy-MM-dd")}
+                      Posted {format(new Date(cn.updated_at), "dd/MM/yyyy")}
                     </span>
                   )}
                   {cn.status === "void" && (
                     <span className="text-[10px] text-destructive">
                       Reversed{" "}
-                      {cn.reversed_at ? format(new Date(cn.reversed_at), "yyyy-MM-dd") : ""}
+                      {cn.reversed_at ? format(new Date(cn.reversed_at), "dd/MM/yyyy") : ""}
                     </span>
                   )}
                 </div>

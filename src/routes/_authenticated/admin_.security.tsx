@@ -151,7 +151,7 @@ function ThreatFeed() {
           <TableBody>
             {(list.data ?? []).map((e) => (
               <TableRow key={e.id}>
-                <TableCell className="text-xs whitespace-nowrap">{format(new Date(e.created_at), "MMM d, HH:mm")}</TableCell>
+                <TableCell className="text-xs whitespace-nowrap">{format(new Date(e.created_at), "dd/MM/yyyy HH:mm")}</TableCell>
                 <TableCell className="text-xs">{e.event_type}</TableCell>
                 <TableCell><SeverityBadge severity={e.severity} /></TableCell>
                 <TableCell className="text-xs">{e.ip ?? "—"}</TableCell>
@@ -218,7 +218,7 @@ function Lockouts() {
                 <TableRow key={l.id}>
                   <TableCell className="text-xs">{l.email ?? l.user_id?.slice(0, 8) ?? "—"}</TableCell>
                   <TableCell className="text-xs">{l.reason}</TableCell>
-                  <TableCell className="text-xs">{format(new Date(l.locked_until), "MMM d, HH:mm")}</TableCell>
+                  <TableCell className="text-xs">{format(new Date(l.locked_until), "dd/MM/yyyy HH:mm")}</TableCell>
                   <TableCell>{active ? <Badge variant="destructive">Locked</Badge> : <Badge variant="secondary">Released</Badge>}</TableCell>
                   <TableCell className="text-right">
                     {active && <Button size="sm" variant="outline" onClick={() => releaseMut.mutate(l.id)}>Release</Button>}
@@ -252,7 +252,7 @@ function FailedLogins() {
           <TableBody>
             {(list.data ?? []).map((f) => (
               <TableRow key={f.id}>
-                <TableCell className="text-xs whitespace-nowrap">{format(new Date(f.attempted_at), "MMM d, HH:mm:ss")}</TableCell>
+                <TableCell className="text-xs whitespace-nowrap">{format(new Date(f.attempted_at), "dd/MM/yyyy HH:mm:ss")}</TableCell>
                 <TableCell className="text-xs">{f.email}</TableCell>
                 <TableCell className="text-xs">{f.ip ?? "—"}</TableCell>
                 <TableCell className="text-xs truncate max-w-[400px]">{f.user_agent ?? "—"}</TableCell>

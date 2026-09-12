@@ -415,6 +415,14 @@ function PosExecutiveAnalytics() {
               variant="outline"
               size="sm"
               disabled={exportsDisabled}
+              onClick={() => exportAll("docx")}
+            >
+              <Download className="h-3 w-3 mr-1" /> DOCX
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={exportsDisabled}
               onClick={() => exportAll("pdf")}
             >
               <Download className="h-3 w-3 mr-1" /> PDF

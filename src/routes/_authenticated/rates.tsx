@@ -54,7 +54,7 @@ function RatesPage() {
               <TableRow key={p.id}>
                 <TableCell className="font-medium">{p.name}</TableCell>
                 <TableCell>{p.room_types?.name}</TableCell>
-                <TableCell>{format(new Date(p.start_date), "MMM d")} → {format(new Date(p.end_date), "MMM d, yyyy")}</TableCell>
+                <TableCell>{format(new Date(p.start_date), "dd/MM/yyyy")} → {format(new Date(p.end_date), "dd/MM/yyyy")}</TableCell>
                 <TableCell>{p.min_stay}</TableCell>
                 <TableCell className="text-right font-semibold">{Number(p.rate).toFixed(2)}</TableCell>
               </TableRow>

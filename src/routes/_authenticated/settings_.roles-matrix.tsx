@@ -166,7 +166,7 @@ function RolesMatrix() {
   .yes{color:#065f46;font-weight:600} .no{color:#9ca3af}
 </style></head><body>
 <h1>Role Permission Matrix — ${roleLabel}</h1>
-<div class="sub">${selectedRole.kind} role · generated ${new Date().toLocaleString()}</div>
+<div class="sub">${selectedRole.kind} role · generated ${new Date().toLocaleString("en-GB")}</div>
 <table><thead><tr>${header.map((h) => `<th>${h}</th>`).join("")}</tr></thead>
 <tbody>${rows.map((r) => `<tr>${header.map((h) => {
       const v = r[h];
@@ -187,7 +187,7 @@ function RolesMatrix() {
     doc.text(`Role Permission Matrix — ${roleLabel}`, 40, 40);
     doc.setFontSize(9);
     doc.setTextColor(120);
-    doc.text(`${selectedRole.kind} role · generated ${new Date().toLocaleString()}`, 40, 56);
+    doc.text(`${selectedRole.kind} role · generated ${new Date().toLocaleString("en-GB")}`, 40, 56);
     autoTable(doc, {
       startY: 70,
       head: [header],

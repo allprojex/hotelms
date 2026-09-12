@@ -1,5 +1,16 @@
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import {
+  Document,
+  HeadingLevel,
+  Packer,
+  Paragraph,
+  Table,
+  TableCell,
+  TableRow,
+  TextRun,
+  WidthType,
+} from "docx";
 import * as XLSX from "xlsx";
 import { openPrintView, renderTable } from "@/lib/admin/print-html";
 import {
@@ -24,10 +35,10 @@ function downloadBlob(blob: Blob, filename: string): void {
   setTimeout(() => URL.revokeObjectURL(url), 5_000);
 }
 
-export function exportReport<Row>(
+export async function exportReport<Row>(
   definition: ReportDefinition<Row>,
   format: ReportFormat,
-): { filename: string } {
+): Promise<{ filename: string }> {
   const filename = reportFileName({
     slug: definition.slug,
     format,
@@ -51,6 +62,57 @@ export function exportReport<Row>(
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Report");
     XLSX.writeFile(workbook, filename, { compression: true });
+    return { filename };
+  }
+
+  if (format === "docx") {
+    const tableRows = [
+      new TableRow({
+        tableHeader: true,
+        children: definition.columns.map(
+          (column) =>
+            new TableCell({
+              children: [
+                new Paragraph({ children: [new TextRun({ text: column.label, bold: true })] }),
+              ],
+            }),
+        ),
+      }),
+      ...(definition.rows.length > 0
+        ? reportRows(definition).map(
+            (row) =>
+              new TableRow({
+                children: row.map(
+                  (value) =>
+                    new TableCell({
+                      children: [new Paragraph(value == null ? "" : String(value))],
+                    }),
+                ),
+              }),
+          )
+        : [
+            new TableRow({
+              children: [
+                new TableCell({
+                  columnSpan: Math.max(1, definition.columns.length),
+                  children: [new Paragraph("No results for the selected filters.")],
+                }),
+              ],
+            }),
+          ]),
+    ];
+    const document = new Document({
+      sections: [
+        {
+          children: [
+            new Paragraph({ text: definition.title, heading: HeadingLevel.TITLE }),
+            new Paragraph(reportSubtitle(definition)),
+            new Table({ rows: tableRows, width: { size: 100, type: WidthType.PERCENTAGE } }),
+          ],
+        },
+      ],
+    });
+    downloadBlob(await Packer.toBlob(document), filename);
     return { filename };
   }
 

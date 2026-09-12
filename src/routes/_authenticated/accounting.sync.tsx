@@ -172,7 +172,7 @@ function SyncPage() {
                   <TableCell className="text-xs font-mono text-muted-foreground max-w-[240px] truncate">{t.webhook_url ?? "— (CSV only)"}</TableCell>
                   <TableCell className="text-xs">{scheduleLabel(t)}</TableCell>
                   <TableCell><Switch checked={t.is_active} onCheckedChange={(v) => toggleActive(t, v)} /></TableCell>
-                  <TableCell className="text-xs">{t.last_sync_at ? new Date(t.last_sync_at).toLocaleString() : "—"}</TableCell>
+                  <TableCell className="text-xs">{t.last_sync_at ? new Date(t.last_sync_at).toLocaleString("en-GB") : "—"}</TableCell>
                   <TableCell><StatusBadge status={t.last_sync_status} error={t.last_sync_error} /></TableCell>
                   <TableCell className="text-right space-x-1">
                     <Button size="sm" variant="outline" disabled={busyId === t.id} onClick={() => syncNow(t.id)}>
@@ -219,7 +219,7 @@ function SyncPage() {
                 const target = targets.data?.find((t: any) => t.id === r.target_id);
                 return (
                   <TableRow key={r.id}>
-                    <TableCell className="text-xs">{new Date(r.started_at).toLocaleString()}</TableCell>
+                    <TableCell className="text-xs">{new Date(r.started_at).toLocaleString("en-GB")}</TableCell>
                     <TableCell className="text-xs">
                       {target?.name ?? "—"}
                       {r.is_test && <Badge variant="secondary" className="ml-2 text-[10px] py-0">test</Badge>}

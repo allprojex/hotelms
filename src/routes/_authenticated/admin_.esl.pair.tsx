@@ -89,7 +89,7 @@ function PairPage() {
                 Kind <Badge variant="outline">{pc.kind}</Badge> · Connection <Badge variant="outline">{pc.connection}</Badge>
               </div>
               <div className="text-xs text-muted-foreground">
-                Expires {new Date(pc.expires_at).toLocaleString()}
+                Expires {new Date(pc.expires_at).toLocaleString("en-GB")}
               </div>
             </div>
           )}

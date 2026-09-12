@@ -349,7 +349,7 @@ function Filter({
   );
 }
 function date(value: string | null) {
-  return value ? new Date(value).toLocaleDateString() : "Never";
+  return value ? new Date(value).toLocaleDateString("en-GB") : "Never";
 }
 
 function CreateDialog({

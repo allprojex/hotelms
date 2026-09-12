@@ -14,6 +14,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogT
 import { Plus, Trash2, Pencil, Upload, Search } from "lucide-react";
 import { toast } from "sonner";
 import { matchesSearch, menuItemSearchText } from "@/lib/search-filter";
+import { InventoryItemSelect } from "@/components/inventory/inventory-item-select";
 
 export const Route = createFileRoute("/_authenticated/pos/menu")({
   head: () => ({ meta: [{ title: "POS Menu" }] }),
@@ -174,10 +175,7 @@ function ItemDialog({ propertyId, outletId, cats, inv, existing, trigger, onDone
           </div>
           <div className="sm:col-span-2">
             <Label>Linked inventory item (optional — auto-deduct on sale)</Label>
-            <Select value={f.inventory_item_id || "_none"} onValueChange={(v) => setF({ ...f, inventory_item_id: v === "_none" ? "" : v })}>
-              <SelectTrigger><SelectValue placeholder="Not linked" /></SelectTrigger>
-              <SelectContent><SelectItem value="_none">Not linked</SelectItem>{inv.map((it: any) => <SelectItem key={it.id} value={it.id}>{it.sku} — {it.name}</SelectItem>)}</SelectContent>
-            </Select>
+            <InventoryItemSelect items={inv} value={f.inventory_item_id} onValueChange={(value) => setF({ ...f, inventory_item_id: value })} allowNone noneLabel="Not linked" />
           </div>
           <div className="sm:col-span-2"><Label>Description</Label><Textarea value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} /></div>
         </div>

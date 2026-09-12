@@ -81,6 +81,13 @@ describe("favicon assets — the Theskwoff browser icon set exists on disk", () 
 });
 
 describe("document head — one coherent set of icon declarations", () => {
+  it("uses a dedicated hotel icon only for explicitly identified Demo builds", () => {
+    expect(rootRoute).toContain("import { BRAND_NAME, IS_DEMO, SITE_ORIGIN }");
+    expect(rootRoute).toContain('href: "/demo-hotel-favicon.svg"');
+    expect(rootRoute).toContain("...(IS_DEMO ? DEMO_FAVICON_LINKS : STATIC_FAVICON_LINKS)");
+    expect(read(resolve(root, "public/demo-hotel-favicon.svg"))).toContain('viewBox="0 0 64 64"');
+  });
+
   it("declares .ico + both PNG sizes + apple-touch-icon + manifest", () => {
     expect(rootRoute).toContain('{ rel: "icon", href: "/favicon.ico", sizes: "48x48" }');
     expect(rootRoute).toContain('href: "/favicon-32x32.png"');
@@ -110,7 +117,9 @@ describe("document head — one coherent set of icon declarations", () => {
     // than a local constant, so a second deployment (the demo) can point these
     // at its own host — but the module's fallback, and therefore production's
     // rendered value with no environment variables set, is unchanged.
-    expect(rootRoute).toContain('import { BRAND_NAME, SITE_ORIGIN } from "@/lib/deployment-identity"');
+    expect(rootRoute).toContain(
+      'import { BRAND_NAME, IS_DEMO, SITE_ORIGIN } from "@/lib/deployment-identity"',
+    );
     expect(deploymentIdentity).toContain(
       'export const FALLBACK_SITE_ORIGIN = "https://theskwoffhotel.com"',
     );
@@ -138,9 +147,7 @@ describe("web manifest", () => {
     // second deployment cannot rename from configuration alone (it is a
     // static file in public/, generated at build time).
     expect(brandSettingsHook).toContain("app_name: BRAND_NAME");
-    expect(deploymentIdentity).toContain(
-      `export const FALLBACK_BRAND_NAME = "${manifest.name}"`,
-    );
+    expect(deploymentIdentity).toContain(`export const FALLBACK_BRAND_NAME = "${manifest.name}"`);
     expect(manifest.icons.map((i: { sizes: string }) => i.sizes)).toEqual(["192x192", "512x512"]);
     for (const icon of manifest.icons as { src: string }[]) {
       expect(() => bytes(`public${icon.src}`)).not.toThrow();

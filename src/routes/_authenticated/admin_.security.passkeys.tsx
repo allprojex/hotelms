@@ -7,6 +7,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { useActiveProperty } from "@/hooks/use-active-property";
 import { useHasAnyRole } from "@/hooks/use-user-roles";
 import { PASSKEY_ADMIN_ROLES } from "@/lib/security/passkey-permissions";
+import { MFA_REQUIRED_ROLES } from "@/lib/security/mfa-policy";
 import { AccessDenied } from "@/components/access-denied";
 import {
   listPasskeyEnrollments,
@@ -22,6 +23,7 @@ import {
   revokePasskeyCredential,
   revokeAllPasskeyCredentials,
   resetUserTwoFactor,
+  getUserMfaStatus,
   getOwnAuthPolicy,
   saveAuthPolicy,
 } from "@/lib/security/passkey-credentials.functions";
@@ -61,10 +63,7 @@ import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/admin_/security/passkeys")({
   head: () => ({
-    meta: [
-      { title: pageTitle("Passkey Administration") },
-      { name: "robots", content: "noindex" },
-    ],
+    meta: [{ title: pageTitle("Passkey Administration") }, { name: "robots", content: "noindex" }],
   }),
   component: AdminPasskeysPage,
 });
@@ -213,7 +212,7 @@ function EnrollmentTab({ propertyId }: { propertyId: string }) {
                     <StatusBadge status={row.status} />
                   </TableCell>
                   <TableCell className="text-xs">
-                    {row.requested_at ? format(new Date(row.requested_at), "MMM d, HH:mm") : "—"}
+                    {row.requested_at ? format(new Date(row.requested_at), "dd/MM/yyyy HH:mm") : "—"}
                   </TableCell>
                   <TableCell className="text-right space-x-1">
                     {row.status === "pending" && (
@@ -352,6 +351,11 @@ function UserDetail({ propertyId, userId }: { propertyId: string; userId: string
     queryKey: ["admin-passkey-history", propertyId, userId],
     queryFn: () => historyFn({ data: { propertyId, targetUserId: userId } }),
   });
+  const mfaStatusFn = useServerFn(getUserMfaStatus);
+  const mfaStatus = useQuery({
+    queryKey: ["admin-mfa-status", propertyId, userId],
+    queryFn: () => mfaStatusFn({ data: { propertyId, targetUserId: userId } }),
+  });
 
   const disableFn = useServerFn(disablePasskeyCredential);
   const revokeFn = useServerFn(revokePasskeyCredential);
@@ -390,14 +394,20 @@ function UserDetail({ propertyId, userId }: { propertyId: string; userId: string
   const resetTwoFactorMut = useMutation({
     mutationFn: (reason: string) =>
       resetTwoFactorFn({ data: { propertyId, targetUserId: userId, reason } }),
-    onSuccess: () => toast.success("Two-factor status reset."),
+    onSuccess: () => {
+      toast.success("Authenticator factors reset. The user must enroll again.");
+      qc.invalidateQueries({ queryKey: ["admin-mfa-status", propertyId, userId] });
+    },
     onError: (e: any) => toast.error(e.message ?? "Could not reset 2FA."),
   });
 
   return (
     <div className="space-y-3 py-2">
       <div className="flex items-center justify-between">
-        <span className="text-sm font-medium">Credentials ({(creds.data ?? []).length})</span>
+        <span className="text-sm font-medium">
+          Credentials ({(creds.data ?? []).length}) · MFA{" "}
+          {mfaStatus.data?.enrolled ? "enrolled" : "not enrolled"}
+        </span>
         <div className="flex gap-2">
           <ReasonDialog
             label="Revoke all"
@@ -417,9 +427,9 @@ function UserDetail({ propertyId, userId }: { propertyId: string; userId: string
           <div key={c.id} className="flex items-center justify-between text-xs border rounded p-2">
             <span>
               {c.device_name} — {c.authenticator_attachment ?? "unknown"} — added{" "}
-              {format(new Date(c.created_at), "MMM d, yyyy")}
+              {format(new Date(c.created_at), "dd/MM/yyyy")}
               {c.last_used_at
-                ? ` · last used ${format(new Date(c.last_used_at), "MMM d, yyyy")}`
+                ? ` · last used ${format(new Date(c.last_used_at), "dd/MM/yyyy")}`
                 : " · never used"}
               {c.revoked_at && (
                 <Badge variant="destructive" className="ml-2">
@@ -458,7 +468,7 @@ function UserDetail({ propertyId, userId }: { propertyId: string; userId: string
         <div className="space-y-1 mt-1">
           {(history.data ?? []).map((h: any) => (
             <div key={h.id} className="text-xs text-muted-foreground">
-              {format(new Date(h.created_at), "MMM d, HH:mm")} — {h.action}
+              {format(new Date(h.created_at), "dd/MM/yyyy HH:mm")} — {h.action}
               {h.reason ? `: ${h.reason}` : ""}
             </div>
           ))}
@@ -479,12 +489,10 @@ function PolicyTab({ propertyId }: { propertyId: string }) {
     queryFn: () => getFn({ data: { propertyId } }),
   });
   const [passkeyPolicy, setPasskeyPolicy] = useState("optional");
-  const [twoFactorPolicy, setTwoFactorPolicy] = useState("disabled");
 
   const settings = q.data;
   if (settings && passkeyPolicy !== settings.passkey_policy) {
     setPasskeyPolicy(settings.passkey_policy);
-    setTwoFactorPolicy(settings.two_factor_policy);
   }
 
   const saveMut = useMutation({
@@ -493,8 +501,8 @@ function PolicyTab({ propertyId }: { propertyId: string }) {
         data: {
           propertyId,
           passkeyPolicy: passkeyPolicy as any,
-          twoFactorPolicy: twoFactorPolicy as any,
-          twoFactorRequiredRoles: [],
+          twoFactorPolicy: "required",
+          twoFactorRequiredRoles: [...MFA_REQUIRED_ROLES],
           stepUpMaxAgeMinutes: 15,
         },
       }),
@@ -507,7 +515,8 @@ function PolicyTab({ propertyId }: { propertyId: string }) {
       <CardHeader>
         <CardTitle className="text-base">Passkey &amp; two-factor policy</CardTitle>
         <CardDescription>
-          TOTP is not implemented in this phase — passkeys are the supported strong second factor.
+          TOTP is mandatory for administrators, owners, general managers, accountants and
+          housekeeping supervisors. Ordinary staff may continue with password or passkey.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -527,16 +536,7 @@ function PolicyTab({ propertyId }: { propertyId: string }) {
         </div>
         <div className="space-y-1.5">
           <Label>Two-factor policy</Label>
-          <Select value={twoFactorPolicy} onValueChange={setTwoFactorPolicy}>
-            <SelectTrigger className="w-64">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="disabled">Disabled</SelectItem>
-              <SelectItem value="optional">Optional</SelectItem>
-              <SelectItem value="required">Required for selected roles</SelectItem>
-            </SelectContent>
-          </Select>
+          <p className="text-sm font-medium">Required for privileged roles</p>
         </div>
         <Button onClick={() => saveMut.mutate()} disabled={saveMut.isPending}>
           {saveMut.isPending ? "Saving…" : "Save policy"}

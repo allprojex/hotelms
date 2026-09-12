@@ -14,6 +14,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Plus, Trash2, ArrowLeftRight } from "lucide-react";
 import { toast } from "sonner";
+import { InventoryItemSelect } from "@/components/inventory/inventory-item-select";
 
 export const Route = createFileRoute("/_authenticated/inventory/transfers")({
   head: () => ({ meta: [{ title: "Stock transfers" }] }),
@@ -53,7 +54,7 @@ function TransfersPage() {
                 <TableCell>{t.from?.name}</TableCell>
                 <TableCell>{t.to?.name}</TableCell>
                 <TableCell><Badge variant={t.status === "completed" ? "outline" : "secondary"}>{t.status}</Badge></TableCell>
-                <TableCell>{t.transferred_at ? new Date(t.transferred_at).toLocaleString() : "—"}</TableCell>
+                <TableCell>{t.transferred_at ? new Date(t.transferred_at).toLocaleString("en-GB") : "—"}</TableCell>
                 <TableCell className="text-right">
                   {t.status === "draft" && <Button size="sm" onClick={() => execute(t.id)}><ArrowLeftRight className="h-3 w-3 mr-1" /> Execute</Button>}
                 </TableCell>
@@ -116,10 +117,7 @@ function TransferDialog({ propertyId, onDone }: any) {
               {lines.map((l, i) => (
                 <div key={i} className="grid grid-cols-12 gap-2 items-end">
                   <div className="col-span-8">
-                    <Select value={l.item_id} onValueChange={(v) => { const c = [...lines]; c[i].item_id = v; setLines(c); }}>
-                      <SelectTrigger><SelectValue placeholder="Item" /></SelectTrigger>
-                      <SelectContent>{items.data?.map((it: any) => <SelectItem key={it.id} value={it.id}>{it.sku} — {it.name}</SelectItem>)}</SelectContent>
-                    </Select>
+                    <InventoryItemSelect items={items.data ?? []} value={l.item_id} onValueChange={(v) => { const c = [...lines]; c[i].item_id = v; setLines(c); }} />
                   </div>
                   <div className="col-span-3"><Input type="number" step="0.01" value={l.quantity} onChange={(e) => { const c = [...lines]; c[i].quantity = +e.target.value; setLines(c); }} /></div>
                   <div className="col-span-1"><Button size="icon" variant="ghost" onClick={() => setLines(lines.filter((_, x) => x !== i))}><Trash2 className="h-4 w-4 text-destructive" /></Button></div>

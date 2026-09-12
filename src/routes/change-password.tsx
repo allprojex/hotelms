@@ -42,7 +42,7 @@ function ChangePasswordPage() {
       });
       if (session.error) throw session.error;
       toast.success("Password changed");
-      navigate({ to: "/dashboard", replace: true });
+      navigate({ to: "/mfa", replace: true });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Password change failed");
     } finally {

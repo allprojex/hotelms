@@ -121,8 +121,8 @@ function SchedulesTab() {
                 <TableCell><Badge variant={s.kind === "incremental" ? "secondary" : "default"}>{s.kind}</Badge></TableCell>
                 <TableCell className="text-sm">{describeFrequency(s)}</TableCell>
                 <TableCell>{s.retention_count}</TableCell>
-                <TableCell className="text-xs">{s.next_run_at ? format(new Date(s.next_run_at), "MMM d HH:mm") : "—"}</TableCell>
-                <TableCell className="text-xs">{s.last_run_at ? format(new Date(s.last_run_at), "MMM d HH:mm") : "—"}</TableCell>
+                <TableCell className="text-xs">{s.next_run_at ? format(new Date(s.next_run_at), "dd/MM/yyyy HH:mm") : "—"}</TableCell>
+                <TableCell className="text-xs">{s.last_run_at ? format(new Date(s.last_run_at), "dd/MM/yyyy HH:mm") : "—"}</TableCell>
                 <TableCell className="text-right">
                   <div className="inline-flex gap-1">
                     <Button size="sm" variant="outline" onClick={async () => {
@@ -321,7 +321,7 @@ function SnapshotsTab() {
         <TableBody>
           {(q.data ?? []).map((s: any) => (
             <TableRow key={s.id}>
-              <TableCell className="text-xs">{format(new Date(s.created_at), "MMM d HH:mm:ss")}</TableCell>
+              <TableCell className="text-xs">{format(new Date(s.created_at), "dd/MM/yyyy HH:mm:ss")}</TableCell>
               <TableCell><Badge variant="outline">{s.scope}</Badge></TableCell>
               <TableCell><Badge variant={s.kind === "incremental" ? "secondary" : "default"}>{s.kind}</Badge></TableCell>
               <TableCell>{(s.row_count ?? 0).toLocaleString()}</TableCell>
@@ -336,7 +336,7 @@ function SnapshotsTab() {
                     }}><Download className="h-3 w-3 mr-1" />Download</Button>
                     <Button size="sm" variant="destructive" disabled={restoring === s.id}
                       onClick={async () => {
-                        if (!confirm(`Restore from snapshot ${format(new Date(s.created_at), "MMM d HH:mm")}?\nExisting rows with the same id will be overwritten.`)) return;
+                        if (!confirm(`Restore from snapshot ${format(new Date(s.created_at), "dd/MM/yyyy HH:mm")}?\nExisting rows with the same id will be overwritten.`)) return;
                         setRestoring(s.id);
                         try {
                           const r = await doRestore({ data: { snapshotId: s.id, mode: "upsert" } });
@@ -447,7 +447,7 @@ function ManualTab() {
             <Label>Archive file (.json)</Label>
             <Input type="file" accept="application/json,.json" onChange={(e) => e.target.files?.[0] && onArchiveFile(e.target.files[0])} />
           </div>
-          {archive && <div className="text-xs text-muted-foreground">Loaded: {new Date(archive.createdAt).toLocaleString()}</div>}
+          {archive && <div className="text-xs text-muted-foreground">Loaded: {new Date(archive.createdAt).toLocaleString("en-GB")}</div>}
           <div>
             <Label>Mode</Label>
             <RadioGroup value={mode} onValueChange={(v) => setMode(v as any)} className="flex gap-4 mt-1">

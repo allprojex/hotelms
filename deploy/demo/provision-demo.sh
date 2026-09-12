@@ -124,20 +124,51 @@ df -h "$DEMO_DIR" | tail -1
 # --max-old-space-size keeps the bundler from ballooning on a 4 GB box that is
 # also serving production. nice/ionice keep it off production's toes.
 nice -n 15 ionice -c3 sudo -u "$DEMO_USER" env NODE_OPTIONS="--max-old-space-size=1536" npm ci --no-audit --no-fund
-nice -n 15 ionice -c3 sudo -u "$DEMO_USER" env NODE_OPTIONS="--max-old-space-size=1536" npm run build
-ok "built"
+
+# --mode demo is load-bearing, not cosmetic.
+#
+# Every VITE_ value is inlined into the BROWSER bundle at build time, and Vite
+# chooses which env files to load from the mode: `vite build` defaults to mode
+# "production" and reads .env / .env.production, neither of which exists in a
+# fresh clone. It never reads a file called .env.demo. `--mode demo` makes it
+# read .env.demo natively.
+#
+# Without this the deployment fails in a way that looks fine from the server
+# side and is broken for every visitor: systemd's EnvironmentFile still gives
+# the Nitro server process.env, so /api/public/health returns 200 with
+# database.ok true and SSR renders the right branding — but the browser bundle
+# carries no Supabase URL at all, createClient() gets undefined, and the root
+# error boundary renders "This page didn't load" on every route. That is
+# exactly what happened on the first deployment of this demo.
+#
+# Nothing in this codebase reads import.meta.env.MODE, PROD or DEV, and there
+# is no custom envPrefix/envDir, so the mode name changes only which env file
+# is loaded.
+nice -n 15 ionice -c3 sudo -u "$DEMO_USER" env NODE_OPTIONS="--max-old-space-size=1536" npm run build -- --mode demo
+ok "built with --mode demo"
 
 [ -f "$DEMO_DIR/.output/server/index.mjs" ] || die "build produced no .output/server/index.mjs"
 ok "server bundle present"
 
-# The VITE_ values are inlined at build time, so prove the bundle really
-# carries the demo identity rather than production's.
+# Prove the CLIENT bundle really carries the demo identity. These assertions
+# are fatal on purpose: the previous revision only printed a note when the
+# demo ref was missing, and that advisory wording is precisely what allowed a
+# broken bundle to be installed and served.
+CLIENT_DIR="$DEMO_DIR/.output/public/assets"
+[ -d "$CLIENT_DIR" ] || die "no client assets directory at $CLIENT_DIR"
+
 if grep -rq "texhuavnrdhaohqzlyqw" "$DEMO_DIR/.output" 2>/dev/null; then
     die "the built bundle contains the PRODUCTION Supabase ref. Refusing to install it."
 fi
-grep -rq "akcppyymgoubsqedpkch" "$DEMO_DIR/.output" 2>/dev/null \
-    && ok "bundle carries the demo Supabase ref" \
-    || echo "    note: demo ref not found as a literal in .output (may be chunked); verify via /api/public/health after start"
+ok "no production Supabase ref anywhere in the build"
+
+grep -rq "akcppyymgoubsqedpkch" "$CLIENT_DIR" 2>/dev/null \
+    || die "the CLIENT bundle does not contain the demo Supabase ref. The VITE_ values were not inlined — the browser would get undefined and every page would hit the error boundary. Check that .env.demo defines VITE_SUPABASE_URL and that the build ran with --mode demo."
+ok "client bundle carries the demo Supabase ref"
+
+grep -rq "app.infinitytechub.com" "$CLIENT_DIR" 2>/dev/null \
+    || die "the CLIENT bundle does not carry VITE_SITE_URL (app.infinitytechub.com). Refusing to install it."
+ok "client bundle carries the demo site URL"
 
 # ---------------------------------------------------------------------------
 say "systemd unit"

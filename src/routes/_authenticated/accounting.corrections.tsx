@@ -212,7 +212,7 @@ function CorrectionsPage() {
                     </Badge>
                   </TableCell>
                   <TableCell className="text-xs">
-                    {format(new Date(c.requested_at), "MMM d, yyyy")}
+                    {format(new Date(c.requested_at), "dd/MM/yyyy")}
                   </TableCell>
                   <TableCell className="text-right space-x-1">
                     {c.status === "pending" && (

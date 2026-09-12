@@ -550,7 +550,7 @@ export function PayrollRunDetailPage({ runId }: { runId: string }) {
                   Archive draft
                 </Button>
               )}
-              {(["csv", "xlsx", "pdf", "print"] as ReportFormat[]).map((format) => (
+              {(["csv", "xlsx", "docx", "pdf", "print"] as ReportFormat[]).map((format) => (
                 <Button key={format} variant="outline" onClick={() => output(format)}>
                   {format === "print" ? (
                     <Printer className="mr-1 h-4 w-4" />

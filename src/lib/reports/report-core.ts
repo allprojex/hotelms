@@ -1,4 +1,4 @@
-export type ReportFormat = "csv" | "xlsx" | "pdf" | "print";
+export type ReportFormat = "csv" | "xlsx" | "docx" | "pdf" | "print";
 
 export type ReportDateRange = {
   from: string;
@@ -173,7 +173,7 @@ export function reportSubtitle<Row>(definition: ReportDefinition<Row>): string {
   if (definition.dateRange) {
     parts.push(`${definition.dateRange.from} to ${definition.dateRange.to}`);
   }
-  parts.push(`Generated ${(definition.generatedAt ?? new Date()).toLocaleString()}`);
+  parts.push(`Generated ${(definition.generatedAt ?? new Date()).toLocaleString("en-GB")}`);
   return parts.join(" · ");
 }
 

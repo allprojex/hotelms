@@ -44,7 +44,7 @@ function KOTPage() {
       <div className="text-center border-b-2 border-dashed pb-2 mb-2">
         <div className="text-lg font-bold">KITCHEN ORDER TICKET</div>
         <div>{order.data.pos_outlets?.name}</div>
-        <div className="text-xs">{new Date(latest.fired_at).toLocaleString()}</div>
+        <div className="text-xs">{new Date(latest.fired_at).toLocaleString("en-GB")}</div>
       </div>
       <div className="flex justify-between mb-1"><span>KOT</span><span className="font-bold">{latest.code}</span></div>
       <div className="flex justify-between mb-1"><span>Order</span><span>{order.data.code}</span></div>
