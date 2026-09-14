@@ -4,7 +4,7 @@ import { createMiddleware } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "./types";
-import { assuranceLevelFromClaims, requiresMfaForRoles } from "@/lib/security/mfa-policy";
+import { assuranceLevelFromClaims, requiresMfa } from "@/lib/security/mfa-policy";
 
 function isNewSupabaseApiKey(value: string): boolean {
   return value.startsWith("sb_publishable_") || value.startsWith("sb_secret_");
@@ -111,7 +111,9 @@ function authMiddleware(options: { allowPasswordChange: boolean; allowAal1: bool
       .eq("user_id", data.claims.sub)) as any;
     if (rolesError) throw new Error("Unauthorized");
     const roles = (roleRows ?? []).map((row: { role: string }) => row.role);
-    const mfaRequired = requiresMfaForRoles(roles);
+    // requiresMfa folds in the deployment-environment policy: every deployment
+    // enforces MFA except one that has explicitly declared APP_ENV=demo.
+    const mfaRequired = requiresMfa(roles);
     const assuranceLevel = assuranceLevelFromClaims(data.claims);
     if (!options.allowAal1 && mfaRequired && assuranceLevel !== "aal2") {
       throw new Error("MFA verification required");

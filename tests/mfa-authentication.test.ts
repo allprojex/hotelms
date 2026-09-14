@@ -33,7 +33,12 @@ describe("role-aware TOTP MFA", () => {
   });
 
   it("enforces privileged AAL2 in centralized server middleware", () => {
-    expect(middleware).toContain("requiresMfaForRoles(roles)");
+    // requiresMfa, not requiresMfaForRoles: the middleware now asks the
+    // environment-aware policy, which folds the role check together with the
+    // deployment-environment exemption (demo only). The aal2 gate below is
+    // unchanged — the exemption alters what `mfaRequired` evaluates to, never
+    // whether the gate exists. See tests/demo-mfa-exemption.test.ts.
+    expect(middleware).toContain("requiresMfa(roles)");
     expect(middleware).toContain('assuranceLevel !== "aal2"');
     expect(middleware).toContain('throw new Error("MFA verification required")');
     expect(middleware).toContain("requireSupabaseAuthAllowMfaChallenge");
